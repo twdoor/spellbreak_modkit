@@ -1,0 +1,32 @@
+[gd_scene format=3 uid="uid://dxsn1gcs66ay8"]
+
+[ext_resource type="Script" uid="uid://dhx0g0op1h4pv" path="res://scenes/uasset_tab.gd" id="1_258fu"]
+
+[node name="UassetTab" type="MarginContainer" unique_id=1132104362 node_paths=PackedStringArray("tree", "detail_panel")]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_258fu")
+tree = NodePath("HSplitContainer/Tree")
+detail_panel = NodePath("HSplitContainer/PanelContainer/DetailPanel")
+
+[node name="HSplitContainer" type="HSplitContainer" parent="." unique_id=822915692]
+layout_mode = 2
+split_offsets = PackedInt32Array(300)
+split_offset = 300
+
+[node name="Tree" type="Tree" parent="HSplitContainer" unique_id=1562990478]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="PanelContainer" type="ScrollContainer" parent="HSplitContainer" unique_id=884664641]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DetailPanel" type="VBoxContainer" parent="HSplitContainer/PanelContainer" unique_id=1005900247]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3

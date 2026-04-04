@@ -1,0 +1,38 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="SpellbreakUAssetEditor"
+run/main_scene="uid://c4ng3sdgj0g3o"
+config/features=PackedStringArray("4.6")
+config/icon="res://icon.svg"
+
+[autoload]
+
+GUIDE="*uid://p2jwrgjcbexr"
+SingleInstance="*uid://cko6ihuturcor"
+
+[display]
+
+window/size/viewport_width=960
+window/size/viewport_height=1080
+window/size/sharp_corners=true
+window/stretch/aspect="expand"
+window/vsync/vsync_mode=0
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/guide/plugin.cfg", "res://addons/nhb_functions_on_the_fly/plugin.cfg")
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

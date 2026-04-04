@@ -1,0 +1,85 @@
+[gd_scene format=3 uid="uid://c4ng3sdgj0g3o"]
+
+[ext_resource type="Script" uid="uid://bswk3vjdcpjbk" path="res://main.gd" id="1_ig7tw"]
+[ext_resource type="Resource" uid="uid://cw5ln0cgjgjdo" path="res://guide/open.tres" id="2_0xm2m"]
+[ext_resource type="Resource" uid="uid://d4fisj7tgmtjp" path="res://guide/mapping.tres" id="2_h2yge"]
+[ext_resource type="Resource" uid="uid://dy3uooruiy2f0" path="res://guide/close.tres" id="4_1bvp3"]
+[ext_resource type="Resource" uid="uid://dricjsoopc74d" path="res://guide/save.tres" id="5_lquwl"]
+[ext_resource type="Resource" uid="uid://xhks6b4hjy4f" path="res://guide/switch_tab.tres" id="6_7mycd"]
+[ext_resource type="Resource" uid="uid://bcgja7kjbx7r7" path="res://guide/copy.tres" id="7_5vw27"]
+[ext_resource type="Resource" uid="uid://ccrx1i2iv5vmf" path="res://guide/paste.tres" id="8_kek77"]
+[ext_resource type="Resource" uid="uid://cbtlbx3ejx06t" path="res://guide/cut.tres" id="9_efxa6"]
+[ext_resource type="Resource" uid="uid://cafxwvdqdma2g" path="res://guide/undo.tres" id="9_kek77"]
+[ext_resource type="Resource" uid="uid://c3lxg6d23k8yl" path="res://guide/delete.tres" id="11_dg77c"]
+[ext_resource type="Resource" uid="uid://dwapj4lckokjm" path="res://guide/shift.tres" id="12_dg77c"]
+[ext_resource type="Resource" uid="uid://6kog7u0g47oc" path="res://guide/cancel.tres" id="13_ycdy4"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1bvp3"]
+bg_color = Color(0, 0, 0, 1)
+
+[node name="Main" type="CanvasLayer" unique_id=1562985923]
+script = ExtResource("1_ig7tw")
+mapping = ExtResource("2_h2yge")
+open_action = ExtResource("2_0xm2m")
+close_action = ExtResource("4_1bvp3")
+save_action = ExtResource("5_lquwl")
+switch_tab_action = ExtResource("6_7mycd")
+copy = ExtResource("7_5vw27")
+paste = ExtResource("8_kek77")
+cut = ExtResource("9_efxa6")
+undo = ExtResource("9_kek77")
+delete = ExtResource("11_dg77c")
+shift = ExtResource("12_dg77c")
+cancel = ExtResource("13_ycdy4")
+
+[node name="Panel" type="PanelContainer" parent="." unique_id=1396061657]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_1bvp3")
+
+[node name="MarginContainer" type="MarginContainer" parent="Panel" unique_id=1165165682]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Panel/MarginContainer" unique_id=1522211695]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="TabCont" type="TabContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=94462518]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+drag_to_rearrange_enabled = true
+
+[node name="OpenFilePopup" type="FileDialog" parent="." unique_id=1170644410]
+unique_name_in_owner = true
+oversampling_override = 1.0
+title = "Open File(s)"
+file_mode = 1
+display_mode = 1
+access = 2
+filters = PackedStringArray("*.uasset ; Unreal Asset (binary)", "*.json ; UAssetAPI JSON")
+use_native_dialog = true
+
+[node name="IntroLabel" type="Label" parent="." unique_id=1503473344]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -20.0
+offset_top = -11.5
+offset_right = 20.0
+offset_bottom = 11.5
+grow_horizontal = 2
+grow_vertical = 2
+text = "Press Ctrl+O to open a file!"
+horizontal_alignment = 1
+vertical_alignment = 1

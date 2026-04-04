@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/twdoor/Spellbonk/**)",
+      "Bash(python3:*)"
+    ]
+  }
+}
