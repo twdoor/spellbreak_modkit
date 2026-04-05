@@ -40,18 +40,11 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_1bvp3")
 
-[node name="MarginContainer" type="MarginContainer" parent="Panel" unique_id=1165165682]
+[node name="VBoxContainer" type="VBoxContainer" parent="Panel" unique_id=1522211695]
 layout_mode = 2
-theme_override_constants/margin_left = 8
-theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 8
-theme_override_constants/margin_bottom = 8
+theme_override_constants/separation = 0
 
-[node name="VBoxContainer" type="VBoxContainer" parent="Panel/MarginContainer" unique_id=1522211695]
-layout_mode = 2
-theme_override_constants/separation = 4
-
-[node name="TabCont" type="TabContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=94462518]
+[node name="TabCont" type="TabContainer" parent="Panel/VBoxContainer" unique_id=94462518]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
@@ -66,20 +59,3 @@ display_mode = 1
 access = 2
 filters = PackedStringArray("*.uasset ; Unreal Asset (binary)", "*.json ; UAssetAPI JSON")
 use_native_dialog = true
-
-[node name="IntroLabel" type="Label" parent="." unique_id=1503473344]
-unique_name_in_owner = true
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -20.0
-offset_top = -11.5
-offset_right = 20.0
-offset_bottom = 11.5
-grow_horizontal = 2
-grow_vertical = 2
-text = "Press Ctrl+O to open a file!"
-horizontal_alignment = 1
-vertical_alignment = 1

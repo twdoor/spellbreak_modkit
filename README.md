@@ -1,6 +1,6 @@
 # Spellbreak Modkit
 
-A toolkit for modding **Spellbreak Community Edition**. Includes a terminal mod manager, a visual asset editor, and CLI tools for converting and packing UE4 assets.
+A visual asset editor and mod manager for **Spellbreak Community Edition**, built with Godot 4.
 
 > Spellbreak runs on Unreal Engine 4.22. All tools target that version.
 
@@ -8,142 +8,97 @@ A toolkit for modding **Spellbreak Community Edition**. Includes a terminal mod 
 
 ## What's Included
 
-| Tool | What it does |
-|------|-------------|
-| `mod_manager.py` | Terminal UI — toggle mods, pack, watch for changes, launch game |
-| `spellbreak_uasset_editor/` | Godot 4 GUI editor for `.uasset` files (open, inspect, edit, save) |
-| `uasset_tool.py` | CLI to convert `.uasset` ↔ JSON and bulk export/build mod folders |
-| `pack_mod.sh` | Shell script to pack a mods folder into a `_P.pak` patch file |
-| `unpack_base.sh` | Shell script to extract the base game pak for reference |
-| `watch.py` | File watcher — auto-repacks when you save a `.uasset` |
-| `uasset_converter/` | .NET 8 CLI wrapper around [UAssetAPI](https://github.com/atenfyr/UAssetAPI) |
-| `u4pak/` | Python tool for reading/writing UE4 `.pak` archives |
+This repo contains one thing: `spellbreak_uasset_editor/` — a Godot 4 desktop app with a built-in mod manager and a full `.uasset` editor.
+
+The [UAssetAPI](https://github.com/atenfyr/UAssetAPI) converter is pre-compiled and bundled inside `spellbreak_uasset_editor/converter/`. No separate build step is needed.
 
 ---
 
 ## Requirements
 
-- **Python 3.10+**
-- **dotnet SDK 8.0** — required for asset conversion
-  ```
-  sudo apt install dotnet-sdk-8.0
-  ```
-- **Spellbreak Community Edition** installed locally
+- **Python 3.10+** — required at runtime by [u4pak](https://github.com/panzi/u4pak) for packing mods
+- **u4pak** — not bundled; download from:
+  [https://github.com/panzi/u4pak](https://github.com/panzi/u4pak)
 
-Optional (only if building the GUI editor from source):
-- **Godot 4.4+** with .NET support disabled (standard build)
+  Clone or place the `u4pak/` folder next to this README for auto-detection, or set the path manually in **Settings → u4pak Directory**.
 
----
-
-## Windows
-
-Everything works on Windows with a few small differences.
-
-### Prerequisites
-
-- **Python 3.10+** — download from [python.org](https://www.python.org/downloads/). During install, check **"Add Python to PATH"**.
-- **dotnet SDK 8.0** — install via winget or download from Microsoft:
-  ```
-  winget install Microsoft.DotNet.SDK.8
-  ```
-- **windows-curses** — required for the terminal UI tools (`mod_manager.py`, `uasset_editor.py`):
-  ```
-  pip install windows-curses
-  ```
-
-### What's different
-
-**Use `python` instead of `python3`:**
-```
-python mod_manager.py
-python uasset_tool.py --setup
-```
-
-**The `.sh` scripts don't work on Windows.** Use the Python tools instead — they cover everything the shell scripts do:
-- Pack mods → `P` key in `mod_manager.py`, or `python watch.py`
-- Unpack the base game pak → `python uasset_tool.py export <folder>` or use the GUI editor to open `.uasset` files directly
-
-If you need the shell scripts (e.g. for CI), run them inside WSL or Git Bash.
-
-**The GUI editor is the recommended way to edit assets on Windows.** Download the pre-built `.exe` from the releases page. It bundles the dotnet converter — no separate install needed.
-
-**Game path** will be something like `C:\Program Files (x86)\Steam\steamapps\common\Spellbreak`. Enter this when `mod_manager.py` asks for the game directory during setup.
+Optional (only if building the editor from source):
+- **Godot 4.6+** — standard build (no .NET support needed)
 
 ---
 
 ## Setup
 
-### 1. Clone the repo
+### 1. Get the editor
+
+#### 1a Prebuild editor (recommended)
+
+Go to [releases](https://github.com/twdoor/spellbreak_modkit/releases) page on github, click on the lastest version and pick the file you need.
+
+#### 1b Clone the repo
 
 ```bash
 git clone https://github.com/yourname/spellbreak-modkit
 cd spellbreak-modkit
 ```
 
-### 2. Build the asset converter
+### 2. Get u4pak
 
 ```bash
-python3 uasset_tool.py --setup
+git clone https://github.com/panzi/u4pak
 ```
 
-This compiles the .NET converter inside `uasset_converter/` using `dotnet publish`. Takes ~30 seconds on first run.
+Place the cloned `u4pak/` folder next to this README so the editor can auto-detect it, or point to it manually in **Settings → u4pak Directory**.
 
-### 3. Configure paths
+### 3. Configure the editor
 
-```bash
-python3 mod_manager.py
-```
+Launch the app (or run from Godot), click **Settings**, and fill in:
 
-On first launch, the setup wizard asks for:
-- **Game directory** — the folder containing `g3/Content/Paks/` (e.g. `/home/user/games/Spellbreak`)
-- **Mods directory** — where your loose mod files live (e.g. `/home/user/spellbreak-mods`)
-- **Launch command** — optional, used by the mod manager's launch shortcut
+- **Game directory** — the folder containing `g3/Content/Paks/`
+- **Mods directory** — where your mod folders live
+- **Launch command** — optional, used by the Launch button
+- **u4pak Directory** — if u4pak is not next to the project
+- **Sources** — exported asset directories for reference (base game export, older versions, reference mods)
 
-Settings are saved to `config.json` (not tracked by git).
+Settings are saved to `config.json` next to the executable (not tracked by git).
 
 ---
 
-## Workflow
+## GUI Editor
 
-### Option A — Terminal UI (recommended)
+### Mod Manager tab
 
-```bash
-python3 mod_manager.py
-```
+The Mod Manager tab is pinned and cannot be closed. It shows all mod folders found in your configured mods directory.
 
-Keys inside the TUI:
+**Mod list:**
+- **Left-click** — expand/collapse a mod's file list
+- **Right-click** — toggle the mod enabled/disabled
+- **Add Files** — browse a registered source and copy files into the mod, preserving the full folder structure (`g3/Content/...`). If multiple sources are configured a dropdown lets you pick which to browse.
+- **✕ on a file** — remove that file from the mod (empty parent directories are cleaned up automatically)
 
-| Key | Action |
-|-----|--------|
-| `↑ ↓` | Navigate mod list |
-| `Space` | Toggle mod on/off |
-| `P` | Pack enabled mods into the patch pak |
-| `W` | Start file watcher (auto-pack on save) |
-| `L` | Launch game |
-| `Q` | Quit |
+**Toolbar:**
 
-### Option B — Direct scripts
+| Button | Action |
+|--------|--------|
+| Pack | Pack all enabled mods into `zzz_mods_P.pak` |
+| Watch | Toggle auto-pack on file save |
+| Launch | Launch Spellbreak |
+| Settings | Open the Settings tab |
 
-```bash
-# Pack your mods manually
-./pack_mod.sh
+A status bar at the bottom of the window shows the current watcher/pack state on all tabs.
 
-# Start the file watcher
-python3 watch.py
+### Settings tab
 
-# Extract base game files for reference
-./unpack_base.sh --search BattleRoyale   # search by name
-./unpack_base.sh --list                  # list all files
-./unpack_base.sh                         # extract everything
-```
+- **Game Directory** — Spellbreak install path
+- **Mods Directory** — root folder containing your mod subfolders
+- **Launch Command** — shell command to start the game
+- **u4pak Directory** — optional override (leave blank for auto-detection)
+- **Sources** — a list of exported asset roots used as browsing targets in "Add Files"
+- **Config File** — read-only display of the active config path
 
----
+### Asset editor tabs
 
-## GUI Asset Editor
-
-`spellbreak_uasset_editor/` is a standalone Godot 4 desktop app for visually editing `.uasset` files. Pre-built binaries are in `spellbreak_uasset_editor/builds/`.
-
-**Opening a file:** `Ctrl+Space` or drag-and-drop a `.uasset` onto the window.
+Open `.uasset` or `.json` files via `Ctrl+Space`, drag-and-drop or open a file from the mod list.
 
 **Keyboard shortcuts:**
 
@@ -157,21 +112,22 @@ python3 watch.py
 | `Ctrl+Z` | Undo |
 | `Ctrl+A / F` | Previous / Next tab |
 | `Click` | Select item |
-| `Ctrl+Click` | Multi-select |
+| `Ctrl+Click` | Add/remove from selection |
 | `Shift+Click` | Range select |
 | `Esc` | Clear selection |
 
 **What you can edit:**
-- Export properties (structs, arrays, scalars, object references)
-- Import table entries
-- Name map entries
-- DataTable rows (view, edit, copy/paste/delete rows)
+
+- **Export properties** — structs, arrays, scalars, enums, text, object references
+- **Array items** — click to select, Ctrl+click / Shift+click for multi-select; Ctrl+C / Ctrl+V / Del work identically to the import list
+- **Import table** — all fields editable inline; multi-select copy/paste/delete supported
+- **Name map** — add, edit, delete entries
+- **DataTable rows** — view, edit, copy/paste/delete rows
+- **StringTable exports** — namespace and all key/value entries displayed and editable; add/remove entries
 
 ### Building from source
 
-Open `spellbreak_uasset_editor/` in Godot 4.4+, then **Project → Export → Linux/Windows**.
-
-The app bundles the .NET converter automatically — no separate install needed for end users.
+Open `spellbreak_uasset_editor/` in Godot 4.6+, then **Project → Export → Linux/Windows**. The converter DLLs in `converter/` are bundled automatically.
 
 ---
 
@@ -189,33 +145,16 @@ Your mod files must mirror the game's internal folder structure:
 
 ```
 mods/
-└── g3/
-    └── Content/
-        └── Blueprints/
-            └── GameModes/
-                ├── DA_BattleRoyale_Solo.uasset
-                └── DA_BattleRoyale_Solo.uexp
+└── my_mod/
+    └── g3/
+        └── Content/
+            └── Blueprints/
+                └── GameModes/
+                    ├── DA_BattleRoyale_Solo.uasset
+                    └── DA_BattleRoyale_Solo.uexp
 ```
 
 > Always copy `.uasset` and `.uexp` together — they are a pair. If a `.ubulk` file also exists, copy that too.
-
----
-
-## CLI Asset Tools
-
-```bash
-# Convert a single file to JSON (for manual editing)
-python3 uasset_tool.py tojson  <file.uasset>
-
-# Convert JSON back to binary
-python3 uasset_tool.py fromjson <file.json>
-
-# Export all uassets in a mod folder to JSON
-python3 uasset_tool.py export <mod_folder>
-
-# Convert all JSON files in a mod folder back to uassets
-python3 uasset_tool.py build <mod_folder>
-```
 
 ---
 
@@ -223,30 +162,52 @@ python3 uasset_tool.py build <mod_folder>
 
 ```
 spellbreak-modkit/
-├── mod_manager.py          Terminal UI for mod management
-├── uasset_tool.py          CLI converter (uasset ↔ json)
-├── uasset_editor.py        Additional asset editing utilities
-├── watch.py                File watcher for auto-packing
-├── pack_mod.sh             Shell packer script
-├── unpack_base.sh          Shell unpacker script
-├── setup.sh                Interactive first-time setup
-├── config.json             User paths (gitignored, generated by setup)
-├── u4pak/                  UE4 pak library (Python)
-├── uasset_converter/       .NET converter (UAssetAPI wrapper)
-│   ├── Program.cs
-│   ├── UAssetConverter.csproj
-│   ├── publish/            Compiled binaries (output of --setup)
-│   └── UAssetAPI/          UAssetAPI submodule (C#)
-└── spellbreak_uasset_editor/ Godot 4 GUI editor
-    ├── uasset/             Asset parsing & serialization
-    ├── scenes/             UI components
-    ├── addons/             Third-party Godot addons
-    └── converter/          Bundled converter DLLs (for export)
+├── README.md
+├── LICENSE
+└── spellbreak_uasset_editor/       Godot 4 app
+    ├── main.gd / main.tscn         Entry point, tab bar, status bar
+    ├── property_row.gd             Inline property editor widget
+    ├── single_instance.gd          Single-window / multi-tab instance manager
+    ├── converter/                  Bundled UAssetAPI DLLs (pre-compiled)
+    ├── uasset/                     Asset parsing & serialization
+    │   ├── uasset_file.gd
+    │   ├── uasset_export.gd
+    │   ├── uasset_import.gd
+    │   ├── uasset_property.gd
+    │   └── ue4_enums.gd
+    ├── scenes/
+    │   ├── uasset_tab.gd/tscn      Per-file editor tab
+    │   ├── detail_panel_builder.gd
+    │   ├── tree_manager.gd
+    │   ├── selection_manager.gd
+    │   ├── clipboard_manager.gd
+    │   ├── undo_manager.gd
+    │   ├── export_reorderer.gd
+    │   ├── import_tab.gd
+    │   ├── detail_items/           One class per detail-panel view
+    │   │   ├── detail_item.gd
+    │   │   ├── property_detail.gd
+    │   │   ├── export_detail.gd
+    │   │   ├── exports_list_detail.gd
+    │   │   ├── import_detail.gd
+    │   │   ├── namemap_detail.gd
+    │   │   ├── datatable_row_detail.gd
+    │   │   └── stringtable_detail.gd
+    │   └── mod_manager/
+    │       ├── mod_manager_panel.gd
+    │       ├── mod_settings_tab.gd
+    │       ├── config_manager.gd
+    │       ├── mod_state_manager.gd
+    │       ├── mod_discovery.gd
+    │       ├── file_watcher.gd
+    │       └── packing_service.gd
+    ├── guide/                      GUIDE action resources (remappable keybinds)
+    └── addons/                     GUIDE input framework
 ```
 
 ---
 
 ## Credits
 
-- [UAssetAPI](https://github.com/atenfyr/UAssetAPI) by atenfyr — UE4 asset serialization library
-- [u4pak](https://github.com/panzi/u4pak) — UE4 pak archive tool
+- [UAssetAPI](https://github.com/atenfyr/UAssetAPI) by atenfyr — UE4 asset serialization (bundled as compiled DLLs)
+- [u4pak](https://github.com/panzi/u4pak) by panzi — UE4 pak archive tool

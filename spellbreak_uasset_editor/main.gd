@@ -2,7 +2,6 @@ extends CanvasLayer
 
 @onready var open_file_popup: FileDialog = %OpenFilePopup
 @onready var tab_cont: TabContainer = %TabCont
-@onready var intro_label: Label = %IntroLabel
 
 @export_group("Inputs")
 @export var mapping: GUIDEMappingContext
@@ -26,6 +25,8 @@ var _toast_tween: Tween
 var _close_dialog: ConfirmationDialog
 var _tab_pending_close: UassetFileTab
 
+var _status_label: Label
+
 const _TOAST_HIDDEN_Y := -8.0   # resting offset_bottom when hidden (just off-screen bottom)
 const _TOAST_SHOWN_Y  := -72.0  # offset_bottom when fully visible
 
@@ -37,10 +38,12 @@ func _ready() -> void:
 
 	open_file_popup.file_selected.connect(_on_file_selected)
 	open_file_popup.files_selected.connect(_on_files_selected)
-	
-	
-	# Global app shortcuts are handled in _shortcut_input (fires before focused controls).
-	# Clipboard shortcuts stay on GUIDE so they yield to focused text fields.
+
+	# All shortcuts go through GUIDE so they stay remappable via the mapping resource.
+	open_action.triggered.connect(func() -> void: open_file_popup.popup_file_dialog())
+	close_action.triggered.connect(_close_current_tab)
+	save_action.triggered.connect(_save_current_tab)
+	switch_tab_action.triggered.connect(_switch_tab)
 	copy.triggered.connect(_copy_selection)
 	paste.triggered.connect(_paste_clipboard)
 	cut.triggered.connect(_cut_selection)
@@ -50,6 +53,63 @@ func _ready() -> void:
 
 	_build_toast()
 	_build_close_dialog()
+	_build_status_bar()
+	_setup_mod_tab()
+
+
+func _build_status_bar() -> void:
+	var vbox := tab_cont.get_parent()
+
+	vbox.add_child(HSeparator.new())
+
+	var bar := MarginContainer.new()
+	bar.add_theme_constant_override("margin_left",   10)
+	bar.add_theme_constant_override("margin_right",  10)
+	bar.add_theme_constant_override("margin_top",     3)
+	bar.add_theme_constant_override("margin_bottom",  3)
+
+	_status_label = Label.new()
+	_status_label.text = "Ready"
+	_status_label.add_theme_font_size_override("font_size", 11)
+	_status_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+	_status_label.clip_text = true
+
+	bar.add_child(_status_label)
+	vbox.add_child(bar)
+
+
+func _setup_mod_tab() -> void:
+	# Tab 0 — Mod Manager (always visible, never closeable)
+	var panel := ModManagerPanel.new()
+	tab_cont.add_child(panel)
+	tab_cont.move_child(panel, 0)
+	tab_cont.set_tab_title(0, "Mod Manager")
+	panel.open_asset_requested.connect(_on_file_selected)
+	panel.status_changed.connect(_on_mod_status_changed)
+
+	# Tab 1 — Settings (hidden by default; opened by the Settings button, closed by Save/Cancel)
+	var settings := ModSettingsTab.new().setup(panel.get_config())
+	tab_cont.add_child(settings)
+	tab_cont.move_child(settings, 1)
+	tab_cont.set_tab_title(1, "Settings")
+	tab_cont.set_tab_hidden(1, true)
+
+	panel.open_settings_requested.connect(func() -> void:
+		settings.refresh()
+		tab_cont.set_tab_hidden(1, false)
+		tab_cont.current_tab = 1
+	)
+
+	settings.close_requested.connect(func() -> void:
+		tab_cont.set_tab_hidden(1, true)
+		tab_cont.current_tab = 0
+	)
+
+
+func _on_mod_status_changed(text: String, is_error: bool) -> void:
+	_status_label.text = text
+	_status_label.add_theme_color_override("font_color",
+		Color(0.9, 0.4, 0.4) if is_error else Color(0.5, 0.5, 0.5))
 
 
 func _build_toast() -> void:
@@ -143,29 +203,12 @@ func _on_save_and_close(action: StringName) -> void:
 	_close_dialog.hide()
 
 
-## Fires before any GUI control handles the event — used for app-wide shortcuts
-## that must work regardless of what has keyboard focus.
-func _input(event: InputEvent) -> void:
-	if not event is InputEventKey or not event.pressed or event.echo:
-		return
-	if not event.ctrl_pressed:
-		return
-	match event.keycode:
-		KEY_SPACE:  # Ctrl+Space = open
-			get_viewport().set_input_as_handled()
-			open_file_popup.popup_file_dialog()
-		KEY_Q:      # Ctrl+Q = close tab
-			get_viewport().set_input_as_handled()
-			_close_current_tab()
-		KEY_S:      # Ctrl+S = save
-			get_viewport().set_input_as_handled()
-			_save_current_tab()
-		KEY_A:  # Ctrl+, = previous tab
-			get_viewport().set_input_as_handled()
-			tab_cont.select_previous_available()
-		KEY_F: # Ctrl+. = next tab
-			get_viewport().set_input_as_handled()
-			tab_cont.select_next_available()
+func _switch_tab() -> void:
+	# switch_tab_action is a 1D axis: positive = next tab, negative = previous.
+	if switch_tab_action.value_axis_1d >= 0.0:
+		tab_cont.select_next_available()
+	else:
+		tab_cont.select_previous_available()
 
 
 func _on_file_selected(path: String) -> void:
@@ -183,9 +226,7 @@ func _on_file_selected(path: String) -> void:
 
 	var new_tab := UassetFileTab.setup(asset)
 	tab_cont.add_child(new_tab)
-	var ind = tab_cont.get_tab_idx_from_control(new_tab)
-	tab_cont.current_tab = ind
-	intro_label.hide()
+	tab_cont.current_tab = tab_cont.get_tab_idx_from_control(new_tab)
 
 
 func _on_files_selected(paths: PackedStringArray) -> void:
@@ -195,13 +236,13 @@ func _on_files_selected(paths: PackedStringArray) -> void:
 
 func _close_current_tab() -> void:
 	var tab = tab_cont.get_current_tab_control()
-	if not tab:
+	# ModManagerPanel (tab 0) is pinned — only UassetFileTabs can be closed
+	if not tab is UassetFileTab:
 		return
-	if tab is UassetFileTab and tab._dirty:
+	if tab._dirty:
 		_tab_pending_close = tab
 		_close_dialog.dialog_text = '"%s" has unsaved changes.' % tab.tab_asset.file_path.get_file()
 		_close_dialog.popup_centered()
-		
 		return
 	tab.queue_free()
 	
