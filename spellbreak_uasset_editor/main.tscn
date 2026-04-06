@@ -13,6 +13,7 @@
 [ext_resource type="Resource" uid="uid://c3lxg6d23k8yl" path="res://guide/delete.tres" id="11_dg77c"]
 [ext_resource type="Resource" uid="uid://dwapj4lckokjm" path="res://guide/shift.tres" id="12_dg77c"]
 [ext_resource type="Resource" uid="uid://6kog7u0g47oc" path="res://guide/cancel.tres" id="13_ycdy4"]
+[ext_resource type="Resource" uid="uid://d04k6gcnu57o1" path="res://guide/create.tres" id="14_w48qg"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1bvp3"]
 bg_color = Color(0, 0, 0, 1)
@@ -31,6 +32,7 @@ undo = ExtResource("9_kek77")
 delete = ExtResource("11_dg77c")
 shift = ExtResource("12_dg77c")
 cancel = ExtResource("13_ycdy4")
+create = ExtResource("14_w48qg")
 
 [node name="Panel" type="PanelContainer" parent="." unique_id=1396061657]
 anchors_preset = 15

@@ -12,10 +12,9 @@ func _build_impl() -> void:
 	_add_separator()
 	_add_import_header()
 
-	for i in asset.imports.size():
-		var imp := asset.imports[i]
+	_build_virtual(asset.imports.size(), func(i: int) -> void:
+		var imp   := asset.imports[i]
 		var index := -(i + 1)
-
 		var row := ImportTab.setup(imp, index, func():
 			if Input.is_key_pressed(KEY_SHIFT):
 				sel.range_select(imp, asset.imports)
@@ -31,6 +30,7 @@ func _build_impl() -> void:
 			func(): return asset.imports
 		)
 		_container.add_child(panel)
+	)
 
 
 func _add_import_header() -> void:

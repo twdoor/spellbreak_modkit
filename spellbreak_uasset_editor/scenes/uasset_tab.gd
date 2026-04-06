@@ -13,11 +13,12 @@ class_name UassetFileTab extends MarginContainer
 @export var detail_panel: VBoxContainer
 
 var tab_asset: UAssetFile
-var _base_name: String = ""
+var _base_name: String = ""       ## Short stem used for duplicate detection ("MyFile")
+var _display_base: String = ""    ## What actually appears in the tab — set by main.gd
 var _dirty: bool = false:
 	set(value):
 		_dirty = value
-		name = (_base_name + " *") if _dirty else _base_name
+		_update_tab_title()
 
 ## Navigation stack: [{data, label}, ...]
 var _detail_stack: Array = []
@@ -39,8 +40,28 @@ static func setup(uasset: UAssetFile) -> UassetFileTab:
 	var tab: UassetFileTab = UASSET_TAB.instantiate()
 	tab.tab_asset = uasset
 	tab._base_name = asset_name
+	tab._display_base = asset_name   # main.gd may override this via _refresh_tab_titles
 	tab.name = asset_name
 	return tab
+
+
+## Returns the disambiguated title: "ModFolder/FileName"
+## ModFolder is the root directory that contains the "g3" folder.
+## Falls back to the immediate parent folder if "g3" is not found in the path.
+func get_disambig_name() -> String:
+	var parts := tab_asset.file_path.split("/")
+	var g3_idx := parts.find("g3")
+	var mod_folder := parts[g3_idx - 1] if g3_idx > 0 else tab_asset.file_path.get_base_dir().get_file()
+	return mod_folder + "/" + _base_name
+
+
+## Called by main.gd after add_child / on close, and by the _dirty setter.
+## Uses set_tab_title so the label is always correct regardless of node name collisions.
+func _update_tab_title() -> void:
+	var title := (_display_base + " *") if _dirty else _display_base
+	if is_inside_tree() and get_parent() is TabContainer:
+		var tc := get_parent() as TabContainer
+		tc.set_tab_title(tc.get_tab_idx_from_control(self), title)
 
 
 func _ready() -> void:
@@ -54,6 +75,7 @@ func _ready() -> void:
 	# Wire tree signals
 	tree.item_selected.connect(_on_tree_selected)
 	tree.item_activated.connect(_on_tree_activated)
+	tree.empty_clicked.connect(func(_pos: Vector2, _btn: int) -> void: clear_selection())
 	tree.columns = 1
 	tree.hide_root = true
 
@@ -137,8 +159,10 @@ func _show_detail(data: Variant) -> void:
 	# Update selection to match, so single-click navigation keeps selection in sync
 	if data is UAssetExport or data is UAssetImport or data is UAssetProperty:
 		_selection.set_selection([data])
+		_tree_manager.select_item(data)
 	elif data is Dictionary and data.has("dt_row"):
 		_selection.set_selection([data])
+		_tree_manager.select_item(data)
 	_detail_builder.show(data)
 
 

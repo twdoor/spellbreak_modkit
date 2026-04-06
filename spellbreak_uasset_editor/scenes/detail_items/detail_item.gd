@@ -255,29 +255,27 @@ func _build_children_sorted(children: Array[UAssetProperty]) -> void:
 
 ## Render array children as selectable rows — same click / Ctrl / Shift pattern as imports.
 ## Copy (Ctrl+C), paste (Ctrl+V), and delete work through the global keyboard handlers.
+## Large arrays are paginated to avoid per-frame lag.
 func _build_array_detail(prop: UAssetProperty) -> void:
 	var sel: SelectionManager = _ctx["selection"]
 
-	for i in prop.children.size():
+	_build_virtual(prop.children.size(), func(i: int) -> void:
 		var child := prop.children[i]
-		var ci    := i  # capture by value for lambdas
 
 		# ── Build visible content ────────────────────────────────────────────
 		var content: Control
 
 		if _is_simple_struct(child):
-			# Label + flat leaves, all inside a VBox
 			var vbox := VBoxContainer.new()
 			vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			vbox.add_theme_constant_override("separation", 3)
 			var lbl := Label.new()
-			lbl.text = "[%d]" % ci
+			lbl.text = "[%d]" % i
 			if not child.struct_type.is_empty():
 				lbl.text += "  %s" % child.struct_type
 			lbl.add_theme_font_size_override("font_size", 12)
 			lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.4))
 			vbox.add_child(lbl)
-			# Temporarily redirect _container so _build_flat_leaves fills the vbox
 			var saved := _container
 			_container = vbox
 			_build_flat_leaves(child)
@@ -285,18 +283,21 @@ func _build_array_detail(prop: UAssetProperty) -> void:
 			content = vbox
 
 		elif child.prop_type in ["Struct", "Array", "GameplayTagContainer"] and not child.children.is_empty():
-			var btn := Button.new()
-			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			btn.flat = true
-			var lbl := "[%d]" % ci
+			var vbox := VBoxContainer.new()
+			vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			vbox.add_theme_constant_override("separation", 3)
+			var lbl := Label.new()
+			lbl.text = "[%d]" % i
 			if child.prop_type == "Struct" and not child.struct_type.is_empty():
-				lbl += "  %s" % child.struct_type
-			btn.text = "▸ %s  [%d children]" % [lbl, child.children.size()]
-			btn.add_theme_color_override("font_color", Color(0.5, 0.7, 1.0))
-			btn.add_theme_color_override("font_hover_color", Color(0.7, 0.85, 1.0))
-			btn.pressed.connect(func() -> void: _ctx["navigate_to"].call(child, "[%d]" % ci))
-			content = btn
+				lbl.text += "  %s" % child.struct_type
+			lbl.add_theme_font_size_override("font_size", 12)
+			lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.4))
+			vbox.add_child(lbl)
+			var saved := _container
+			_container = vbox
+			_build_children_sorted(child.children)
+			_container = saved
+			content = vbox
 
 		else:
 			var row := PropertyRow.create(child, _ctx["asset"])
@@ -319,11 +320,43 @@ func _build_array_detail(prop: UAssetProperty) -> void:
 				else:    sel.set_selection([child]),
 			func() -> Array: return prop.children
 		))
+	)
 
-		if i < prop.children.size() - 1:
-			var spacer := Control.new()
-			spacer.custom_minimum_size.y = 2
-			_container.add_child(spacer)
+
+## ── Incremental build ─────────────────────────────────────────────────────────
+## Builds all rows but spreads the work across frames so the UI never freezes.
+## Each frame gets up to FRAME_BUDGET_MS milliseconds of build time; whatever
+## fits gets rendered, then the function yields and continues next frame.
+## All rows end up in the VBox — scrolling is entirely native with no stutter.
+##
+## A sentinel node is added first; if the panel is cleared while building is
+## still in progress the sentinel gets freed and the coroutine stops cleanly.
+
+func _build_virtual(total: int, build_row: Callable, _unused_row_h: float = 30.0) -> void:
+	if total == 0:
+		return
+
+	# Add a sentinel as the first child so we can detect panel-clear mid-build.
+	var sentinel := Node.new()
+	_container.add_child(sentinel)
+
+	const FRAME_BUDGET_MS := 12  # leave ~4 ms headroom in a 60 fps frame
+	var frame_start := Time.get_ticks_msec()
+
+	for i in total:
+		# Panel was cleared (navigated away) — stop immediately.
+		if not is_instance_valid(sentinel):
+			return
+		build_row.call(i)
+		# Every 8 rows check if we've used up the frame budget.
+		if i % 8 == 7 and Time.get_ticks_msec() - frame_start >= FRAME_BUDGET_MS:
+			await _container.get_tree().process_frame
+			if not is_instance_valid(sentinel):
+				return
+			frame_start = Time.get_ticks_msec()
+
+	if is_instance_valid(sentinel):
+		sentinel.queue_free()
 
 
 func _on_row_value_changed(prop: UAssetProperty, old_value: Variant, _new_value: Variant) -> void:

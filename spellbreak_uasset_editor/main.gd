@@ -16,6 +16,7 @@ extends CanvasLayer
 @export var delete: GUIDEAction
 @export var shift: GUIDEAction
 @export var cancel: GUIDEAction
+@export var create: GUIDEAction
 
 var _toast_label: Label
 var _toast_panel: PanelContainer
@@ -50,6 +51,7 @@ func _ready() -> void:
 	undo.triggered.connect(_undo)
 	delete.triggered.connect(_delete_selection)
 	cancel.triggered.connect(_cancel_selection)
+	create.triggered.connect(_create_file)
 
 	_build_toast()
 	_build_close_dialog()
@@ -86,6 +88,12 @@ func _setup_mod_tab() -> void:
 	tab_cont.set_tab_title(0, "Mod Manager")
 	panel.open_asset_requested.connect(_on_file_selected)
 	panel.status_changed.connect(_on_mod_status_changed)
+
+	# When any UassetFileTab is removed, refresh titles so lone survivors revert to short names.
+	tab_cont.child_exiting_tree.connect(func(child: Node) -> void:
+		if child is UassetFileTab:
+			_refresh_tab_titles.call_deferred()
+	)
 
 	# Tab 1 — Settings (hidden by default; opened by the Settings button, closed by Save/Cancel)
 	var settings := ModSettingsTab.new().setup(panel.get_config())
@@ -226,12 +234,36 @@ func _on_file_selected(path: String) -> void:
 
 	var new_tab := UassetFileTab.setup(asset)
 	tab_cont.add_child(new_tab)
+	# Refresh all tab titles: duplicates get "ParentFolder/Name", unique ones stay short.
+	_refresh_tab_titles()
 	tab_cont.current_tab = tab_cont.get_tab_idx_from_control(new_tab)
 
 
 func _on_files_selected(paths: PackedStringArray) -> void:
 	for path in paths:
 		_on_file_selected(path)
+
+
+## Scans all open UassetFileTabs and updates their displayed title:
+##   - unique filename  → short form  "FileName"
+##   - duplicate filename → long form  "ParentFolder/FileName"
+## Also handles the dirty (*) suffix through _update_tab_title.
+func _refresh_tab_titles() -> void:
+	# Count how many open tabs share each base name.
+	var counts: Dictionary = {}
+	for i in tab_cont.get_child_count():
+		var tab := tab_cont.get_child(i)
+		if tab is UassetFileTab:
+			var n: String = (tab as UassetFileTab)._base_name
+			counts[n] = counts.get(n, 0) + 1
+
+	# Apply short or long form accordingly.
+	for i in tab_cont.get_child_count():
+		var tab := tab_cont.get_child(i)
+		if tab is UassetFileTab:
+			var ft := tab as UassetFileTab
+			ft._display_base = ft.get_disambig_name() if counts[ft._base_name] > 1 else ft._base_name
+			ft._update_tab_title()
 
 
 func _close_current_tab() -> void:
@@ -259,41 +291,57 @@ func _copy_selection() -> void:
 	if _text_control_focused():
 		return
 	var tab := tab_cont.get_current_tab_control()
-	if tab and tab is UassetFileTab:
+	if tab is UassetFileTab:
 		tab.copy_selection()
 		_show_toast("Copied  " + tab.get_clipboard_label())
+	elif tab is ModManagerPanel:
+		(tab as ModManagerPanel).copy_selection()
 
 
 func _cut_selection() -> void:
 	if _text_control_focused():
 		return
 	var tab := tab_cont.get_current_tab_control()
-	if tab and tab is UassetFileTab:
+	if tab is UassetFileTab:
 		tab.cut_selection()
 		_show_toast("Cut  " + tab.get_clipboard_label())
+	elif tab is ModManagerPanel:
+		(tab as ModManagerPanel).cut_selection()
 
 
 func _paste_clipboard() -> void:
 	if _text_control_focused():
 		return
 	var tab := tab_cont.get_current_tab_control()
-	if tab and tab is UassetFileTab:
+	if tab is UassetFileTab:
 		tab.paste_clipboard()
+	elif tab is ModManagerPanel:
+		(tab as ModManagerPanel).paste_clipboard()
 
 
 func _delete_selection() -> void:
 	if _text_control_focused():
 		return
 	var tab := tab_cont.get_current_tab_control()
-	if tab and tab is UassetFileTab:
+	if tab is UassetFileTab:
 		tab.delete_selection()
+	elif tab is ModManagerPanel:
+		(tab as ModManagerPanel).delete_selection()
+
+
+func _create_file() -> void:
+	if _text_control_focused():
+		return
+	var tab := tab_cont.get_current_tab_control()
+	if tab is ModManagerPanel:
+		(tab as ModManagerPanel).create_file()
 
 
 func _undo() -> void:
 	if _text_control_focused():
 		return
 	var tab := tab_cont.get_current_tab_control()
-	if tab and tab is UassetFileTab:
+	if tab is UassetFileTab:
 		tab.undo()
 
 
@@ -301,8 +349,10 @@ func _cancel_selection() -> void:
 	if _text_control_focused():
 		return
 	var tab := tab_cont.get_current_tab_control()
-	if tab and tab is UassetFileTab:
+	if tab is UassetFileTab:
 		tab.clear_selection()
+	elif tab is ModManagerPanel:
+		(tab as ModManagerPanel).clear_selection()
 
 
 ## Returns true when a text-editing control has keyboard focus.

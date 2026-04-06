@@ -53,5 +53,5 @@ func _resolve_item(data: Variant) -> DetailItem:
 		match data:
 			&"namemap":   return NamemapDetail.new()
 			&"importmap": return ImportDetail.new()
-			&"exports":   return ExportsListDetail.new()
+			&"exports":   return null  # list view removed (performance)
 	return null

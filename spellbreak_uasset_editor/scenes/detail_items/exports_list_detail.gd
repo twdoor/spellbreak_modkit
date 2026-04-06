@@ -12,9 +12,9 @@ func _build_impl() -> void:
 	_add_header("Exports")
 	_add_separator()
 
-	for i in asset.exports.size():
+	_build_virtual(asset.exports.size(), func(i: int) -> void:
 		var expo := asset.exports[i]
-		var row := HBoxContainer.new()
+		var row  := HBoxContainer.new()
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 		var btn := Button.new()
@@ -36,7 +36,6 @@ func _build_impl() -> void:
 		)
 		row.add_child(btn)
 
-		# Move-up button
 		if i > 0:
 			var up_btn := Button.new()
 			up_btn.text = "↑"
@@ -47,7 +46,6 @@ func _build_impl() -> void:
 			up_btn.pressed.connect(func(): _request_swap(i, i - 1))
 			row.add_child(up_btn)
 
-		# Move-down button
 		if i < asset.exports.size() - 1:
 			var dn_btn := Button.new()
 			dn_btn.text = "↓"
@@ -65,6 +63,7 @@ func _build_impl() -> void:
 			func(): return asset.exports
 		)
 		_container.add_child(panel)
+	)
 
 
 ## Ask the tab to perform a swap (context callback "swap_exports" → UassetFileTab._do_swap).

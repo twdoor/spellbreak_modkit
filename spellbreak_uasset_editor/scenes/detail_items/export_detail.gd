@@ -13,9 +13,6 @@ func init_data(expo: UAssetExport) -> ExportDetail:
 func _build_impl() -> void:
 	var expo := _expo
 
-	if not (_ctx["detail_stack"] as Array).is_empty():
-		_add_back_button()
-
 	# Header row: title
 	var hdr := HBoxContainer.new()
 	var hdr_label := Label.new()
@@ -47,28 +44,17 @@ func _build_impl() -> void:
 	_add_field_editor("ObjectFlags", expo.object_flags, func(v):
 		expo.object_flags = v; expo.raw["ObjectFlags"] = v)
 
-	# Split properties: simple values up top, complex (Struct/Array) below
-	var simple: Array[UAssetProperty] = []
-	var complex: Array[UAssetProperty] = []
+	# Only show simple leaf properties — structs/arrays are navigable via the tree.
+	var has_props := false
 	for prop in expo.properties:
-		if prop.prop_type in ["Struct", "Array", "GameplayTagContainer"]:
-			complex.append(prop)
-		else:
-			simple.append(prop)
-
-	if not simple.is_empty():
-		_add_separator()
-		_add_section_label("PROPERTIES")
-		for prop in simple:
+		if prop.prop_type not in ["Struct", "Array", "GameplayTagContainer"]:
+			if not has_props:
+				_add_separator()
+				_add_section_label("PROPERTIES")
+				has_props = true
 			var row := PropertyRow.create(prop, _ctx["asset"])
 			row.value_changed.connect(_on_row_value_changed)
 			_container.add_child(row)
-
-	if not complex.is_empty():
-		_add_separator()
-		_add_section_label("STRUCTS & ARRAYS")
-		for prop in complex:
-			_add_nav_button(prop)
 
 	# Dependency arrays
 	_add_separator()

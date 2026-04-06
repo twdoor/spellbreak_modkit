@@ -14,9 +14,6 @@ func init_data(prop: UAssetProperty) -> PropertyDetail:
 func _build_impl() -> void:
 	var prop := _prop
 
-	if not (_ctx["detail_stack"] as Array).is_empty():
-		_add_back_button()
-
 	match prop.prop_type:
 		"Struct":
 			_add_header(prop.prop_name)

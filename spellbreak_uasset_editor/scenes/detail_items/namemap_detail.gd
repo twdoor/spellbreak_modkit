@@ -24,8 +24,7 @@ func _build_impl() -> void:
 	hdr.add_child(hdr_name)
 	_container.add_child(hdr)
 
-	for i in asset.name_map.size():
-		_build_name_row(i)
+	_build_virtual(asset.name_map.size(), _build_name_row)
 
 
 func _build_name_row(index: int) -> void:

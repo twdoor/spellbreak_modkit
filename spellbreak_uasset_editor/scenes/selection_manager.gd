@@ -11,6 +11,17 @@ var _selection: Array = []
 var _last_selected_anchor: Variant = null
 var _row_panels: Dictionary = {}
 
+## Cached style boxes — created once, reused on every highlight update.
+var _style_selected: StyleBoxFlat
+var _style_normal: StyleBoxFlat
+
+
+func _init() -> void:
+	_style_selected = StyleBoxFlat.new()
+	_style_selected.bg_color = _COLOR_SELECTED
+	_style_normal = StyleBoxFlat.new()
+	_style_normal.bg_color = _COLOR_NORMAL
+
 ## Emitted whenever the selection changes. current is the single selected item or null.
 signal selection_changed(selection: Array, current: Variant)
 
@@ -86,9 +97,7 @@ func _update_row_highlights() -> void:
 		if not is_instance_valid(panel):
 			continue
 		var selected: bool = key in _selection
-		var style := StyleBoxFlat.new()
-		style.bg_color = _COLOR_SELECTED if selected else _COLOR_NORMAL
-		panel.add_theme_stylebox_override("panel", style)
+		panel.add_theme_stylebox_override("panel", _style_selected if selected else _style_normal)
 
 
 ## Wrap inner in a PanelContainer registered under key so it gets highlight updates.
@@ -97,9 +106,7 @@ func _update_row_highlights() -> void:
 func make_selectable_row(key: Variant, inner: Control, click_handler: Callable, get_list: Callable = Callable()) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var style := StyleBoxFlat.new()
-	style.bg_color = _COLOR_NORMAL
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", _style_normal)
 	panel.add_child(inner)
 	panel.gui_input.connect(func(event: InputEvent):
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:

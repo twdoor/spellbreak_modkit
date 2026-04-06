@@ -15,17 +15,26 @@ var _packer:  PackingService
 var _watcher: ModFileWatcher
 
 # ── State ──────────────────────────────────────────────────────────────────────
-var _mods:          Array = []  # from ModDiscovery.scan()
-var _expanded_mod:  String = ""
-var _log_lines:     Array  = []
+var _mods:           Array      = []  # from ModDiscovery.scan()
+var _collapsed_mods: Dictionary = {}  # mod_name -> bool  (default true = collapsed)
+var _collapsed_dirs: Dictionary = {}  # "mod_name::rel_dir" -> bool (true = collapsed)
+var _log_lines:      Array      = []
 const _MAX_LOG := 80
 
+# File clipboard — independent of the uasset ClipboardManager
+var _file_clipboard:    Array = []   # [{mod, rel_path, full_path}, ...]
+var _clipboard_is_cut:  bool  = false
+
+# Tree button IDs
+const _BTN_ADD := 0
+const _BTN_DEL := 0
+
 # ── UI references ──────────────────────────────────────────────────────────────
-var _mod_list_container: VBoxContainer
-var _watch_btn:          Button
-var _pack_btn:           Button
-var _log_label:          Label
-var _log_scroll:         ScrollContainer
+var _mod_tree:  Tree
+var _watch_btn: Button
+var _pack_btn:  Button
+var _log_label: Label
+var _log_scroll: ScrollContainer
 
 
 func _ready() -> void:
@@ -66,9 +75,9 @@ func _build_ui() -> void:
 
 	# ── Toolbar ──
 	var toolbar_margin := MarginContainer.new()
-	toolbar_margin.add_theme_constant_override("margin_left", 8)
-	toolbar_margin.add_theme_constant_override("margin_right", 8)
-	toolbar_margin.add_theme_constant_override("margin_top", 6)
+	toolbar_margin.add_theme_constant_override("margin_left",   8)
+	toolbar_margin.add_theme_constant_override("margin_right",  8)
+	toolbar_margin.add_theme_constant_override("margin_top",    6)
 	toolbar_margin.add_theme_constant_override("margin_bottom", 4)
 	var toolbar := HBoxContainer.new()
 	toolbar.add_theme_constant_override("separation", 6)
@@ -97,6 +106,19 @@ func _build_ui() -> void:
 	launch_btn.pressed.connect(_on_launch_pressed)
 	toolbar.add_child(launch_btn)
 
+	# Spacer pushes the next buttons to the right
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	toolbar.add_child(spacer)
+
+	var new_mod_btn := Button.new()
+	new_mod_btn.text = "New Mod"
+	new_mod_btn.icon = _icon("FolderCreate")
+	new_mod_btn.tooltip_text = "Create a new mod folder"
+	new_mod_btn.add_theme_color_override("font_color", Color(0.6, 0.85, 0.6))
+	new_mod_btn.pressed.connect(_on_new_mod_pressed)
+	toolbar.add_child(new_mod_btn)
+
 	var settings_btn := Button.new()
 	settings_btn.text = "Settings"
 	settings_btn.icon = _icon("Tools")
@@ -105,21 +127,23 @@ func _build_ui() -> void:
 	settings_btn.pressed.connect(func() -> void: open_settings_requested.emit())
 	toolbar.add_child(settings_btn)
 
-
 	toolbar_margin.add_child(toolbar)
 	add_child(toolbar_margin)
 	add_child(HSeparator.new())
 
-	# ── Mod list (scrollable) ──
-	var mod_scroll := ScrollContainer.new()
-	mod_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	mod_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-
-	_mod_list_container = VBoxContainer.new()
-	_mod_list_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_mod_list_container.add_theme_constant_override("separation", 2)
-	mod_scroll.add_child(_mod_list_container)
-	add_child(mod_scroll)
+	# ── Mod tree ──
+	_mod_tree = Tree.new()
+	_mod_tree.hide_root = true
+	_mod_tree.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+	_mod_tree.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_mod_tree.select_mode = Tree.SELECT_MULTI
+	_mod_tree.allow_rmb_select = true
+	_mod_tree.add_theme_constant_override("v_separation", 4)
+	_mod_tree.item_activated.connect(_on_tree_item_activated)
+	_mod_tree.item_mouse_selected.connect(_on_tree_item_mouse_selected)
+	_mod_tree.button_clicked.connect(_on_tree_button_clicked)
+	_mod_tree.empty_clicked.connect(func(_pos: Vector2, _btn: int) -> void: clear_selection())
+	add_child(_mod_tree)
 
 	add_child(HSeparator.new())
 
@@ -130,10 +154,10 @@ func _build_ui() -> void:
 	_log_scroll.visible = false
 
 	var log_margin := MarginContainer.new()
-	log_margin.add_theme_constant_override("margin_left", 10)
-	log_margin.add_theme_constant_override("margin_right", 10)
-	log_margin.add_theme_constant_override("margin_top", 2)
-	log_margin.add_theme_constant_override("margin_bottom", 6)
+	log_margin.add_theme_constant_override("margin_left",   10)
+	log_margin.add_theme_constant_override("margin_right",  10)
+	log_margin.add_theme_constant_override("margin_top",     2)
+	log_margin.add_theme_constant_override("margin_bottom",  6)
 	_log_label = Label.new()
 	_log_label.add_theme_font_size_override("font_size", 11)
 	_log_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
@@ -143,21 +167,11 @@ func _build_ui() -> void:
 	add_child(_log_scroll)
 
 
-
 ## Returns a Godot editor icon by name, or null when EditorIcons aren't in the theme.
-## Works when running embedded inside the editor; silently returns null otherwise.
 func _icon(icon_name: String) -> Texture2D:
 	if has_theme_icon(icon_name, &"EditorIcons"):
 		return get_theme_icon(icon_name, &"EditorIcons")
 	return null
-
-
-func _make_panel(bg: Color) -> PanelContainer:
-	var pc := PanelContainer.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = bg
-	pc.add_theme_stylebox_override("panel", style)
-	return pc
 
 
 # ── Mod list ───────────────────────────────────────────────────────────────────
@@ -171,191 +185,295 @@ func _refresh_mods() -> void:
 
 
 func _rebuild_mod_list() -> void:
-	for child in _mod_list_container.get_children():
-		child.queue_free()
+	# Persist folder collapse state from the live tree before clearing.
+	_save_collapse_state()
+	_mod_tree.clear()
+
+	var root := _mod_tree.create_item()  # hidden root
 
 	if _mods.is_empty():
-		var empty_lbl := Label.new()
-		if _cfg.mods_dir.is_empty():
-			empty_lbl.text = "Configure mods_dir\nin Settings"
-		else:
-			empty_lbl.text = "No mods in:\n%s\n\nEach mod = folder with g3/" % _cfg.mods_dir
-		empty_lbl.add_theme_font_size_override("font_size", 11)
-		empty_lbl.add_theme_color_override("font_color", Color(0.45, 0.45, 0.45))
-		empty_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
-		var pad := MarginContainer.new()
-		pad.add_theme_constant_override("margin_left", 10)
-		pad.add_theme_constant_override("margin_top", 12)
-		pad.add_child(empty_lbl)
-		_mod_list_container.add_child(pad)
+		var item := _mod_tree.create_item(root)
+		item.set_text(0, "No mods found" if not _cfg.mods_dir.is_empty()
+				else "Configure mods_dir in Settings")
+		item.set_custom_color(0, Color(0.45, 0.45, 0.45))
+		item.set_selectable(0, false)
 		return
 
 	for mod in _mods:
-		_mod_list_container.add_child(_build_mod_row(mod))
-		if _expanded_mod == mod["name"]:
-			_mod_list_container.add_child(_build_mod_file_list(mod))
+		_build_mod_item(root, mod)
 
 
-func _build_mod_row(mod: Dictionary) -> Control:
+## Walk the live tree and save collapsed state for mod and folder items before a rebuild.
+func _save_collapse_state() -> void:
+	if not is_instance_valid(_mod_tree) or not _mod_tree.get_root():
+		return
+	var mod_item := _mod_tree.get_root().get_first_child()
+	while mod_item:
+		var mod_meta: Dictionary = mod_item.get_metadata(0)
+		if mod_meta.get("type") == "mod":
+			_collapsed_mods[(mod_meta["mod"] as Dictionary)["name"] as String] = mod_item.collapsed
+		var folder_item := mod_item.get_first_child()
+		while folder_item:
+			var meta: Dictionary = folder_item.get_metadata(0)
+			if meta.get("type") == "folder":
+				_collapsed_dirs[meta["key"] as String] = folder_item.collapsed
+			folder_item = folder_item.get_next()
+		mod_item = mod_item.get_next()
+
+
+func _build_mod_item(root: TreeItem, mod: Dictionary) -> void:
 	var mod_name: String = mod["name"]
 	var enabled:  bool   = _state.is_enabled(mod_name)
-	var expanded: bool   = _expanded_mod == mod_name
 
-	# Background colour: green tint when enabled, subtle highlight when expanded
-	var bg_color: Color
-	if enabled:
-		bg_color = Color(0.08, 0.16, 0.08) if not expanded else Color(0.09, 0.19, 0.09)
-	else:
-		bg_color = Color(0.11, 0.11, 0.13) if not expanded else Color(0.13, 0.13, 0.16)
-
-	var row_bg := _make_panel(bg_color)
-	# Let the panel catch mouse events for click handling
-	row_bg.mouse_filter = Control.MOUSE_FILTER_STOP
-	row_bg.gui_input.connect(func(event: InputEvent) -> void:
-		if not event is InputEventMouseButton or not event.pressed:
-			return
-		match event.button_index:
-			MOUSE_BUTTON_LEFT:
-				# Left-click: toggle file list expand/collapse
-				_expanded_mod = "" if _expanded_mod == mod_name else mod_name
-				_rebuild_mod_list()
-			MOUSE_BUTTON_RIGHT:
-				# Right-click: toggle enabled state
-				_state.toggle(mod_name)
-				_rebuild_mod_list()
-	)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 8)
-	margin.add_theme_constant_override("margin_right", 8)
-	margin.add_theme_constant_override("margin_top", 5)
-	margin.add_theme_constant_override("margin_bottom", 5)
-	# Prevent the margin from swallowing clicks before gui_input on the parent panel
-	margin.mouse_filter = Control.MOUSE_FILTER_PASS
-
-	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 6)
-	hbox.mouse_filter = Control.MOUSE_FILTER_PASS
-
-	# Expand chevron
-	var chevron := TextureRect.new()
-	chevron.texture = _icon("GuiTreeArrowDown") if expanded else _icon("GuiTreeArrowRight")
-	chevron.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
-	chevron.mouse_filter = Control.MOUSE_FILTER_PASS
-	hbox.add_child(chevron)
-
-	# Mod name + file count
-	var name_col := VBoxContainer.new()
-	name_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_col.mouse_filter = Control.MOUSE_FILTER_PASS
-
-	var name_lbl := Label.new()
-	name_lbl.text = mod_name
-	name_lbl.add_theme_font_size_override("font_size", 13)
-	name_lbl.add_theme_color_override("font_color",
-		Color(0.55, 0.95, 0.55) if enabled else Color(0.85, 0.85, 0.85))
-	name_lbl.clip_text = true
-	name_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
-	name_col.add_child(name_lbl)
-
-	var info_lbl := Label.new()
-	info_lbl.text = "%d files · %s · %s" % [
+	var item := _mod_tree.create_item(root)
+	item.set_text(0, mod_name)
+	item.set_custom_font_size(0, 14)
+	item.set_custom_color(0, Color(0.45, 0.9, 0.45) if enabled else Color(0.82, 0.82, 0.82))
+	item.set_icon(0, _icon("GuiVisibilityVisible" if enabled else "GuiVisibilityHidden"))
+	item.set_tooltip_text(0, "%d files · %s\n%s  (right-click to toggle)" % [
 		mod["file_count"],
 		ModDiscovery.fmt_size(mod["size_bytes"]),
-		"on" if enabled else "off"
-	]
-	info_lbl.add_theme_font_size_override("font_size", 10)
-	info_lbl.add_theme_color_override("font_color", Color(0.45, 0.45, 0.45))
-	info_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
-	name_col.add_child(info_lbl)
-	hbox.add_child(name_col)
+		"Enabled" if enabled else "Disabled",
+	])
+	item.set_metadata(0, {"type": "mod", "mod": mod})
+	# Default collapsed; remember user-expanded state across rebuilds.
+	item.collapsed = _collapsed_mods.get(mod_name, true)
 
-	# "Add Files" button — right-aligned, MOUSE_FILTER_STOP so it doesn't bubble to the panel
-	var add_btn := Button.new()
-	add_btn.text = "Add Files"
-	add_btn.icon = _icon("Add")
-	add_btn.tooltip_text = "Copy files from a source into this mod"
-	add_btn.flat = true
-	add_btn.add_theme_font_size_override("font_size", 11)
-	add_btn.add_theme_color_override("font_color", Color(0.5, 0.75, 1.0))
-	# MOUSE_FILTER_STOP is the default for Button — click won't reach the panel's gui_input
-	add_btn.pressed.connect(func() -> void: _on_add_files_pressed(mod, add_btn))
-	hbox.add_child(add_btn)
+	# Add Files button (icon only, anchored to the item's right side)
+	var add_icon := _icon("Add")
+	if add_icon:
+		item.add_button(0, add_icon, _BTN_ADD, false, "Add files to this mod")
 
-	margin.add_child(hbox)
-	row_bg.add_child(margin)
-	return row_bg
+	_build_mod_files(item, mod)
 
 
-func _build_mod_file_list(mod: Dictionary) -> Control:
-	var container := VBoxContainer.new()
-	container.add_theme_constant_override("separation", 0)
-
-	# Group files by their parent folder (relative to mod_path)
+func _build_mod_files(mod_item: TreeItem, mod: Dictionary) -> void:
+	var mod_name: String = mod["name"]
 	var files := ModDiscovery.list_mod_files(mod["path"])
-	var last_dir := ""
 
+	# Group files by relative directory, preserving discovery order.
+	var dir_order: Array    = []
+	var groups:    Dictionary = {}
 	for rel_path: String in files:
-		var file_name: String = rel_path.get_file()
-		var file_dir:  String = rel_path.get_base_dir()
+		var d: String = rel_path.get_base_dir()
+		if d not in groups:
+			groups[d] = []
+			dir_order.append(d)
+		(groups[d] as Array).append(rel_path)
 
-		# Show a directory separator when we enter a new folder
-		if file_dir != last_dir:
-			last_dir = file_dir
-			var dir_lbl := Label.new()
-			dir_lbl.text = "  " + file_dir + "/"
-			dir_lbl.add_theme_font_size_override("font_size", 10)
-			dir_lbl.add_theme_color_override("font_color", Color(0.35, 0.35, 0.35))
-			dir_lbl.clip_text = true
-			container.add_child(dir_lbl)
+	for dir: String in dir_order:
+		var dir_key: String = mod_name + "::" + dir
 
-		var file_row := HBoxContainer.new()
-		file_row.add_theme_constant_override("separation", 0)
+		var dir_item := _mod_tree.create_item(mod_item)
+		dir_item.set_text(0, dir + "/")
+		dir_item.set_custom_font_size(0, 12)
+		dir_item.set_custom_color(0, Color(0.5, 0.5, 0.58))
+		dir_item.set_selectable(0, false)
+		dir_item.set_metadata(0, {"type": "folder", "key": dir_key})
+		dir_item.collapsed = _collapsed_dirs.get(dir_key, false)
 
-		var file_btn := Button.new()
-		file_btn.text = "    " + file_name       # indent under the dir label
-		file_btn.tooltip_text = rel_path          # full relative path on hover
-		file_btn.flat = true
-		file_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		file_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		file_btn.clip_text = true
-		file_btn.add_theme_font_size_override("font_size", 11)
+		for rel_path: String in (groups[dir] as Array):
+			var full_path: String = (mod["path"] as String).path_join(rel_path)
+			var is_uasset := rel_path.ends_with(".uasset")
 
-		var full_path: String = (mod["path"] as String).path_join(rel_path)
+			var file_item := _mod_tree.create_item(dir_item)
+			file_item.set_text(0, rel_path.get_file())
+			file_item.set_custom_font_size(0, 13)
+			file_item.set_tooltip_text(0, rel_path)
+			file_item.set_custom_color(0,
+				Color(0.5, 0.75, 1.0) if is_uasset else Color(0.62, 0.62, 0.62))
+			file_item.set_selectable(0, true)
+			file_item.set_metadata(0, {
+				"type": "file", "mod": mod,
+				"rel_path": rel_path, "full_path": full_path
+			})
 
-		if rel_path.ends_with(".uasset"):
-			file_btn.add_theme_color_override("font_color", Color(0.5, 0.7, 1.0))
-			file_btn.pressed.connect(func() -> void:
-				open_asset_requested.emit(full_path)
-			)
+			var del_icon := _icon("Remove")
+			if del_icon:
+				file_item.add_button(0, del_icon, _BTN_DEL, false, "Remove from mod")
+
+
+# ── Tree signal handlers ───────────────────────────────────────────────────────
+
+## Double-click a .uasset file → open it in the editor.
+## Using activated (double-click) so single-click safely builds multi-selection.
+func _on_tree_item_activated() -> void:
+	var item := _mod_tree.get_selected()
+	if not item:
+		return
+	var meta: Dictionary = item.get_metadata(0)
+	if meta.get("type") == "file" and (meta["rel_path"] as String).ends_with(".uasset"):
+		open_asset_requested.emit(meta["full_path"] as String)
+
+
+## Left-click a mod item → expand/collapse.  Right-click → toggle enabled/disabled.
+func _on_tree_item_mouse_selected(_position: Vector2, mouse_button_index: int) -> void:
+	var item := _mod_tree.get_selected()
+	if not item:
+		return
+	var meta: Dictionary = item.get_metadata(0)
+	if meta.get("type") != "mod":
+		return
+	match mouse_button_index:
+		MOUSE_BUTTON_LEFT:
+			# Toggle collapse in-place — no rebuild needed.
+			item.collapsed = not item.collapsed
+		MOUSE_BUTTON_RIGHT:
+			_state.toggle((meta["mod"] as Dictionary)["name"] as String)
+			# Defer: Tree blocks clear()/create_item() while inside a signal callback.
+			_rebuild_mod_list.call_deferred()
+
+
+## Button clicks: Add (mod items) or Delete (file items).
+func _on_tree_button_clicked(item: TreeItem, _column: int, id: int, mouse_button_index: int) -> void:
+	if mouse_button_index != MOUSE_BUTTON_LEFT:
+		return
+	var meta: Dictionary = item.get_metadata(0)
+	match meta.get("type"):
+		"mod":
+			if id == _BTN_ADD:
+				_on_add_files_pressed(meta["mod"] as Dictionary)
+		"file":
+			if id == _BTN_DEL:
+				# Defer: _rebuild_mod_list calls clear() — blocked inside a Tree signal.
+				var mod_ref: Dictionary = meta["mod"]
+				var path_ref: String    = meta["full_path"]
+				(func() -> void: _remove_mod_file(mod_ref, path_ref)).call_deferred()
+
+
+# ── Selection helpers ──────────────────────────────────────────────────────────
+
+## Collect all selected file items as metadata snapshots.
+func _get_selected_files() -> Array:
+	var result: Array = []
+	var item := _mod_tree.get_next_selected(null)
+	while item:
+		var meta: Dictionary = item.get_metadata(0)
+		if meta.get("type") == "file":
+			result.append({
+				"mod":       meta["mod"],
+				"rel_path":  meta["rel_path"],
+				"full_path": meta["full_path"],
+			})
+		item = _mod_tree.get_next_selected(item)
+	return result
+
+
+## Walk up the tree from a TreeItem to find the ancestor mod dict.
+func _get_mod_for_item(item: TreeItem) -> Variant:
+	var meta: Dictionary = item.get_metadata(0)
+	if meta.get("type") == "mod":
+		return meta["mod"]
+	var p := item.get_parent()
+	while p and p != _mod_tree.get_root():
+		var pm: Dictionary = p.get_metadata(0)
+		if pm.get("type") == "mod":
+			return pm["mod"]
+		p = p.get_parent()
+	return null
+
+
+## Return the mod dict of the first selected item (used as paste / create target).
+func _get_selected_mod() -> Variant:
+	var item := _mod_tree.get_next_selected(null)
+	while item:
+		var mod: Variant = _get_mod_for_item(item)
+		if mod != null:
+			return mod
+		item = _mod_tree.get_next_selected(item)
+	return null
+
+
+# ── Public clipboard / action API (called from main.gd) ───────────────────────
+
+func copy_selection() -> void:
+	_file_clipboard   = _get_selected_files()
+	_clipboard_is_cut = false
+	if _file_clipboard.is_empty():
+		return
+	_set_status("Copied %d file(s)" % _file_clipboard.size())
+
+
+func cut_selection() -> void:
+	_file_clipboard   = _get_selected_files()
+	_clipboard_is_cut = true
+	if _file_clipboard.is_empty():
+		return
+	_set_status("Cut %d file(s) — paste to move" % _file_clipboard.size())
+
+
+func paste_clipboard() -> void:
+	if _file_clipboard.is_empty():
+		_set_status("Nothing to paste", true)
+		return
+	var target: Variant = _get_selected_mod()
+	if target == null:
+		_set_status("Select a mod to paste into", true)
+		return
+	var target_mod := target as Dictionary
+	var dst_root: String = target_mod["path"]
+
+	var copied := 0
+	var failed := 0
+	for entry: Dictionary in _file_clipboard:
+		# Preserve the full relative path so folder structure is maintained.
+		var rel: String = entry["rel_path"]
+		var dst: String = dst_root.path_join(rel)
+		DirAccess.make_dir_recursive_absolute(dst.get_base_dir())
+		var data := FileAccess.get_file_as_bytes(entry["full_path"] as String)
+		var out  := FileAccess.open(dst, FileAccess.WRITE)
+		if out:
+			out.store_buffer(data)
+			out.close()
+			copied += 1
 		else:
-			file_btn.add_theme_color_override("font_color", Color(0.4, 0.4, 0.4))
-			file_btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			failed += 1
 
-		var del_btn := Button.new()
-		del_btn.text = "✕"
-		del_btn.flat = true
-		del_btn.tooltip_text = "Remove this file from the mod"
-		del_btn.add_theme_font_size_override("font_size", 10)
-		del_btn.add_theme_color_override("font_color", Color(0.6, 0.25, 0.25))
-		del_btn.pressed.connect(func() -> void:
-			_remove_mod_file(mod, full_path)
-		)
+	# For cut: delete sources only after all copies succeeded.
+	if _clipboard_is_cut and copied > 0:
+		for entry: Dictionary in _file_clipboard:
+			_delete_file_raw(entry["mod"] as Dictionary, entry["full_path"] as String)
+		_file_clipboard.clear()
+		_clipboard_is_cut = false
 
-		file_row.add_child(file_btn)
-		file_row.add_child(del_btn)
-		container.add_child(file_row)
-
-	return container
+	var msg := "Pasted %d file(s) into %s" % [copied, target_mod["name"]]
+	if failed > 0:
+		msg += " (%d failed)" % failed
+	_set_status(msg, failed > 0 and copied == 0)
+	_refresh_mods()
 
 
-## Delete a single file from the mod folder and prune any empty parent directories.
-func _remove_mod_file(mod: Dictionary, full_path: String) -> void:
+func delete_selection() -> void:
+	var files := _get_selected_files()
+	if files.is_empty():
+		return
+	for entry: Dictionary in files:
+		_delete_file_raw(entry["mod"] as Dictionary, entry["full_path"] as String)
+	_set_status("Deleted %d file(s)" % files.size())
+	_refresh_mods()
+
+
+func clear_selection() -> void:
+	_mod_tree.deselect_all()
+
+
+## Open the Add Files dialog for the selected mod (or the mod owning the selection).
+func create_file() -> void:
+	var mod: Variant = _get_selected_mod()
+	if mod == null:
+		_set_status("Select a mod first", true)
+		return
+	_on_add_files_pressed(mod as Dictionary)
+
+
+# ── File management ────────────────────────────────────────────────────────────
+
+## Delete a file and prune empty parent dirs up to the mod root.
+## Returns OK or an error code. Does NOT emit status or refresh — callers do that.
+func _delete_file_raw(mod: Dictionary, full_path: String) -> Error:
 	var err := DirAccess.remove_absolute(full_path)
 	if err != OK:
-		_set_status("Failed to remove: %s" % full_path.get_file(), true)
-		return
-	# Walk up and remove any now-empty directories (stop at the mod root)
+		return err
 	var mod_path: String = mod["path"]
 	var dir := full_path.get_base_dir()
 	while dir.begins_with(mod_path) and dir != mod_path:
@@ -367,14 +485,22 @@ func _remove_mod_file(mod: Dictionary, full_path: String) -> void:
 			if not has_contents:
 				DirAccess.remove_absolute(dir)
 		dir = dir.get_base_dir()
+	return OK
+
+
+## Delete one file via the tree ✕ button: reports status and refreshes.
+func _remove_mod_file(mod: Dictionary, full_path: String) -> void:
+	var err := _delete_file_raw(mod, full_path)
+	if err != OK:
+		_set_status("Failed to remove: %s" % full_path.get_file(), true)
+		return
 	_set_status("Removed %s from %s" % [full_path.get_file(), mod["name"]])
 	_refresh_mods()
 
 
-# ── Add Files from source ─────────────────────────────────────────────────────
+# ── Add Files from source ──────────────────────────────────────────────────────
 
-func _on_add_files_pressed(mod: Dictionary, btn: Button) -> void:
-	# Filter out sources with no path set
+func _on_add_files_pressed(mod: Dictionary) -> void:
 	var sources: Array = _cfg.sources.filter(
 		func(s: Dictionary) -> bool: return not (s["path"] as String).is_empty()
 	)
@@ -384,11 +510,11 @@ func _on_add_files_pressed(mod: Dictionary, btn: Button) -> void:
 	if sources.size() == 1:
 		_open_add_files_dialog(mod, sources[0])
 	else:
-		_show_source_picker(mod, sources, btn)
+		_show_source_picker(mod, sources)
 
 
-## Drop down a source-picker menu anchored below btn.
-func _show_source_picker(mod: Dictionary, sources: Array, btn: Button) -> void:
+## Drop-down source picker anchored to the current mouse position.
+func _show_source_picker(mod: Dictionary, sources: Array) -> void:
 	var popup := PopupMenu.new()
 	popup.name = "SourcePicker"
 	for i in sources.size():
@@ -400,9 +526,8 @@ func _show_source_picker(mod: Dictionary, sources: Array, btn: Button) -> void:
 		popup.queue_free()
 	)
 	get_tree().root.add_child(popup)
-	# Position the popup flush below the button, left-aligned with it
-	var origin := btn.get_screen_position()
-	popup.popup(Rect2i(int(origin.x), int(origin.y + btn.size.y), 0, 0))
+	var mp := DisplayServer.mouse_get_position()
+	popup.popup(Rect2i(mp.x, mp.y, 0, 0))
 
 
 ## Open a multi-file browser rooted at source["path"]; copy selections into mod.
@@ -412,10 +537,10 @@ func _open_add_files_dialog(mod: Dictionary, source: Dictionary) -> void:
 		_set_status("Source folder not found: %s" % source_path, true)
 		return
 	var dialog := FileDialog.new()
-	dialog.file_mode  = FileDialog.FILE_MODE_OPEN_FILES
-	dialog.access     = FileDialog.ACCESS_FILESYSTEM
+	dialog.file_mode       = FileDialog.FILE_MODE_OPEN_FILES
+	dialog.access          = FileDialog.ACCESS_FILESYSTEM
 	dialog.use_native_dialog = true
-	dialog.current_dir = source_path
+	dialog.current_dir     = source_path
 	dialog.files_selected.connect(func(paths: PackedStringArray) -> void:
 		_copy_files_to_mod(mod, source_path, paths)
 		dialog.queue_free()
@@ -427,21 +552,18 @@ func _open_add_files_dialog(mod: Dictionary, source: Dictionary) -> void:
 ## Mirror each selected file's path (relative to source_root) into mod["path"].
 func _copy_files_to_mod(mod: Dictionary, source_root: String, file_paths: PackedStringArray) -> void:
 	var mod_path: String = mod["path"]
-	var copied  := 0
-	var failed  := 0
+	var copied := 0
+	var failed := 0
 	for src_file in file_paths:
-		# Strip the source root to get the relative path, e.g. "g3/Content/BP/Foo.uasset"
 		if not src_file.begins_with(source_root):
 			_set_status("File is outside source root — skipped: %s" % src_file.get_file(), true)
 			failed += 1
 			continue
 		var rel := src_file.substr(source_root.length()).lstrip("/")
 		var dst := mod_path.path_join(rel)
-		# Create any missing directories
 		DirAccess.make_dir_recursive_absolute(dst.get_base_dir())
-		# Copy bytes
-		var data  := FileAccess.get_file_as_bytes(src_file)
-		var out   := FileAccess.open(dst, FileAccess.WRITE)
+		var data := FileAccess.get_file_as_bytes(src_file)
+		var out  := FileAccess.open(dst, FileAccess.WRITE)
 		if out:
 			out.store_buffer(data)
 			out.close()
@@ -454,7 +576,56 @@ func _copy_files_to_mod(mod: Dictionary, source_root: String, file_paths: Packed
 		if failed > 0:
 			msg += " (%d failed)" % failed
 		_set_status(msg)
-		_refresh_mods()   # update file count + expand list if already open
+		_refresh_mods()
+
+
+# ── New Mod ────────────────────────────────────────────────────────────────────
+
+func _on_new_mod_pressed() -> void:
+	if _cfg.mods_dir.is_empty():
+		_set_status("Configure mods_dir in Settings first", true)
+		return
+
+	# Build a small input dialog inline.
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "New Mod"
+	dialog.ok_button_text = "Create"
+	dialog.min_size = Vector2i(300, 0)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 6)
+	var lbl := Label.new()
+	lbl.text = "Mod folder name:"
+	var edit := LineEdit.new()
+	edit.placeholder_text = "MyModName"
+	vbox.add_child(lbl)
+	vbox.add_child(edit)
+	dialog.add_child(vbox)
+	add_child(dialog)
+
+	dialog.confirmed.connect(func() -> void:
+		var mod_name := edit.text.strip_edges()
+		if mod_name.is_empty():
+			dialog.queue_free()
+			return
+		var mod_path := _cfg.mods_dir.path_join(mod_name)
+		if DirAccess.dir_exists_absolute(mod_path):
+			_set_status("Mod '%s' already exists" % mod_name, true)
+			dialog.queue_free()
+			return
+		var err := DirAccess.make_dir_recursive_absolute(mod_path.path_join("g3/Content"))
+		if err != OK:
+			_set_status("Failed to create mod folder", true)
+			dialog.queue_free()
+			return
+		_set_status("Created mod: " + mod_name)
+		_refresh_mods()
+		dialog.queue_free()
+	)
+
+	dialog.popup_centered()
+	# Focus the text field after the popup opens.
+	edit.grab_focus.call_deferred()
 
 
 # ── Actions ────────────────────────────────────────────────────────────────────
@@ -489,16 +660,40 @@ func _on_launch_pressed() -> void:
 	if cmd.is_empty():
 		_set_status("No launch command set — configure in Settings", true)
 		return
-	var parts := cmd.split(" ", false)
-	var exe   := parts[0]
+
+	# Pure URL schemes (e.g. "steam://rungameid/...") go through the OS shell.
+	# Only triggers when :// appears before any space — "steam steam://..." is
+	# an exe + argument and falls through to normal parsing below.
+	
+	var slash_pos := cmd.find("://")
+	if slash_pos != -1 and not " " in cmd.left(slash_pos):
+		var err := OS.shell_open(cmd)
+		_set_status("Launch failed" if err != OK else "Launched: %s" % cmd, err != OK)
+		return
+
+	# Parse exe + args, respecting a quoted exe path for paths with spaces.
+	# Accepted forms:
+	#   C:\NoSpaces\game.exe -arg1 -arg2
+	#   "C:\With Spaces\game.exe" -arg1 -arg2
+	var exe: String
 	var args: PackedStringArray = []
-	for i in range(1, parts.size()):
-		args.append(parts[i])
-	var err := OS.create_process(exe, args)
-	if err < 0:
-		_set_status("Launch failed", true)
+	if cmd.begins_with('"'):
+		var close := cmd.find('"', 1)
+		if close == -1:
+			exe = cmd.trim_prefix('"')          # unterminated quote — use whole string
+		else:
+			exe = cmd.substr(1, close - 1)
+			var rest := cmd.substr(close + 1).strip_edges()
+			if not rest.is_empty():
+				args = rest.split(" ", false)
 	else:
-		_set_status("Launched: %s" % cmd)
+		var parts := cmd.split(" ", false)
+		exe = parts[0]
+		for i in range(1, parts.size()):
+			args.append(parts[i])
+
+	var error := OS.create_process(exe, args)
+	_set_status("Launch failed" if error < 0 else "Launched: %s" % cmd, error < 0)
 
 
 # ── Service signal handlers ────────────────────────────────────────────────────
@@ -536,8 +731,6 @@ func _on_watch_pack_triggered(n: int) -> void:
 func _on_config_changed() -> void:
 	_state = ModStateManager.new().setup(_cfg.get_state_path())
 	# Stop and FULLY JOIN the old watcher before replacing it.
-	# Without wait_to_finish() the old RefCounted watcher is freed while its
-	# thread is still sleeping, which produces the ~Thread warning.
 	_watcher.stop()
 	_watcher.wait_to_finish()
 	_watcher = ModFileWatcher.new().setup(_cfg, _state, _packer)
