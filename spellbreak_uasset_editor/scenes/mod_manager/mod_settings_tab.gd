@@ -215,7 +215,7 @@ func _on_revert() -> void:
 func _section(text: String) -> Label:
 	var lbl := Label.new()
 	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", 14)
+	lbl.add_theme_font_size_override("font_size", 16)
 	lbl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
 	return lbl
 
@@ -223,7 +223,7 @@ func _section(text: String) -> Label:
 func _hint(text: String) -> Label:
 	var lbl := Label.new()
 	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.add_theme_font_size_override("font_size", 14)
 	lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
 	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
 	return lbl

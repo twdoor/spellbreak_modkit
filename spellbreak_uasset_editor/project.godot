@@ -32,6 +32,10 @@ window/vsync/vsync_mode=0
 
 enabled=PackedStringArray("res://addons/guide/plugin.cfg", "res://addons/nhb_functions_on_the_fly/plugin.cfg", "res://addons/script-ide/plugin.cfg")
 
+[gui]
+
+theme/custom="uid://d3ygy1hpwcbqw"
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"

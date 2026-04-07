@@ -132,11 +132,11 @@ func _run_u4pak(u4pak_path: String, pak_path: String, merged_dir: String) -> int
 	var args: Array
 	if OS.get_name() == "Windows":
 		cmd = "cmd"
-		args = ["/c", "cd /d \"%s\" && \"%s\" \"%s\" pack --archive-version=3 --mount-point=../../../  \"%s\" g3/" \
+		args = ["/c", "cd /d \"%s\" && \"%s\" \"%s\" pack -z --archive-version=3 --mount-point=../../../  \"%s\" g3/" \
 			% [merged_dir, python, u4pak_path, pak_path]]
 	else:
 		cmd = "sh"
-		args = ["-c", "cd '%s' && '%s' '%s' pack --archive-version=3 --mount-point=../../../  '%s' g3/" \
+		args = ["-c", "cd '%s' && '%s' '%s' pack -z --archive-version=3 --mount-point=../../../  '%s' g3/" \
 			% [merged_dir, python, u4pak_path, pak_path]]
 	var output: Array = []
 	var code := OS.execute(cmd, args, output, true, false)

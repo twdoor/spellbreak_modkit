@@ -138,7 +138,6 @@ func _build_ui() -> void:
 	_mod_tree.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_mod_tree.select_mode = Tree.SELECT_MULTI
 	_mod_tree.allow_rmb_select = true
-	_mod_tree.add_theme_constant_override("v_separation", 4)
 	_mod_tree.item_activated.connect(_on_tree_item_activated)
 	_mod_tree.item_mouse_selected.connect(_on_tree_item_mouse_selected)
 	_mod_tree.button_clicked.connect(_on_tree_button_clicked)
@@ -159,7 +158,7 @@ func _build_ui() -> void:
 	log_margin.add_theme_constant_override("margin_top",     2)
 	log_margin.add_theme_constant_override("margin_bottom",  6)
 	_log_label = Label.new()
-	_log_label.add_theme_font_size_override("font_size", 11)
+	#_log_label.add_theme_font_size_override("font_size", 11)
 	_log_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
 	_log_label.autowrap_mode = TextServer.AUTOWRAP_WORD
 	log_margin.add_child(_log_label)
@@ -227,7 +226,7 @@ func _build_mod_item(root: TreeItem, mod: Dictionary) -> void:
 
 	var item := _mod_tree.create_item(root)
 	item.set_text(0, mod_name)
-	item.set_custom_font_size(0, 14)
+	#item.set_custom_font_size(0, 14)
 	item.set_custom_color(0, Color(0.45, 0.9, 0.45) if enabled else Color(0.82, 0.82, 0.82))
 	item.set_icon(0, _icon("GuiVisibilityVisible" if enabled else "GuiVisibilityHidden"))
 	item.set_tooltip_text(0, "%d files · %s\n%s  (right-click to toggle)" % [
@@ -266,7 +265,7 @@ func _build_mod_files(mod_item: TreeItem, mod: Dictionary) -> void:
 
 		var dir_item := _mod_tree.create_item(mod_item)
 		dir_item.set_text(0, dir + "/")
-		dir_item.set_custom_font_size(0, 12)
+		#dir_item.set_custom_font_size(0, 12)
 		dir_item.set_custom_color(0, Color(0.5, 0.5, 0.58))
 		dir_item.set_selectable(0, false)
 		dir_item.set_metadata(0, {"type": "folder", "key": dir_key})
@@ -278,7 +277,7 @@ func _build_mod_files(mod_item: TreeItem, mod: Dictionary) -> void:
 
 			var file_item := _mod_tree.create_item(dir_item)
 			file_item.set_text(0, rel_path.get_file())
-			file_item.set_custom_font_size(0, 13)
+			#file_item.set_custom_font_size(0, 13)
 			file_item.set_tooltip_text(0, rel_path)
 			file_item.set_custom_color(0,
 				Color(0.5, 0.75, 1.0) if is_uasset else Color(0.62, 0.62, 0.62))

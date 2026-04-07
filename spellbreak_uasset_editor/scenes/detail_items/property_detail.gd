@@ -40,9 +40,7 @@ func _build_impl() -> void:
 			_add_separator()
 
 			# Main value editor
-			var row := PropertyRow.create(prop, _ctx["asset"])
-			row.value_changed.connect(_on_row_value_changed)
-			_container.add_child(row)
+			_add_selectable_property_row(prop)
 
 			# Type-specific extra fields
 			match prop.prop_type:

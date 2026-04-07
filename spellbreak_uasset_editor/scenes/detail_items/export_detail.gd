@@ -46,15 +46,17 @@ func _build_impl() -> void:
 
 	# Only show simple leaf properties — structs/arrays are navigable via the tree.
 	var has_props := false
+	var leaf_props: Array[UAssetProperty] = []
 	for prop in expo.properties:
 		if prop.prop_type not in ["Struct", "Array", "GameplayTagContainer"]:
-			if not has_props:
-				_add_separator()
-				_add_section_label("PROPERTIES")
-				has_props = true
-			var row := PropertyRow.create(prop, _ctx["asset"])
-			row.value_changed.connect(_on_row_value_changed)
-			_container.add_child(row)
+			leaf_props.append(prop)
+	var get_leaves: Callable = func() -> Array: return leaf_props
+	for prop in leaf_props:
+		if not has_props:
+			_add_separator()
+			_add_section_label("PROPERTIES")
+			has_props = true
+		_add_selectable_property_row(prop, get_leaves)
 
 	# Dependency arrays
 	_add_separator()

@@ -210,6 +210,22 @@ func _is_simple_struct(prop: UAssetProperty) -> bool:
 	return true
 
 
+## Wrap a PropertyRow (or any Control) as a selectable row so clicking it sets
+## the selection to that property, enabling copy/paste/cut/delete from the detail panel.
+## siblings (optional): callable returning the ordered Array for shift+click range selection.
+func _add_selectable_property_row(prop: UAssetProperty, siblings: Callable = Callable()) -> void:
+	var sel: SelectionManager = _ctx["selection"]
+	var row := PropertyRow.create(prop, _ctx["asset"])
+	row.value_changed.connect(_on_row_value_changed)
+	_container.add_child(sel.make_selectable_row(
+		prop, row,
+		func(ctrl: bool) -> void:
+			if ctrl: sel.toggle(prop)
+			else:    sel.set_selection([prop]),
+		siblings
+	))
+
+
 ## Recursively render all leaf values from a struct inline.
 func _build_flat_leaves(prop: UAssetProperty) -> void:
 	if prop.prop_type == "Struct" and not prop.children.is_empty():
@@ -218,9 +234,7 @@ func _build_flat_leaves(prop: UAssetProperty) -> void:
 	elif prop.prop_type == "Array" and not prop.children.is_empty():
 		_add_nav_button(prop)
 	else:
-		var row := PropertyRow.create(prop, _ctx["asset"])
-		row.value_changed.connect(_on_row_value_changed)
-		_container.add_child(row)
+		_add_selectable_property_row(prop)
 
 
 ## Render children split into: simple editable values, inline simple structs, nav buttons.
@@ -237,10 +251,9 @@ func _build_children_sorted(children: Array[UAssetProperty]) -> void:
 		else:
 			simple_rows.append(child)
 
+	var get_simple: Callable = func() -> Array: return simple_rows
 	for prop in simple_rows:
-		var row := PropertyRow.create(prop, _ctx["asset"])
-		row.value_changed.connect(_on_row_value_changed)
-		_container.add_child(row)
+		_add_selectable_property_row(prop, get_simple)
 
 	for prop in inline_structs:
 		_add_section_label("%s [%s]" % [prop.prop_name, prop.struct_type])
