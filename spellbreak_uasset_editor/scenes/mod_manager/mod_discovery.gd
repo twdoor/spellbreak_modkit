@@ -1,7 +1,7 @@
 class_name ModDiscovery extends RefCounted
 
 ## Scans a mods directory and returns metadata for each discovered mod.
-## A valid mod is any subdirectory that contains a g3/ subfolder with asset files.
+## A valid mod is any subdirectory that contains a g3/ subfolder.
 ## Mirrors the discover_mods() logic in mod_manager.py.
 
 const ASSET_EXTENSIONS := [".uasset", ".uexp", ".ubulk", ".umap"]
@@ -35,8 +35,6 @@ static func scan(mods_dir: String) -> Array:
 		if not DirAccess.dir_exists_absolute(g3_path):
 			continue
 		var assets := _list_assets(g3_path)
-		if assets.is_empty():
-			continue
 		results.append({
 			"name":       mod_name,
 			"path":       mod_path,

@@ -78,16 +78,6 @@ func _build_ui() -> void:
 	launch_edit.text_changed.connect(func(v: String) -> void: _cfg.launch_cmd = v)
 	content.add_child(launch_edit)
 
-	# ── u4pak directory ──
-	content.add_child(_section("u4pak Directory  (optional)"))
-	content.add_child(_hint(
-		"Path to the folder containing u4pak.py. Leave blank — the tool auto-detects it from the project location."
-	))
-	content.add_child(_dir_row(
-		func() -> String: return _cfg.u4pak_dir,
-		func(v: String) -> void: _cfg.u4pak_dir = v,
-		_cfg.get_u4pak_path().get_base_dir() + "  (auto-detected)"
-	))
 
 	# ── Sources ──
 	content.add_child(_section("Sources"))

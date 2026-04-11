@@ -117,32 +117,18 @@ func _build_tag_container(prop: UAssetProperty) -> void:
 		)
 		hbox.add_child(line)
 
-		var del_btn := Button.new()
-		del_btn.text = "✕"
-		del_btn.flat = true
-		del_btn.add_theme_color_override("font_color", Color(0.9, 0.4, 0.4))
-		del_btn.add_theme_color_override("font_hover_color", Color(1.0, 0.5, 0.5))
-		del_btn.pressed.connect(func():
+		hbox.add_child(_make_delete_btn(func():
 			tags.remove_at(ci)
 			prop.value = tags
 			prop.raw["Value"] = tags
 			_ctx["show_detail"].call(prop)
-		)
-		hbox.add_child(del_btn)
+		))
 		_container.add_child(hbox)
 
 	_add_separator()
-	var add_btn := Button.new()
-	add_btn.text = "+ Add Tag"
-	add_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	add_btn.flat = true
-	add_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	add_btn.add_theme_color_override("font_color", Color(0.4, 0.8, 0.4))
-	add_btn.add_theme_color_override("font_hover_color", Color(0.6, 1.0, 0.6))
-	add_btn.pressed.connect(func():
+	_container.add_child(_make_add_btn("+ Add Tag", func():
 		tags.append("")
 		prop.value = tags
 		prop.raw["Value"] = tags
 		_ctx["show_detail"].call(prop)
-	)
-	_container.add_child(add_btn)
+	))

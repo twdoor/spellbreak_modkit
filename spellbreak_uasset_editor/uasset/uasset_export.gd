@@ -90,3 +90,13 @@ func get_property_names() -> PackedStringArray:
 
 func get_display_name() -> String:
 	return "%s (%s)" % [object_name, export_type]
+
+
+## Return the raw DataTable row array from this export's Table.Data, or [].
+func get_datatable_rows() -> Array:
+	var table_raw: Variant = raw.get("Table")
+	if table_raw is Dictionary:
+		var dr: Variant = table_raw.get("Data")
+		if dr is Array:
+			return dr as Array
+	return []

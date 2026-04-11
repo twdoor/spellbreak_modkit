@@ -1,7 +1,3 @@
-# u4pak — not bundled; download from https://github.com/panzi/u4pak
-# Place the u4pak/ folder here if you want auto-detection to work.
-u4pak/
-
 # User-specific config (generated on first run)
 config.json
 .mod_state.json

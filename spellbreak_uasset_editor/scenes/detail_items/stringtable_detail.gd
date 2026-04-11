@@ -97,36 +97,25 @@ func _build_entries(expo: UAssetExport, table_raw: Dictionary, entries: Array) -
 		row.add_child(val_edit)
 
 		# Delete — deferred to avoid freeing during signal emit
-		var del_btn := Button.new()
-		del_btn.text = "✕"
-		del_btn.flat = true
-		del_btn.tooltip_text = "Remove entry [%d]" % ci
-		del_btn.add_theme_color_override("font_color", Color(0.8, 0.3, 0.3))
-		del_btn.pressed.connect(func() -> void:
+		var del_btn := _make_delete_btn(func() -> void:
 			entries.remove_at(ci)
 			table_raw["Value"] = entries
 			_ctx["set_dirty"].call()
 			_rebuild_entries_deferred.call_deferred(expo, table_raw)
 		)
+		del_btn.tooltip_text = "Remove entry [%d]" % ci
 		row.add_child(del_btn)
 		_container.add_child(row)
 
 	_add_separator()
 
 	# Add entry
-	var add_btn := Button.new()
-	add_btn.text = "+ Add Entry"
-	add_btn.flat = true
-	add_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	add_btn.add_theme_color_override("font_color", Color(0.4, 0.8, 0.4))
-	add_btn.add_theme_color_override("font_hover_color", Color(0.6, 1.0, 0.6))
-	add_btn.pressed.connect(func() -> void:
+	_container.add_child(_make_add_btn("+ Add Entry", func() -> void:
 		entries.append(["", ""])
 		table_raw["Value"] = entries
 		_ctx["set_dirty"].call()
 		_ctx["show_detail"].call(expo)
-	)
-	_container.add_child(add_btn)
+	))
 
 
 ## Full panel rebuild — called deferred after a delete so the pressed signal finishes first.

@@ -358,6 +358,22 @@ func _get_selected_files() -> Array:
 	return result
 
 
+## Collect all selected mod-level items as mod dicts (deduplicated).
+func _get_selected_mods() -> Array:
+	var result: Array = []
+	var seen: Dictionary = {}
+	var item := _mod_tree.get_next_selected(null)
+	while item:
+		var meta: Dictionary = item.get_metadata(0)
+		if meta.get("type") == "mod":
+			var mod_name: String = (meta["mod"] as Dictionary)["name"]
+			if mod_name not in seen:
+				seen[mod_name] = true
+				result.append(meta["mod"])
+		item = _mod_tree.get_next_selected(item)
+	return result
+
+
 ## Walk up the tree from a TreeItem to find the ancestor mod dict.
 func _get_mod_for_item(item: TreeItem) -> Variant:
 	var meta: Dictionary = item.get_metadata(0)
@@ -418,12 +434,7 @@ func paste_clipboard() -> void:
 		# Preserve the full relative path so folder structure is maintained.
 		var rel: String = entry["rel_path"]
 		var dst: String = dst_root.path_join(rel)
-		DirAccess.make_dir_recursive_absolute(dst.get_base_dir())
-		var data := FileAccess.get_file_as_bytes(entry["full_path"] as String)
-		var out  := FileAccess.open(dst, FileAccess.WRITE)
-		if out:
-			out.store_buffer(data)
-			out.close()
+		if FileUtils.copy_file(entry["full_path"] as String, dst) == OK:
 			copied += 1
 		else:
 			failed += 1
@@ -443,9 +454,44 @@ func paste_clipboard() -> void:
 
 
 func delete_selection() -> void:
+	var mods  := _get_selected_mods()
 	var files := _get_selected_files()
-	if files.is_empty():
+
+	if mods.is_empty() and files.is_empty():
 		return
+
+	# If entire mods are selected, confirm before deleting.
+	if not mods.is_empty():
+		var names: PackedStringArray = []
+		for m: Dictionary in mods:
+			names.append(m["name"] as String)
+		var dialog := ConfirmationDialog.new()
+		dialog.title = "Delete Mod(s)"
+		dialog.dialog_text = "Permanently delete %d mod(s)?\n\n%s" % [
+			mods.size(), "\n".join(names)]
+		dialog.ok_button_text = "Delete"
+		add_child(dialog)
+		dialog.confirmed.connect(func() -> void:
+			for m: Dictionary in mods:
+				FileUtils.remove_dir_recursive(m["path"] as String)
+			# Also delete any selected files that aren't part of a deleted mod.
+			var deleted_mod_paths: Dictionary = {}
+			for m: Dictionary in mods:
+				deleted_mod_paths[m["path"] as String] = true
+			for entry: Dictionary in files:
+				var mod_path: String = (entry["mod"] as Dictionary)["path"]
+				if mod_path not in deleted_mod_paths:
+					_delete_file_raw(entry["mod"] as Dictionary, entry["full_path"] as String)
+			_set_status("Deleted %d mod(s)" % mods.size()
+				+ (", %d file(s)" % files.size() if not files.is_empty() else ""))
+			_refresh_mods()
+			dialog.queue_free()
+		)
+		dialog.canceled.connect(dialog.queue_free)
+		dialog.popup_centered()
+		return
+
+	# Files only — no confirmation needed.
 	for entry: Dictionary in files:
 		_delete_file_raw(entry["mod"] as Dictionary, entry["full_path"] as String)
 	_set_status("Deleted %d file(s)" % files.size())
@@ -560,12 +606,7 @@ func _copy_files_to_mod(mod: Dictionary, source_root: String, file_paths: Packed
 			continue
 		var rel := src_file.substr(source_root.length()).lstrip("/")
 		var dst := mod_path.path_join(rel)
-		DirAccess.make_dir_recursive_absolute(dst.get_base_dir())
-		var data := FileAccess.get_file_as_bytes(src_file)
-		var out  := FileAccess.open(dst, FileAccess.WRITE)
-		if out:
-			out.store_buffer(data)
-			out.close()
+		if FileUtils.copy_file(src_file, dst) == OK:
 			copied += 1
 		else:
 			_set_status("Could not write: %s" % dst.get_file(), true)

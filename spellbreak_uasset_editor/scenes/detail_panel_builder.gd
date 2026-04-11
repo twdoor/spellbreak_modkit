@@ -46,6 +46,12 @@ func _resolve_item(data: Variant) -> DetailItem:
 	if data is UAssetExport:
 		if data.export_type == "StringTableExport":
 			return StringTableDetail.new().init_data(data)
+		# Check if this export is a texture type
+		var asset: UAssetFile = _ctx.get("asset")
+		if asset:
+			var cls_name := asset.get_export_class_name(data)
+			if cls_name in UAssetFile.TEXTURE_CLASSES:
+				return TextureDetail.new().init_data(data, cls_name)
 		return ExportDetail.new().init_data(data)
 	if data is Dictionary and data.has("dt_row"):
 		return DataTableRowDetail.new().init_data(data["dt_row"], data["expo"])

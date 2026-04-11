@@ -27,15 +27,13 @@ var _close_dialog: ConfirmationDialog
 var _tab_pending_close: UassetFileTab
 
 var _status_label: Label
+var _texture_service: TextureService
 
 const _TOAST_HIDDEN_Y := -8.0   # resting offset_bottom when hidden (just off-screen bottom)
 const _TOAST_SHOWN_Y  := -72.0  # offset_bottom when fully visible
 
 func _ready() -> void:
 	GUIDE.enable_mapping_context(mapping)
-
-	# SingleInstance autoload handles command line args + second-instance files
-	SingleInstance.file_received.connect(_on_file_selected)
 
 	open_file_popup.file_selected.connect(_on_file_selected)
 	open_file_popup.files_selected.connect(_on_files_selected)
@@ -88,6 +86,7 @@ func _setup_mod_tab() -> void:
 	tab_cont.set_tab_title(0, "Mod Manager")
 	panel.open_asset_requested.connect(_on_file_selected)
 	panel.status_changed.connect(_on_mod_status_changed)
+	_texture_service = TextureService.new().setup(panel.get_config())
 
 	# When any UassetFileTab is removed, refresh titles so lone survivors revert to short names.
 	tab_cont.child_exiting_tree.connect(func(child: Node) -> void:
@@ -232,7 +231,7 @@ func _on_file_selected(path: String) -> void:
 		push_error("Failed to load: " + path)
 		return
 
-	var new_tab := UassetFileTab.setup(asset)
+	var new_tab := UassetFileTab.setup(asset, _texture_service)
 	tab_cont.add_child(new_tab)
 	# Refresh all tab titles: duplicates get "ParentFolder/Name", unique ones stay short.
 	_refresh_tab_titles()
@@ -346,7 +345,9 @@ func _undo() -> void:
 
 
 func _cancel_selection() -> void:
-	if _text_control_focused():
+	var focus := get_viewport().gui_get_focus_owner()
+	if focus is LineEdit or focus is TextEdit or focus is SpinBox:
+		focus.release_focus()
 		return
 	var tab := tab_cont.get_current_tab_control()
 	if tab is UassetFileTab:

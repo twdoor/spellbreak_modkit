@@ -26,6 +26,7 @@ const _DB: Dictionary = {
 	"EAttachmentRule": ["EAttachmentRule::KeepRelative"],
 	"EAttenuationDistanceModel": ["EAttenuationDistanceModel::Logarithmic","EAttenuationDistanceModel::NaturalSound"],
 	"EAttributeRequirementOperator": ["EAttributeRequirementOperator::Divide","EAttributeRequirementOperator::Subtract"],
+	"EAttributeRequirementRelationship": ["EAttributeRequirementRelationship::Equal","EAttributeRequirementRelationship::NotEqual","EAttributeRequirementRelationship::GreaterThan","EAttributeRequirementRelationship::GreaterThanOrEqual","EAttributeRequirementRelationship::LessThan","EAttributeRequirementRelationship::LessThanOrEqual"],
 	"EAxis": ["EAxis::None","EAxis::Y","EAxis::Z"],
 	"EBodyCollisionResponse": ["EBodyCollisionResponse::BodyCollision_Disabled"],
 	"EBoneFilterActionOption": ["EBoneFilterActionOption::Remove"],

@@ -141,9 +141,12 @@ func rebuild_preserving_state() -> void:
 ## Find and select the tree item for data, expanding its ancestors so it is visible.
 func select_item(data: Variant) -> void:
 	for item in _item_map:
-		if _item_map[item] is StringName:
+		var mapped: Variant = _item_map[item]
+		if mapped is StringName:
 			continue
-		if _item_map[item] == data:
+		if typeof(mapped) != typeof(data):
+			continue
+		if mapped == data:
 			# Expand ancestors so the item is reachable — but do NOT expand the item
 			# itself here: if it has lazy children, setting collapsed=false would fire
 			# item_collapsed inside a signal callback and hit the "blocked > 0" crash.

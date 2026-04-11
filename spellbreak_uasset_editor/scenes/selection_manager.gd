@@ -79,6 +79,17 @@ func range_select(target: Variant, ordered_list: Variant) -> void:
 	selection_changed.emit(_selection, get_current())
 
 
+## Convenience: route a button press through shift/ctrl/plain click logic.
+## ordered_list is a Callable returning the full list for shift+click range selection.
+func handle_click(item: Variant, ordered_list: Callable) -> void:
+	if Input.is_key_pressed(KEY_SHIFT):
+		range_select(item, ordered_list.call())
+	elif Input.is_key_pressed(KEY_CTRL):
+		toggle(item)
+	else:
+		set_selection([item])
+
+
 func clear() -> void:
 	_selection.clear()
 	_last_selected_anchor = null

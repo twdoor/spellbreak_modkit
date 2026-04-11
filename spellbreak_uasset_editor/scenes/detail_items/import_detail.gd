@@ -16,12 +16,7 @@ func _build_impl() -> void:
 		var imp   := asset.imports[i]
 		var index := -(i + 1)
 		var row := ImportTab.setup(imp, index, func():
-			if Input.is_key_pressed(KEY_SHIFT):
-				sel.range_select(imp, asset.imports)
-			elif Input.is_key_pressed(KEY_CTRL):
-				sel.toggle(imp)
-			else:
-				sel.set_selection([imp])
+			sel.handle_click(imp, func(): return asset.imports)
 		)
 		var panel := sel.make_selectable_row(imp, row,
 			func(ctrl: bool):

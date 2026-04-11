@@ -18,7 +18,6 @@ config/icon="res://icon.svg"
 [autoload]
 
 GUIDE="*uid://p2jwrgjcbexr"
-SingleInstance="*uid://cko6ihuturcor"
 
 [display]
 

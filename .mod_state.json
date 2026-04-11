@@ -1,8 +1,9 @@
 {
-  "blitz": true,
+  "blitz": false,
   "dodge_t": false,
+  "dominion_2": false,
   "fixes": false,
-  "gen2": false,
   "jest": true,
+  "leftovers": false,
   "weapons": false
 }

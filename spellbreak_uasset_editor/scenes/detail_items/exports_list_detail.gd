@@ -25,12 +25,8 @@ func _build_impl() -> void:
 		btn.add_theme_color_override("font_color", Color(0.5, 0.7, 1.0))
 		btn.add_theme_color_override("font_hover_color", Color(0.7, 0.85, 1.0))
 		btn.pressed.connect(func():
-			if Input.is_key_pressed(KEY_SHIFT):
-				sel.range_select(expo, asset.exports)
-			elif Input.is_key_pressed(KEY_CTRL):
-				sel.toggle(expo)
-			else:
-				sel.set_selection([expo])
+			sel.handle_click(expo, func(): return asset.exports)
+			if not Input.is_key_pressed(KEY_SHIFT) and not Input.is_key_pressed(KEY_CTRL):
 				_ctx["select_tree_item"].call(expo)
 				_ctx["navigate_to"].call(expo, "[%d] %s" % [i + 1, expo.object_name])
 		)

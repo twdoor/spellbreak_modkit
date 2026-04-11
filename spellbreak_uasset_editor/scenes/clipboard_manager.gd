@@ -224,12 +224,7 @@ static func paste(context: Dictionary) -> void:
 
 		"dt_row":
 			var expo: UAssetExport = _clipboard["expo"]
-			var rows_raw: Array = []
-			var table_raw: Variant = expo.raw.get("Table")
-			if table_raw is Dictionary:
-				var dr: Variant = table_raw.get("Data")
-				if dr is Array:
-					rows_raw = dr as Array
+			var rows_raw: Array = expo.get_datatable_rows()
 			if rows_raw.is_empty():
 				return
 			var new_raw: Dictionary = (_clipboard["raw"] as Dictionary).duplicate(true)

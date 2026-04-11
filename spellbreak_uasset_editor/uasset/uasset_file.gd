@@ -11,6 +11,12 @@ extends RefCounted
 ##       prop.value = 20
 ##       asset.save_file("path/to/DA_BattleRoyale_Duo.json")
 
+## Texture export class names recognized by UE4-DDS-Tools
+const TEXTURE_CLASSES := [
+	"Texture2D", "TextureCube", "LightMapTexture2D", "ShadowMapTexture2D",
+	"Texture2DArray", "TextureCubeArray", "VolumeTexture",
+]
+
 ## The raw top-level JSON dict - kept for round-trip fidelity
 var raw: Dictionary
 
@@ -218,8 +224,64 @@ static func _from_dict(data: Dictionary, path: String) -> UAssetFile:
 			if exp_dict is Dictionary:
 				asset.exports.append(UAssetExport.from_dict(exp_dict))
 	
+	asset._ensure_default_properties()
 	asset.file_loaded.emit(path)
 	return asset
+
+
+## Resolve the class name for an export via its ClassIndex import.
+func get_export_class_name(expo: UAssetExport) -> String:
+	if expo.class_index < 0:
+		var imp := get_import(expo.class_index)
+		if imp:
+			return imp.object_name
+	return ""
+
+
+## Returns true if any export in this asset is a texture type.
+func is_texture_asset() -> bool:
+	for expo in exports:
+		if get_export_class_name(expo) in TEXTURE_CLASSES:
+			return true
+	return false
+
+
+## After loading, inject missing default properties for known export types.
+## UE4 skips serializing properties that equal their class default values, but
+## we want them visible and editable in the editor.
+const _DEFAULT_PROPERTIES := {
+	"XAttributeRequirement": [
+		{  # float "Value" — the number the attribute is compared against (defaults to 0)
+			"$type": "UAssetAPI.PropertyTypes.Objects.FloatPropertyData, UAssetAPI",
+			"Name": "Value",
+			"ArrayIndex": 0,
+			"IsZero": false,
+			"PropertyTagFlags": "None",
+			"PropertyTypeName": null,
+			"PropertyTagExtensions": "NoExtension",
+			"Value": 0.0,
+		},
+	],
+}
+
+
+func _ensure_default_properties() -> void:
+	for expo in exports:
+		var cls_name := get_export_class_name(expo)
+		if cls_name not in _DEFAULT_PROPERTIES:
+			continue
+		var defaults: Array = _DEFAULT_PROPERTIES[cls_name]
+		for default_raw: Dictionary in defaults:
+			var prop_name: String = default_raw["Name"]
+			if expo.find_property(prop_name) != null:
+				continue  # already present
+			# Inject into both the parsed properties and the raw data
+			ensure_name(prop_name)
+			var prop := UAssetProperty.from_dict(default_raw)
+			expo.properties.append(prop)
+			var data_arr: Variant = expo.raw.get("Data")
+			if data_arr is Array:
+				(data_arr as Array).append(default_raw.duplicate(true))
 
 
 ## Save back to disk. If loaded from a .uasset binary, writes binary directly — no .json file.

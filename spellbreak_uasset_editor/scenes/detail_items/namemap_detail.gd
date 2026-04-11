@@ -44,16 +44,13 @@ func _build_name_row(index: int) -> void:
 	idx_btn.alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	idx_btn.add_theme_color_override("font_color", Color(0.45, 0.45, 0.45))
 	idx_btn.add_theme_color_override("font_hover_color", Color(0.75, 0.85, 1.0))
+	var _get_indices := func() -> Array:
+		var arr: Array = []
+		for j in asset.name_map.size():
+			arr.append(j)
+		return arr
 	idx_btn.pressed.connect(func():
-		if Input.is_key_pressed(KEY_SHIFT):
-			var arr: Array = []
-			for j in asset.name_map.size():
-				arr.append(j)
-			sel.range_select(index, arr)
-		elif Input.is_key_pressed(KEY_CTRL):
-			sel.toggle(index)
-		else:
-			sel.set_selection([index])
+		sel.handle_click(index, _get_indices)
 	)
 	row.add_child(idx_btn)
 
@@ -76,10 +73,6 @@ func _build_name_row(index: int) -> void:
 		func(ctrl: bool):
 			if ctrl: sel.toggle(index)
 			else: sel.set_selection([index]),
-		func():
-			var arr: Array = []
-			for j in asset.name_map.size():
-				arr.append(j)
-			return arr
+		_get_indices
 	)
 	_container.add_child(panel)

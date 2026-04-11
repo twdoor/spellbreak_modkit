@@ -10,18 +10,20 @@ A visual asset editor and mod manager for **Spellbreak Community Edition**, buil
 
 This repo contains one thing: `spellbreak_uasset_editor/` — a Godot 4 desktop app with a built-in mod manager and a full `.uasset` editor.
 
-The [UAssetAPI](https://github.com/atenfyr/UAssetAPI) converter is pre-compiled and bundled inside `spellbreak_uasset_editor/converter/`. No separate build step is needed.
+Everything is bundled inside the single binary:
+- [UAssetAPI](https://github.com/atenfyr/UAssetAPI) converter (pre-compiled .NET DLLs)
+- [u4pak](https://github.com/panzi/u4pak) for packing mods into `.pak` files
+- [UE4-DDS-Tools](https://github.com/matyalatte/UE4-DDS-Tools) + [libtexconv](https://github.com/matyalatte/Texconv-Custom-DLL) for texture extraction/injection
 
 ---
 
 ## Requirements
 
-- **Python 3.10+** — required at runtime by [u4pak](https://github.com/panzi/u4pak) for packing mods
-  > **Windows:** when installing Python, check **"Add Python to PATH"** on the first installer screen — it is unchecked by default. Without this the packer will fail to find Python.
-- **u4pak** — not bundled; download from:
-  [https://github.com/panzi/u4pak](https://github.com/panzi/u4pak)
-
-  Clone or place the `u4pak/` folder next to this README for auto-detection, or set the path manually in **Settings → u4pak Directory**.
+- **Python 3.10+** — required at runtime for mod packing and texture operations
+  > **Windows:** when installing Python, check **"Add Python to PATH"** on the first installer screen — it is unchecked by default.
+- **.NET Runtime** — required for UAssetAPI (asset parsing)
+- **ImageMagick** — required for texture export/import (DDS/TGA to PNG conversion)
+  > Most Linux distros include it. On Windows, install from [imagemagick.org](https://imagemagick.org/script/download.php) and add to PATH.
 
 Optional (only if building the editor from source):
 - **Godot 4.6+** — standard build (no .NET support needed)
@@ -32,38 +34,29 @@ Optional (only if building the editor from source):
 
 ### 1. Get the editor
 
-#### 1a Prebuild editor (recommended)
+#### Prebuilt editor (recommended)
 
-Go to [releases](https://github.com/twdoor/spellbreak_modkit/releases) page on github, click on the lastest version and pick the file you need.
+Go to the [releases](https://github.com/twdoor/spellbreak_modkit/releases) page, click on the latest version and download the file for your platform.
 
-### OR:
-
-#### 1b Clone the repo
+#### OR: Build from source
 
 ```bash
-git clone https://github.com/yourname/spellbreak-modkit
-cd spellbreak-modkit
+git clone https://github.com/twdoor/spellbreak_modkit
+cd spellbreak_modkit
 ```
 
-### 2. Get u4pak
+Open `spellbreak_uasset_editor/` in Godot 4.6+, then **Project > Export > Linux/Windows**. All dependencies (converter, u4pak, ue4_dds_tools) are bundled automatically.
 
-```bash
-git clone https://github.com/panzi/u4pak
-```
+### 2. Configure the editor
 
-Place the cloned `u4pak/` folder next to this README so the editor can auto-detect it, or point to it manually in **Settings → u4pak Directory**.
+Launch the app, click **Settings**, and fill in:
 
-### 3. Configure the editor
-
-Launch the app (or run from Godot), click **Settings**, and fill in:
-
-- **Game directory** — the folder containing `g3` and `Spellbreak.exe`
+- **Game directory** — the folder containing `g3/` and `Spellbreak.exe`
 - **Mods directory** — where your mod folders live
 - **Launch command** — optional, used by the Launch button
-- **u4pak Directory** — if u4pak is not next to the project
-- **Sources** — exported asset directories for reference (base game export, older versions, reference mods)
+- **Sources** — exported asset directories for reference (base game export, older versions, etc.)
 
-Settings are saved to `config.json` next to the executable (not tracked by git).
+Settings are saved to `config.json` next to the executable.
 
 ---
 
@@ -71,46 +64,39 @@ Settings are saved to `config.json` next to the executable (not tracked by git).
 
 ### Mod Manager tab
 
-The Mod Manager tab is pinned and cannot be closed. It shows all mod folders found in your configured mods directory as a collapsible tree.
-
-**Mod list tree:**
-
-Each mod appears as a top-level row, collapsed by default. Folders inside the mod are nested below it.
+The Mod Manager tab is pinned and always visible. It shows all mod folders found in your configured mods directory as a collapsible tree.
 
 | Action | Result |
 |--------|--------|
 | **Left-click a mod** | Expand / collapse it |
-| **Right-click a mod** | Toggle the mod enabled / disabled |
+| **Right-click a mod** | Toggle enabled / disabled |
 | **Double-click a file** | Open it in the asset editor |
-
 
 **Multi-select and clipboard:**
 
-Select files with `Click`, `Ctrl+Click` (toggle), or `Shift+Click` (range). The standard shortcuts then operate on the whole selection:
+Select files with `Click`, `Ctrl+Click` (toggle), or `Shift+Click` (range).
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+E` | Imports files from sources|
+| `Ctrl+E` | Import files from sources |
 | `Ctrl+C` | Copy selected files |
 | `Ctrl+X` | Cut selected files |
-| `Ctrl+V` | Paste into target mod (folder structure is preserved — files land at the same `g3/Content/…` path in the destination mod) |
-| `Del / Ctrl+D` | Delete selected files |
+| `Ctrl+V` | Paste into target mod (preserves `g3/Content/...` folder structure) |
+| `Del / Ctrl+D` | Delete selected files or mods |
 
 **Toolbar:**
 
 | Button | Action |
 |--------|--------|
-| **New Mod** | Create a new mod folder (prompts for a name, creates `mods/<name>/g3/Content/` automatically) |
+| **New Mod** | Create a new mod folder |
 | **Settings** | Open the Settings tab |
 | **Pack** | Pack all enabled mods into `zzz_mods_P.pak` |
 | **Watch** | Toggle auto-pack on file save |
 | **Launch** | Launch Spellbreak |
 
-A status bar at the bottom of the window shows the current watcher/pack state on all tabs.
-
 ### Asset editor tabs
 
-Open `.uasset` or `.json` files via `Ctrl+Space`, drag-and-drop or open a file from the mod list.
+Open `.uasset` or `.json` files via `Ctrl+Space`, drag-and-drop, or double-click from the mod list.
 
 **Keyboard shortcuts:**
 
@@ -123,23 +109,26 @@ Open `.uasset` or `.json` files via `Ctrl+Space`, drag-and-drop or open a file f
 | `Del / Ctrl+D` | Delete selected item |
 | `Ctrl+Z` | Undo |
 | `Ctrl+A / F` | Previous / Next tab |
-| `Click` | Select item |
-| `Ctrl+Click` | Add/remove from selection |
-| `Shift+Click` | Range select |
-| `Esc` | Clear selection |
+| `Esc` | Clear selection / cancel edit |
 
 **What you can edit:**
 
 - **Export properties** — structs, arrays, scalars, enums, text, object references
-- **Array items** — click to select, Ctrl+click / Shift+click for multi-select; Ctrl+C / Ctrl+V / Del work identically to the import list
-- **Import table** — all fields editable inline; multi-select copy/paste/delete supported
+- **Array items** — multi-select with Ctrl/Shift+click; copy/paste/delete supported
+- **Import table** — all fields editable inline; multi-select supported
 - **Name map** — add, edit, delete entries
 - **DataTable rows** — view, edit, copy/paste/delete rows
-- **StringTable exports** — namespace and all key/value entries displayed and editable; add/remove entries
+- **StringTable exports** — namespace and all key/value entries
 
-### Building from source
+### Texture support
 
-Open `spellbreak_uasset_editor/` in Godot 4.6+, then **Project → Export → Linux/Windows**. The converter DLLs in `converter/` are bundled automatically.
+When opening a texture `.uasset` (Texture2D, TextureCube, etc.), the detail panel shows:
+
+- **Inline preview** — the texture rendered at up to 512px wide with dimensions displayed
+- **Export as PNG** — save the texture to a PNG file
+- **Import PNG** — inject an edited PNG back into the `.uasset` (automatically handles BC1/BC3/BC5/BC7 format matching)
+
+> Texture operations require Python and ImageMagick to be installed and in PATH.
 
 ---
 
@@ -150,7 +139,7 @@ UE4 loads `.pak` files alphabetically. Files with the `_P` suffix are treated as
 This modkit creates `zzz_mods_P.pak` inside the game's `Paks/` folder:
 - `zzz` prefix ensures it loads **last** (after all base paks)
 - `_P` suffix marks it as a patch override
-- A `.sig` file is copied from an existing game pak (UE4 requires a signature file alongside each pak)
+- A `.sig` file is copied from an existing game pak (UE4 requires a signature file)
 - The base game is **never modified**
 
 Your mod files must mirror the game's internal folder structure:
@@ -179,14 +168,16 @@ spellbreak-modkit/
 └── spellbreak_uasset_editor/       Godot 4 app
     ├── main.gd / main.tscn         Entry point, tab bar, status bar
     ├── property_row.gd             Inline property editor widget
-    ├── single_instance.gd          Single-window / multi-tab instance manager
     ├── converter/                  Bundled UAssetAPI DLLs (pre-compiled)
+    ├── u4pak/                      Bundled u4pak (pak packing tool)
+    ├── ue4_dds_tools/              Bundled UE4-DDS-Tools + libtexconv
     ├── uasset/                     Asset parsing & serialization
     │   ├── uasset_file.gd
     │   ├── uasset_export.gd
     │   ├── uasset_import.gd
     │   ├── uasset_property.gd
-    │   └── ue4_enums.gd
+    │   ├── ue4_enums.gd
+    │   └── spellbreak_tags.gd
     ├── scenes/
     │   ├── uasset_tab.gd/tscn      Per-file editor tab
     │   ├── detail_panel_builder.gd
@@ -195,11 +186,12 @@ spellbreak-modkit/
     │   ├── clipboard_manager.gd
     │   ├── undo_manager.gd
     │   ├── export_reorderer.gd
-    │   ├── import_tab.gd
+    │   ├── texture_service.gd      Texture extraction/injection service
     │   ├── detail_items/           One class per detail-panel view
     │   │   ├── detail_item.gd
     │   │   ├── property_detail.gd
     │   │   ├── export_detail.gd
+    │   │   ├── texture_detail.gd   Texture preview & import/export
     │   │   ├── exports_list_detail.gd
     │   │   ├── import_detail.gd
     │   │   ├── namemap_detail.gd
@@ -212,6 +204,7 @@ spellbreak-modkit/
     │       ├── mod_state_manager.gd
     │       ├── mod_discovery.gd
     │       ├── file_watcher.gd
+    │       ├── file_utils.gd
     │       └── packing_service.gd
     ├── guide/                      GUIDE action resources (remappable keybinds)
     └── addons/                     GUIDE input framework
@@ -221,5 +214,7 @@ spellbreak-modkit/
 
 ## Credits
 
-- [UAssetAPI](https://github.com/atenfyr/UAssetAPI) by atenfyr — UE4 asset serialization (bundled as compiled DLLs)
-- [u4pak](https://github.com/panzi/u4pak) by panzi — UE4 pak archive tool
+- [UAssetAPI](https://github.com/atenfyr/UAssetAPI) by atenfyr — UE4 asset serialization (bundled)
+- [u4pak](https://github.com/panzi/u4pak) by panzi — UE4 pak archive tool (bundled)
+- [UE4-DDS-Tools](https://github.com/matyalatte/UE4-DDS-Tools) by matyalatte — UE4 texture extraction/injection (bundled)
+- [Texconv-Custom-DLL](https://github.com/matyalatte/Texconv-Custom-DLL) by matyalatte — Cross-platform texture format converter (bundled as libtexconv)

@@ -21,6 +21,9 @@ var u4pak_dir:  String = ""
 ## Reference pak sources. Each entry: { "name": String, "path": String }
 ## Used to register the base game pak, reference mods, older versions, etc.
 var sources: Array = []
+## Optional override: absolute path to the UE4-DDS-Tools directory (the folder containing src/main.py).
+## Required for texture preview and PNG export/import.
+var ue4_dds_tools_dir: String = ""
 
 signal config_changed
 
@@ -33,32 +36,24 @@ func _init() -> void:
 
 # ── Path detection ─────────────────────────────────────────────────────────────
 
-## Walk up from known locations to find the modkit root (contains u4pak/u4pak.py).
+## Locate the config file.  In dev mode (Godot editor) search upward from the
+## project directory.  In exported builds, store config next to the executable.
 func _find_config_path() -> String:
-	# Search upward from the project directory (res://).
-	# Strip any trailing slash first — get_base_dir() on a path ending in "/"
-	# strips the slash instead of going up a level, which breaks detection.
 	var project_dir := ProjectSettings.globalize_path("res://").rstrip("/")
-	for _i in range(4):  # check up to 4 levels up from the project
-		if FileAccess.file_exists(project_dir.path_join("u4pak/u4pak.py")):
-			return project_dir.path_join(CONFIG_FILENAME)
-		var parent := project_dir.get_base_dir()
-		if parent == project_dir:
-			break  # reached filesystem root
-		project_dir = parent
+	if project_dir.is_absolute_path():
+		# Dev / editor: walk up looking for the modkit root (contains spellbreak_uasset_editor/)
+		var dir := project_dir
+		for _i in range(4):
+			if DirAccess.dir_exists_absolute(dir.path_join("spellbreak_uasset_editor")):
+				return dir.path_join(CONFIG_FILENAME)
+			var parent := dir.get_base_dir()
+			if parent == dir:
+				break
+			dir = parent
 
-	# Exported binary: walk up from the executable's directory
-	var exe_dir := OS.get_executable_path().get_base_dir().rstrip("/")
-	for _i in range(4):
-		if FileAccess.file_exists(exe_dir.path_join("u4pak/u4pak.py")):
-			return exe_dir.path_join(CONFIG_FILENAME)
-		var parent := exe_dir.get_base_dir()
-		if parent == exe_dir:
-			break
-		exe_dir = parent
-
-	# Fallback: store config next to the executable (user will need to set paths manually)
-	return OS.get_executable_path().get_base_dir().path_join(CONFIG_FILENAME)
+	# Exported build: config lives next to the executable
+	var exe_dir := OS.get_executable_path().get_base_dir()
+	return exe_dir.path_join(CONFIG_FILENAME)
 
 
 func get_config_dir() -> String:
@@ -68,7 +63,7 @@ func get_config_dir() -> String:
 func get_u4pak_path() -> String:
 	if not u4pak_dir.is_empty():
 		return u4pak_dir.rstrip("/").path_join("u4pak.py")
-	return get_config_dir().path_join("u4pak/u4pak.py")
+	return _find_bundled_tool("u4pak", "u4pak.py")
 
 
 func get_state_path() -> String:
@@ -95,6 +90,7 @@ func load_config() -> void:
 	mods_dir   = str(parsed.get("mods_dir",   ""))
 	launch_cmd = str(parsed.get("launch_cmd", ""))
 	u4pak_dir  = str(parsed.get("u4pak_dir",  ""))
+	ue4_dds_tools_dir = str(parsed.get("ue4_dds_tools_dir", ""))
 	sources    = []
 	for entry in parsed.get("sources", []):
 		if entry is Dictionary:
@@ -105,6 +101,8 @@ func save_config() -> void:
 	var data: Dictionary = {"game_dir": game_dir, "mods_dir": mods_dir, "launch_cmd": launch_cmd}
 	if not u4pak_dir.is_empty():
 		data["u4pak_dir"] = u4pak_dir
+	if not ue4_dds_tools_dir.is_empty():
+		data["ue4_dds_tools_dir"] = ue4_dds_tools_dir
 	if not sources.is_empty():
 		data["sources"] = sources
 	var file := FileAccess.open(_config_path, FileAccess.WRITE)
@@ -118,3 +116,98 @@ func save_config() -> void:
 
 func get_paks_dir() -> String:
 	return game_dir.path_join("g3/Content/Paks")
+
+
+func get_dds_tools_main_py() -> String:
+	if not ue4_dds_tools_dir.is_empty():
+		return ue4_dds_tools_dir.rstrip("/").path_join("main.py")
+	return _find_bundled_tool("ue4_dds_tools", "main.py")
+
+
+func get_dds_tools_dir() -> String:
+	if not ue4_dds_tools_dir.is_empty():
+		return ue4_dds_tools_dir.rstrip("/")
+	var main_py := get_dds_tools_main_py()
+	if not main_py.is_empty():
+		return main_py.get_base_dir()
+	return ""
+
+
+# ── Bundled tool resolution ───────────────────────────────────────────────────
+# Both u4pak/ and ue4_dds_tools/ are packed inside the Godot .pck at export time.
+# At runtime the search order mirrors UAssetFile._get_converter_dll():
+#   1. Next to the executable  (user manually placed)
+#   2. User data dir           (previously extracted from .pck)
+#   3. Project source tree     (Godot editor / dev)
+#   4. Extract from res://     (exported build, first run)
+
+## All files that need to be extracted for each bundled tool.
+const _U4PAK_FILES := ["u4pak.py"]
+const _DDS_TOOLS_FILES := [
+	"main.py", "util.py", "config.json", "LICENSE",
+	"unreal/archive.py", "unreal/city_hash.py", "unreal/crc.py",
+	"unreal/data_resource.py", "unreal/file_summary.py",
+	"unreal/import_export.py", "unreal/uasset.py", "unreal/umipmap.py",
+	"unreal/utexture.py", "unreal/version.py",
+	"directx/dds.py", "directx/dxgi_format.py", "directx/texconv.py",
+	"directx/libtexconv.so", "directx/texconv.dll",
+]
+
+
+func _find_bundled_tool(tool_dir: String, marker_file: String) -> String:
+	var exe_dir := OS.get_executable_path().get_base_dir()
+	var user_dir := OS.get_user_data_dir()
+	var project_dir := ProjectSettings.globalize_path("res://")
+
+	# 1. Next to executable
+	var p := exe_dir.path_join(tool_dir).path_join(marker_file)
+	if FileAccess.file_exists(p):
+		return p
+
+	# 2. Already extracted to user data
+	p = user_dir.path_join(tool_dir).path_join(marker_file)
+	if FileAccess.file_exists(p):
+		return p
+
+	# 3. Project source tree (editor / dev)
+	if project_dir.is_absolute_path():
+		p = project_dir.path_join(tool_dir).path_join(marker_file)
+		if FileAccess.file_exists(p):
+			return p
+		# Also check parent dir (modkit root has spellbreak_uasset_editor/ as child)
+		p = project_dir.get_base_dir().path_join(tool_dir).path_join(marker_file)
+		if FileAccess.file_exists(p):
+			return p
+
+	# 4. Packed inside .pck — extract to user data
+	if FileAccess.file_exists("res://%s/%s" % [tool_dir, marker_file]):
+		var files: Array
+		match tool_dir:
+			"u4pak":          files = _U4PAK_FILES
+			"ue4_dds_tools":  files = _DDS_TOOLS_FILES
+			_:                files = [marker_file]
+		_extract_tool_to_user_dir(tool_dir, files)
+		p = user_dir.path_join(tool_dir).path_join(marker_file)
+		if FileAccess.file_exists(p):
+			return p
+
+	return ""
+
+
+static func _extract_tool_to_user_dir(tool_dir: String, files: Array) -> void:
+	var user_dir := OS.get_user_data_dir()
+	var dst_root := user_dir.path_join(tool_dir)
+	for rel_path in files:
+		var src := "res://%s/%s" % [tool_dir, rel_path]
+		var dst := dst_root.path_join(rel_path)
+		# Ensure subdirectory exists
+		DirAccess.make_dir_recursive_absolute(dst.get_base_dir())
+		if not FileAccess.file_exists(src):
+			continue
+		var data := FileAccess.get_file_as_bytes(src)
+		if data.size() == 0:
+			continue
+		var f := FileAccess.open(dst, FileAccess.WRITE)
+		if f:
+			f.store_buffer(data)
+			f.close()

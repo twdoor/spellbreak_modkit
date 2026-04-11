@@ -170,7 +170,7 @@ func _add_field_editor(label_text: String, current_value: String, on_change: Cal
 	var line := LineEdit.new()
 	line.text = current_value
 	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line.text_submitted.connect(func(t): _ctx["set_dirty"].call(); on_change.call(t))
+	line.text_changed.connect(func(t): _ctx["set_dirty"].call(); on_change.call(t))
 	hbox.add_child(line)
 	_container.add_child(hbox)
 
@@ -370,6 +370,30 @@ func _build_virtual(total: int, build_row: Callable, _unused_row_h: float = 30.0
 
 	if is_instance_valid(sentinel):
 		sentinel.queue_free()
+
+
+## Create a small red "✕" delete button.
+static func _make_delete_btn(on_pressed: Callable) -> Button:
+	var btn := Button.new()
+	btn.text = "✕"
+	btn.flat = true
+	btn.add_theme_color_override("font_color", Color(0.9, 0.4, 0.4))
+	btn.add_theme_color_override("font_hover_color", Color(1.0, 0.5, 0.5))
+	btn.pressed.connect(on_pressed)
+	return btn
+
+
+## Create a green "+ Label" add button.
+static func _make_add_btn(label: String, on_pressed: Callable) -> Button:
+	var btn := Button.new()
+	btn.text = label
+	btn.flat = true
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.add_theme_color_override("font_color", Color(0.4, 0.8, 0.4))
+	btn.add_theme_color_override("font_hover_color", Color(0.6, 1.0, 0.6))
+	btn.pressed.connect(on_pressed)
+	return btn
 
 
 func _on_row_value_changed(prop: UAssetProperty, old_value: Variant, _new_value: Variant) -> void:

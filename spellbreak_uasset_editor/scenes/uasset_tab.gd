@@ -33,14 +33,16 @@ var _detail_builder:  DetailPanelBuilder
 var _selection:       SelectionManager
 var _undo_manager:    UndoManager
 var _reorderer:       ExportReorderer
+var _texture_service: TextureService
 
 
-static func setup(uasset: UAssetFile) -> UassetFileTab:
+static func setup(uasset: UAssetFile, texture_service: TextureService = null) -> UassetFileTab:
 	var asset_name: String = uasset.file_path.get_file().get_basename()
 	var tab: UassetFileTab = UASSET_TAB.instantiate()
 	tab.tab_asset = uasset
 	tab._base_name = asset_name
 	tab._display_base = asset_name   # main.gd may override this via _refresh_tab_titles
+	tab._texture_service = texture_service
 	tab.name = asset_name
 	return tab
 
@@ -52,7 +54,7 @@ func get_disambig_name() -> String:
 	var parts := tab_asset.file_path.split("/")
 	var g3_idx := parts.find("g3")
 	var mod_folder := parts[g3_idx - 1] if g3_idx > 0 else tab_asset.file_path.get_base_dir().get_file()
-	return mod_folder + "/" + _base_name
+	return "@" + mod_folder + "/" + _base_name
 
 
 ## Called by main.gd after add_child / on close, and by the _dirty setter.
@@ -111,6 +113,7 @@ func _make_context() -> Dictionary:
 		"paste":             paste_clipboard,
 		"swap_exports":      _do_swap,
 		"detail_stack":      _detail_stack,
+		"texture_service":   _texture_service,
 	}
 
 
@@ -345,7 +348,7 @@ func delete_selection() -> void:
 	elif _current_data is Dictionary and _current_data.has("dt_row"):
 		var row: UAssetProperty  = _current_data["dt_row"]
 		var expo: UAssetExport   = _current_data["expo"]
-		var rows_raw: Array = _get_datatable_rows(expo)
+		var rows_raw: Array = expo.get_datatable_rows()
 		var idx := DataTableRowDetail.row_index(row, rows_raw)
 		if idx < 0: return
 		_dirty = true
@@ -457,12 +460,3 @@ func _search_in_array(arr: Array, target: UAssetProperty,
 			if not result.is_empty():
 				return result
 	return {}
-
-
-func _get_datatable_rows(expo: UAssetExport) -> Array:
-	var table_raw: Variant = expo.raw.get("Table")
-	if table_raw is Dictionary:
-		var dr: Variant = table_raw.get("Data")
-		if dr is Array:
-			return dr as Array
-	return []

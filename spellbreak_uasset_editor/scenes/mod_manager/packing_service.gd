@@ -94,7 +94,7 @@ func _do_pack(enabled_mods: Array) -> Array:
 	var exit_code := _run_u4pak(u4pak_path, pak_path, merged)
 
 	# Clean up temp dir
-	_remove_dir_recursive(tmp_dir)
+	FileUtils.remove_dir_recursive(tmp_dir)
 
 	if exit_code != 0:
 		return [false, "Pack failed (exit %d)" % exit_code]
@@ -192,23 +192,6 @@ func _copy_dir_recursive(src: String, dst: String, mod_root: String) -> void:
 					fa.close()
 		entry = dir.get_next()
 	dir.list_dir_end()
-
-
-func _remove_dir_recursive(path: String) -> void:
-	var dir := DirAccess.open(path)
-	if not dir:
-		return
-	dir.list_dir_begin()
-	var entry := dir.get_next()
-	while not entry.is_empty():
-		var full := path.path_join(entry)
-		if dir.current_is_dir() and not entry.begins_with("."):
-			_remove_dir_recursive(full)
-		elif not dir.current_is_dir():
-			DirAccess.remove_absolute(full)
-		entry = dir.get_next()
-	dir.list_dir_end()
-	DirAccess.remove_absolute(path)
 
 
 func _emit_log(line: String) -> void:

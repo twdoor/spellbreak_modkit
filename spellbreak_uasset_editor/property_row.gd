@@ -155,7 +155,7 @@ static func _create_editor(prop: UAssetProperty, row: PropertyRow, asset: UAsset
 				var line := LineEdit.new()
 				line.text = current
 				line.placeholder_text = prop.enum_type
-				line.text_submitted.connect(func(t): _on_change(row, t))
+				line.text_changed.connect(func(t): _on_change(row, t))
 				return line
 
 		"Text":
@@ -168,7 +168,7 @@ static func _create_editor(prop: UAssetProperty, row: PropertyRow, asset: UAsset
 			key_line.placeholder_text = "key"
 			key_line.add_theme_font_size_override("font_size", 11)
 			key_line.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55))
-			key_line.text_submitted.connect(func(t): _on_change(row, t))
+			key_line.text_changed.connect(func(t): _on_change(row, t))
 			vbox.add_child(key_line)
 
 			# Actual text content — multiline
@@ -188,7 +188,7 @@ static func _create_editor(prop: UAssetProperty, row: PropertyRow, asset: UAsset
 		"Name", "Str":
 			var line := LineEdit.new()
 			line.text = str(prop.value) if prop.value != null else ""
-			line.text_submitted.connect(func(t): _on_change(row, t))
+			line.text_changed.connect(func(t): _on_change(row, t))
 			return line
 
 		"SoftObject":
