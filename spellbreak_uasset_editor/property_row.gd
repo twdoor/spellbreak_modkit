@@ -194,8 +194,15 @@ static func _create_editor(prop: UAssetProperty, row: PropertyRow, asset: UAsset
 		"SoftObject":
 			var line := LineEdit.new()
 			line.text = prop.get_display_value()
-			line.editable = false
 			line.add_theme_color_override("font_color", Color(0.5, 0.7, 1.0))
+			line.text_changed.connect(func(t):
+				if prop.value is Dictionary:
+					var asset_path = prop.value.get("AssetPath", {})
+					if asset_path is Dictionary:
+						var old = asset_path.get("PackageName", "")
+						asset_path["PackageName"] = t if t != "" else null
+						row.value_changed.emit(prop, old, t)
+			)
 			return line
 
 		"Struct":

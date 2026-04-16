@@ -6,7 +6,7 @@ class_name ModSettingsTab extends VBoxContainer
 
 signal close_requested
 
-var _cfg:               ModConfigManager
+var _cfg: ModConfigManager
 var _sources_container: VBoxContainer
 
 
@@ -78,6 +78,32 @@ func _build_ui() -> void:
 	launch_edit.text_changed.connect(func(v: String) -> void: _cfg.launch_cmd = v)
 	content.add_child(launch_edit)
 
+
+	# ── umodel (3D Preview) ──
+	content.add_child(_section("umodel (3D Preview)"))
+	content.add_child(_hint("Path to the umodel binary. Required for 3D mesh preview. Download from gildor.org/en/projects/umodel"))
+	var umodel_row := HBoxContainer.new()
+	umodel_row.add_theme_constant_override("separation", 6)
+	var umodel_edit := _line_edit(_cfg.umodel_path, "/path/to/umodel")
+	umodel_edit.text_changed.connect(func(v: String) -> void: _cfg.umodel_path = v)
+	umodel_row.add_child(umodel_edit)
+	var umodel_browse := Button.new()
+	umodel_browse.text = "Browse..."
+	umodel_browse.pressed.connect(func() -> void:
+		var dialog := FileDialog.new()
+		dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+		dialog.access = FileDialog.ACCESS_FILESYSTEM
+		dialog.use_native_dialog = true
+		dialog.file_selected.connect(func(path: String) -> void:
+			umodel_edit.text = path
+			_cfg.umodel_path = path
+			dialog.queue_free()
+		)
+		get_tree().root.add_child(dialog)
+		dialog.popup_centered(Vector2i(800, 600))
+	)
+	umodel_row.add_child(umodel_browse)
+	content.add_child(umodel_row)
 
 	# ── Sources ──
 	content.add_child(_section("Sources"))

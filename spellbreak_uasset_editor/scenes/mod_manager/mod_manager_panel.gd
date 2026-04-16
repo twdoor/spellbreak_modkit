@@ -294,15 +294,20 @@ func _build_mod_files(mod_item: TreeItem, mod: Dictionary) -> void:
 
 # ── Tree signal handlers ───────────────────────────────────────────────────────
 
-## Double-click a .uasset file → open it in the editor.
+## Double-click a file → open .uasset in the editor, everything else with the OS default app.
 ## Using activated (double-click) so single-click safely builds multi-selection.
 func _on_tree_item_activated() -> void:
 	var item := _mod_tree.get_selected()
 	if not item:
 		return
 	var meta: Dictionary = item.get_metadata(0)
-	if meta.get("type") == "file" and (meta["rel_path"] as String).ends_with(".uasset"):
-		open_asset_requested.emit(meta["full_path"] as String)
+	if meta.get("type") != "file":
+		return
+	var path: String = meta["full_path"]
+	if path.ends_with(".uasset"):
+		open_asset_requested.emit(path)
+	else:
+		OS.shell_open(path)
 
 
 ## Left-click a mod item → expand/collapse.  Right-click → toggle enabled/disabled.

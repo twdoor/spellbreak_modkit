@@ -28,6 +28,8 @@ var _tab_pending_close: UassetFileTab
 
 var _status_label: Label
 var _texture_service: TextureService
+var _sound_service: SoundService
+var _mesh_service: MeshService
 
 const _TOAST_HIDDEN_Y := -8.0   # resting offset_bottom when hidden (just off-screen bottom)
 const _TOAST_SHOWN_Y  := -72.0  # offset_bottom when fully visible
@@ -87,6 +89,8 @@ func _setup_mod_tab() -> void:
 	panel.open_asset_requested.connect(_on_file_selected)
 	panel.status_changed.connect(_on_mod_status_changed)
 	_texture_service = TextureService.new().setup(panel.get_config())
+	_sound_service = SoundService.new()
+	_mesh_service = MeshService.new().setup(panel.get_config())
 
 	# When any UassetFileTab is removed, refresh titles so lone survivors revert to short names.
 	tab_cont.child_exiting_tree.connect(func(child: Node) -> void:
@@ -231,7 +235,7 @@ func _on_file_selected(path: String) -> void:
 		push_error("Failed to load: " + path)
 		return
 
-	var new_tab := UassetFileTab.setup(asset, _texture_service)
+	var new_tab := UassetFileTab.setup(asset, _texture_service, _sound_service, _mesh_service)
 	tab_cont.add_child(new_tab)
 	# Refresh all tab titles: duplicates get "ParentFolder/Name", unique ones stay short.
 	_refresh_tab_titles()

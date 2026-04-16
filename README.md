@@ -25,8 +25,9 @@ Everything is bundled inside the single binary:
 - **ImageMagick** — required for texture export/import (DDS/TGA to PNG conversion)
   > Most Linux distros include it. On Windows, install from [imagemagick.org](https://imagemagick.org/script/download.php) and add to PATH.
 
-Optional (only if building the editor from source):
-- **Godot 4.6+** — standard build (no .NET support needed)
+Optional:
+- **[umodel](https://www.gildor.org/en/projects/umodel)** (UE Viewer) — required for 3D mesh preview (StaticMesh / SkeletalMesh assets). Download a prebuilt binary or [build from source](https://github.com/gildor2/UEViewer). Set the path in **Settings > umodel (3D Preview)**.
+- **Godot 4.6+** — only if building the editor from source (no .NET support needed)
 
 ---
 
@@ -54,6 +55,7 @@ Launch the app, click **Settings**, and fill in:
 - **Game directory** — the folder containing `g3/` and `Spellbreak.exe`
 - **Mods directory** — where your mod folders live
 - **Launch command** — optional, used by the Launch button
+- **umodel path** — optional, path to the umodel binary for 3D mesh preview
 - **Sources** — exported asset directories for reference (base game export, older versions, etc.)
 
 Settings are saved to `config.json` next to the executable.
@@ -70,7 +72,8 @@ The Mod Manager tab is pinned and always visible. It shows all mod folders found
 |--------|--------|
 | **Left-click a mod** | Expand / collapse it |
 | **Right-click a mod** | Toggle enabled / disabled |
-| **Double-click a file** | Open it in the asset editor |
+| **Double-click a `.uasset`** | Open it in the asset editor |
+| **Double-click any other file** | Open with system default app |
 
 **Multi-select and clipboard:**
 
@@ -113,7 +116,7 @@ Open `.uasset` or `.json` files via `Ctrl+Space`, drag-and-drop, or double-click
 
 **What you can edit:**
 
-- **Export properties** — structs, arrays, scalars, enums, text, object references
+- **Export properties** — structs, arrays, scalars, enums, text, object references, SoftObject paths
 - **Array items** — multi-select with Ctrl/Shift+click; copy/paste/delete supported
 - **Import table** — all fields editable inline; multi-select supported
 - **Name map** — add, edit, delete entries
@@ -129,6 +132,26 @@ When opening a texture `.uasset` (Texture2D, TextureCube, etc.), the detail pane
 - **Import PNG** — inject an edited PNG back into the `.uasset` (automatically handles BC1/BC3/BC5/BC7 format matching)
 
 > Texture operations require Python and ImageMagick to be installed and in PATH.
+
+### Audio support
+
+When opening a SoundWave `.uasset`, the detail panel shows:
+
+- **Inline playback** — play, pause, stop controls with a seek slider and time display
+- **Export as OGG** — save the audio stream to an OGG Vorbis file
+- **Import OGG** — inject a new OGG file back into the `.uasset` (updates companion `.uexp`/`.ubulk` binary data and FByteBulkData headers)
+
+> Audio extraction and injection are implemented in pure GDScript — no external tools required.
+
+### 3D Mesh support
+
+When opening a StaticMesh or SkeletalMesh `.uasset`, the detail panel shows:
+
+- **3D preview** — interactive viewport with orbit controls (left-drag to rotate, scroll to zoom)
+- **Auto-framing** — camera automatically positions to fit the mesh on load
+- **Export as glTF** — save the mesh to a glTF file
+
+> Mesh preview requires [umodel](https://www.gildor.org/en/projects/umodel) to be installed and configured in Settings.
 
 ---
 
@@ -187,11 +210,15 @@ spellbreak-modkit/
     │   ├── undo_manager.gd
     │   ├── export_reorderer.gd
     │   ├── texture_service.gd      Texture extraction/injection service
+    │   ├── sound_service.gd        Audio extraction/injection service
+    │   ├── mesh_service.gd         3D mesh export via umodel
     │   ├── detail_items/           One class per detail-panel view
     │   │   ├── detail_item.gd
     │   │   ├── property_detail.gd
     │   │   ├── export_detail.gd
     │   │   ├── texture_detail.gd   Texture preview & import/export
+    │   │   ├── sound_detail.gd     Audio playback & import/export
+    │   │   ├── mesh_detail.gd      3D mesh preview & export
     │   │   ├── exports_list_detail.gd
     │   │   ├── import_detail.gd
     │   │   ├── namemap_detail.gd
@@ -218,3 +245,4 @@ spellbreak-modkit/
 - [u4pak](https://github.com/panzi/u4pak) by panzi — UE4 pak archive tool (bundled)
 - [UE4-DDS-Tools](https://github.com/matyalatte/UE4-DDS-Tools) by matyalatte — UE4 texture extraction/injection (bundled)
 - [Texconv-Custom-DLL](https://github.com/matyalatte/Texconv-Custom-DLL) by matyalatte — Cross-platform texture format converter (bundled as libtexconv)
+- [umodel / UE Viewer](https://www.gildor.org/en/projects/umodel) by Gildor — UE4 mesh viewer/exporter (optional, user-installed)

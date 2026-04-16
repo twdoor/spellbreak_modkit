@@ -17,6 +17,12 @@ const TEXTURE_CLASSES := [
 	"Texture2DArray", "TextureCubeArray", "VolumeTexture",
 ]
 
+## Sound export class names — audio preview via SoundService
+const SOUND_CLASSES := ["SoundWave"]
+
+## Mesh export class names — 3D preview via MeshService (umodel)
+const MESH_CLASSES := ["StaticMesh", "SkeletalMesh"]
+
 ## The raw top-level JSON dict - kept for round-trip fidelity
 var raw: Dictionary
 

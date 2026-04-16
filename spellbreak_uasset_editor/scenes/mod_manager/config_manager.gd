@@ -24,6 +24,8 @@ var sources: Array = []
 ## Optional override: absolute path to the UE4-DDS-Tools directory (the folder containing src/main.py).
 ## Required for texture preview and PNG export/import.
 var ue4_dds_tools_dir: String = ""
+## Absolute path to the umodel binary.  Required for 3D mesh preview.
+var umodel_path: String = ""
 
 signal config_changed
 
@@ -91,6 +93,7 @@ func load_config() -> void:
 	launch_cmd = str(parsed.get("launch_cmd", ""))
 	u4pak_dir  = str(parsed.get("u4pak_dir",  ""))
 	ue4_dds_tools_dir = str(parsed.get("ue4_dds_tools_dir", ""))
+	umodel_path = str(parsed.get("umodel_path", ""))
 	sources    = []
 	for entry in parsed.get("sources", []):
 		if entry is Dictionary:
@@ -103,6 +106,8 @@ func save_config() -> void:
 		data["u4pak_dir"] = u4pak_dir
 	if not ue4_dds_tools_dir.is_empty():
 		data["ue4_dds_tools_dir"] = ue4_dds_tools_dir
+	if not umodel_path.is_empty():
+		data["umodel_path"] = umodel_path
 	if not sources.is_empty():
 		data["sources"] = sources
 	var file := FileAccess.open(_config_path, FileAccess.WRITE)
@@ -112,6 +117,10 @@ func save_config() -> void:
 	file.store_string(JSON.stringify(data, "  "))
 	file.close()
 	config_changed.emit()
+
+
+func get_umodel_path() -> String:
+	return umodel_path
 
 
 func get_paks_dir() -> String:

@@ -34,15 +34,19 @@ var _selection:       SelectionManager
 var _undo_manager:    UndoManager
 var _reorderer:       ExportReorderer
 var _texture_service: TextureService
+var _sound_service: SoundService
+var _mesh_service: MeshService
 
 
-static func setup(uasset: UAssetFile, texture_service: TextureService = null) -> UassetFileTab:
+static func setup(uasset: UAssetFile, texture_service: TextureService = null, sound_service: SoundService = null, mesh_service: MeshService = null) -> UassetFileTab:
 	var asset_name: String = uasset.file_path.get_file().get_basename()
 	var tab: UassetFileTab = UASSET_TAB.instantiate()
 	tab.tab_asset = uasset
 	tab._base_name = asset_name
 	tab._display_base = asset_name   # main.gd may override this via _refresh_tab_titles
 	tab._texture_service = texture_service
+	tab._sound_service = sound_service
+	tab._mesh_service = mesh_service
 	tab.name = asset_name
 	return tab
 
@@ -114,6 +118,8 @@ func _make_context() -> Dictionary:
 		"swap_exports":      _do_swap,
 		"detail_stack":      _detail_stack,
 		"texture_service":   _texture_service,
+		"sound_service":     _sound_service,
+		"mesh_service":      _mesh_service,
 	}
 
 
