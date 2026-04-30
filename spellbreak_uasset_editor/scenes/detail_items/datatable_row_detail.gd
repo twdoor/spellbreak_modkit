@@ -23,24 +23,32 @@ func _build_impl() -> void:
 
 	var hdr_label := Label.new()
 	hdr_label.text = row.prop_name
-	hdr_label.add_theme_font_size_override("font_size", 16)
+	AppTheme.style_header(hdr_label)
 	_container.add_child(hdr_label)
 	_add_type_badge("Row: %s" % row.struct_type)
 	_add_separator()
 
-	# Editable row key name
-	_add_field_editor("Row Name", row.prop_name, func(v: String):
-		if v.is_empty():
-			return
-		row.prop_name = v
-		row.raw["Name"] = v
-		hdr_label.text = v
-		_ctx["set_dirty"].call()
-		# Update the tree item label in-place — no full rebuild needed
-		# (TreeManager.refresh_item_text only handles UAssetProperty leaves;
-		#  for DataTable rows we rebuild the tree via the standard path)
-		_ctx["rebuild_tree"].call()
-	)
+	# Editable row key name — commits on Enter / focus-exit to avoid
+	# rebuilding the tree on every keystroke.
+	var name_hbox := HBoxContainer.new()
+	name_hbox.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
+	var name_label := Label.new()
+	name_label.text = "Row Name"
+	name_label.custom_minimum_size.x = PropertyRow.LABEL_MIN_WIDTH
+	name_label.size_flags_horizontal = Control.SIZE_FILL
+	AppTheme.style_dim(name_label)
+	name_hbox.add_child(name_label)
+	name_hbox.add_child(_make_commit_line(
+		row.prop_name,
+		func(v: String):
+			if v.is_empty():
+				return
+			row.prop_name = v
+			row.raw["Name"] = v
+			hdr_label.text = v
+			_ctx["rebuild_tree"].call()
+	))
+	_container.add_child(name_hbox)
 
 	_add_separator()
 	_build_flat_leaves(row)

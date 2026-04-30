@@ -9,6 +9,7 @@ class_name SoundService extends RefCounted
 
 signal operation_finished(success: bool, message: String)
 
+var _cfg: ModConfigManager
 var _thread: Thread = null
 var _busy: bool = false
 
@@ -17,6 +18,11 @@ static var OGG_MAGIC := PackedByteArray([0x4F, 0x67, 0x67, 0x53])
 
 ## Temp directory for audio cache
 const CACHE_DIR := "sb_audio_cache"
+
+
+func setup(cfg: ModConfigManager) -> SoundService:
+	_cfg = cfg
+	return self
 
 
 func is_busy() -> bool:
@@ -124,6 +130,9 @@ func _on_operation_done(success: bool, message: String) -> void:
 ## Extract OGG audio bytes from a SoundWave .uasset's companion files.
 ## Returns [success: bool, message: String, data: PackedByteArray].
 func _do_extract_audio(uasset_path: String) -> Array:
+	if _cfg and _cfg.get_game_profile().audio_format != "ogg_raw":
+		return [false, "Audio format '%s' is not supported — only raw OGG (ogg_raw) is currently supported" % _cfg.get_game_profile().audio_format, PackedByteArray()]
+
 	if not FileAccess.file_exists(uasset_path):
 		return [false, "File not found: %s" % uasset_path, PackedByteArray()]
 
@@ -258,6 +267,9 @@ func _find_ogg_stream_end(data: PackedByteArray, start: int) -> int:
 ## recognises the new payload length.
 ## Returns [success: bool, message: String].
 func _do_inject_ogg(uasset_path: String, ogg_path: String) -> Array:
+	if _cfg and _cfg.get_game_profile().audio_format != "ogg_raw":
+		return [false, "Audio injection not supported for format '%s' — only raw OGG (ogg_raw) is supported" % _cfg.get_game_profile().audio_format]
+
 	if not FileAccess.file_exists(uasset_path):
 		return [false, "Asset not found: %s" % uasset_path]
 	if not FileAccess.file_exists(ogg_path):

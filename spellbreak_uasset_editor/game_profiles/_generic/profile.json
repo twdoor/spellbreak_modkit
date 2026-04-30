@@ -1,0 +1,15 @@
+{
+  "display_name": "Generic UE4/5",
+  "builtin": true,
+  "ue_version": "4.27",
+  "umodel_game_flag": "ue4.27",
+  "dds_tools_version": "4.27",
+  "pak_archive_version": 3,
+  "pak_mount_point": "../../../",
+  "content_root": "Content",
+  "paks_subpath": "Content/Paks",
+  "pak_output_name": "zzz_mods_P",
+  "audio_format": "ogg_raw",
+  "has_enums": false,
+  "has_tags": false
+}

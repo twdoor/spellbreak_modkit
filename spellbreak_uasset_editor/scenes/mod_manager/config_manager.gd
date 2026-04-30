@@ -26,6 +26,10 @@ var sources: Array = []
 var ue4_dds_tools_dir: String = ""
 ## Absolute path to the umodel binary.  Required for 3D mesh preview.
 var umodel_path: String = ""
+## Active game profile ID (directory name under game_profiles/, or "ue_X.Y" for generic).
+var game_profile_id: String = "spellbreak"
+
+var _game_profile: GameProfile = null
 
 signal config_changed
 
@@ -94,6 +98,8 @@ func load_config() -> void:
 	u4pak_dir  = str(parsed.get("u4pak_dir",  ""))
 	ue4_dds_tools_dir = str(parsed.get("ue4_dds_tools_dir", ""))
 	umodel_path = str(parsed.get("umodel_path", ""))
+	game_profile_id = str(parsed.get("game_profile", "spellbreak"))
+	_game_profile = null  # invalidate cache
 	sources    = []
 	for entry in parsed.get("sources", []):
 		if entry is Dictionary:
@@ -101,7 +107,12 @@ func load_config() -> void:
 
 
 func save_config() -> void:
-	var data: Dictionary = {"game_dir": game_dir, "mods_dir": mods_dir, "launch_cmd": launch_cmd}
+	var data: Dictionary = {
+		"game_profile": game_profile_id,
+		"game_dir": game_dir,
+		"mods_dir": mods_dir,
+		"launch_cmd": launch_cmd,
+	}
 	if not u4pak_dir.is_empty():
 		data["u4pak_dir"] = u4pak_dir
 	if not ue4_dds_tools_dir.is_empty():
@@ -123,8 +134,24 @@ func get_umodel_path() -> String:
 	return umodel_path
 
 
+## Returns the cached GameProfile for the active game_profile_id.
+## Lazy-loads on first access; invalidated when game_profile_id changes.
+func get_game_profile() -> GameProfile:
+	if _game_profile == null:
+		# Ensure game_profiles are extracted from .pck for exported builds
+		_find_bundled_tool("game_profiles", "_generic/profile.json")
+		_game_profile = GameProfile.load_profile(game_profile_id)
+	return _game_profile
+
+
+## Change the active profile and invalidate the cache.
+func set_game_profile_id(pid: String) -> void:
+	game_profile_id = pid
+	_game_profile = null
+
+
 func get_paks_dir() -> String:
-	return game_dir.path_join("g3/Content/Paks")
+	return game_dir.path_join(get_game_profile().paks_subpath)
 
 
 func get_dds_tools_main_py() -> String:
@@ -161,6 +188,10 @@ const _DDS_TOOLS_FILES := [
 	"directx/dds.py", "directx/dxgi_format.py", "directx/texconv.py",
 	"directx/libtexconv.so", "directx/texconv.dll",
 ]
+const _GAME_PROFILE_FILES := [
+	"_generic/profile.json", "_generic/enums.json",
+	"spellbreak/profile.json", "spellbreak/enums.json", "spellbreak/tags.json",
+]
 
 
 func _find_bundled_tool(tool_dir: String, marker_file: String) -> String:
@@ -192,9 +223,10 @@ func _find_bundled_tool(tool_dir: String, marker_file: String) -> String:
 	if FileAccess.file_exists("res://%s/%s" % [tool_dir, marker_file]):
 		var files: Array
 		match tool_dir:
-			"u4pak":          files = _U4PAK_FILES
-			"ue4_dds_tools":  files = _DDS_TOOLS_FILES
-			_:                files = [marker_file]
+			"u4pak":           files = _U4PAK_FILES
+			"ue4_dds_tools":   files = _DDS_TOOLS_FILES
+			"game_profiles":   files = _GAME_PROFILE_FILES
+			_:                 files = [marker_file]
 		_extract_tool_to_user_dir(tool_dir, files)
 		p = user_dir.path_join(tool_dir).path_join(marker_file)
 		if FileAccess.file_exists(p):

@@ -29,16 +29,10 @@ func _build_impl() -> void:
 
 
 func _add_import_header() -> void:
-	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 6)
-	for col in [["#", 32], ["ClassPackage", 180], ["ClassName", 140], ["ObjectName", 0], ["Outer", 72]]:
-		var lbl := Label.new()
-		lbl.text = col[0]
-		lbl.add_theme_font_size_override("font_size", 10)
-		lbl.add_theme_color_override("font_color", Color(0.45, 0.45, 0.45))
-		if col[1] > 0:
-			lbl.custom_minimum_size.x = col[1]
-		else:
-			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		hbox.add_child(lbl)
-	_container.add_child(hbox)
+	_add_column_headers([
+		["#", 32, AppTheme.FONT_TINY],
+		["ClassPackage", 180, AppTheme.FONT_TINY],
+		["ClassName", 140, AppTheme.FONT_TINY],
+		["ObjectName", 0, AppTheme.FONT_TINY],
+		["Outer", 72, AppTheme.FONT_TINY],
+	])

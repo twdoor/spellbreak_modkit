@@ -1,0 +1,16 @@
+{
+  "display_name": "Spellbreak",
+  "builtin": true,
+  "ue_version": "4.22",
+  "umodel_game_flag": "ue4.22",
+  "dds_tools_version": "4.20",
+  "pak_archive_version": 3,
+  "pak_mount_point": "../../../",
+  "content_root": "g3",
+  "paks_subpath": "g3/Content/Paks",
+  "pak_output_name": "zzz_mods_P",
+  "audio_format": "ogg_raw",
+  "has_enums": true,
+  "has_tags": true,
+  "has_constants": true
+}

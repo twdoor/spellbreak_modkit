@@ -23,7 +23,7 @@ func _build_impl() -> void:
 
 	var hdr_label := Label.new()
 	hdr_label.text = "StringTable: %s" % expo.object_name
-	hdr_label.add_theme_font_size_override("font_size", 16)
+	AppTheme.style_header(hdr_label)
 	_container.add_child(hdr_label)
 	_add_type_badge("StringTableExport")
 	_add_separator()
@@ -60,43 +60,19 @@ func _build_entries(expo: UAssetExport, table_raw: Dictionary, entries: Array) -
 	for i in entries.size():
 		var entry: Array = entries[i] if entries[i] is Array else ["", ""]
 		var ci := i
+		var row := _make_row()
 
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
+		row.add_child(_make_commit_line(
+			str(entry[0]) if entry.size() > 0 and entry[0] != null else "",
+			func(t: String): entry[0] = t,
+			"Key", 180, false
+		))
+		row.add_child(_make_commit_line(
+			str(entry[1]) if entry.size() > 1 and entry[1] != null else "",
+			func(t: String): entry[1] = t,
+			"Value"
+		))
 
-		# Key — fixed width
-		var key_edit := LineEdit.new()
-		key_edit.text = str(entry[0]) if entry.size() > 0 and entry[0] != null else ""
-		key_edit.custom_minimum_size.x = 180
-		key_edit.placeholder_text = "Key"
-		key_edit.text_submitted.connect(func(t: String) -> void:
-			entry[0] = t
-			_ctx["set_dirty"].call()
-		)
-		key_edit.focus_exited.connect(func() -> void:
-			if is_instance_valid(key_edit):
-				entry[0] = key_edit.text
-				_ctx["set_dirty"].call()
-		)
-		row.add_child(key_edit)
-
-		# Value — expands
-		var val_edit := LineEdit.new()
-		val_edit.text = str(entry[1]) if entry.size() > 1 and entry[1] != null else ""
-		val_edit.placeholder_text = "Value"
-		val_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		val_edit.text_submitted.connect(func(t: String) -> void:
-			entry[1] = t
-			_ctx["set_dirty"].call()
-		)
-		val_edit.focus_exited.connect(func() -> void:
-			if is_instance_valid(val_edit):
-				entry[1] = val_edit.text
-				_ctx["set_dirty"].call()
-		)
-		row.add_child(val_edit)
-
-		# Delete — deferred to avoid freeing during signal emit
 		var del_btn := _make_delete_btn(func() -> void:
 			entries.remove_at(ci)
 			table_raw["Value"] = entries
@@ -109,7 +85,6 @@ func _build_entries(expo: UAssetExport, table_raw: Dictionary, entries: Array) -
 
 	_add_separator()
 
-	# Add entry
 	_container.add_child(_make_add_btn("+ Add Entry", func() -> void:
 		entries.append(["", ""])
 		table_raw["Value"] = entries

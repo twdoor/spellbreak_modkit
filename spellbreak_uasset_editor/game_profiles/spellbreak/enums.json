@@ -1,0 +1,292 @@
+{
+  "EGAddFriendResultType": [
+    "EGAddFriendResultType::AlreadyFriends",
+    "EGAddFriendResultType::AlreadyReceivedInvite",
+    "EGAddFriendResultType::AlreadySentInvite",
+    "EGAddFriendResultType::BlockedByPlayer",
+    "EGAddFriendResultType::InvalidTextEntry",
+    "EGAddFriendResultType::PlayerIsBlocked",
+    "EGAddFriendResultType::Success",
+    "EGAddFriendResultType::Unknown"
+  ],
+  "EGAnimationPose": [
+    "EGAnimationPose::Melee"
+  ],
+  "EGAttackActivationEffectTriggerMode": [
+    "EGAttackActivationEffectTriggerMode::OncePerAction",
+    "EGAttackActivationEffectTriggerMode::OncePerAttackPoint"
+  ],
+  "EGAttributeChangeEffectScalingType": [
+    "EGAttributeChangeEffectScalingType::ScaleByAbsoluteDeltaChange"
+  ],
+  "EGAttributeChangeType": [
+    "EGAttributeChangeType::Addition"
+  ],
+  "EGAttributeSource": [
+    "EGAttributeSource::Weapon"
+  ],
+  "EGBannerStyle": [
+    "EGBannerStyle::Fail",
+    "EGBannerStyle::Success"
+  ],
+  "EGBoonInclusionType": [
+    "EGBoonInclusionType::Filler",
+    "EGBoonInclusionType::IncludeAlways"
+  ],
+  "EGButtonState": [
+    "EGButtonState::Disabled",
+    "EGButtonState::Hovered",
+    "EGButtonState::Normal",
+    "EGButtonState::Selected"
+  ],
+  "EGCooldownState": [
+    "EGCooldownState::EGCooldownState_Active",
+    "EGCooldownState::EGCooldownState_Charged",
+    "EGCooldownState::EGCooldownState_Charging",
+    "EGCooldownState::EGCooldownState_Empty"
+  ],
+  "EGCountdownTimerFormat": [
+    "EGCountdownTimerFormat::MinutesSeconds"
+  ],
+  "EGDamageEventType": [
+    "EGDamageEventType::OnAnyDamage",
+    "EGDamageEventType::OnHealthDamage"
+  ],
+  "EGDrawerAnchor": [
+    "EGDrawerAnchor::Right"
+  ],
+  "EGEffectStateRequirement": [
+    "EGEffectStateRequirement::Always",
+    "EGEffectStateRequirement::WhenElectrified",
+    "EGEffectStateRequirement::WhenFrozen",
+    "EGEffectStateRequirement::WhenIgnited",
+    "EGEffectStateRequirement::WhenIgnitedAndToxic",
+    "EGEffectStateRequirement::WhenIgnitedNotToxic",
+    "EGEffectStateRequirement::WhenNotFrozenNotToxic",
+    "EGEffectStateRequirement::WhenToxic"
+  ],
+  "EGElementType": [
+    "EGElementType::Air",
+    "EGElementType::Earth",
+    "EGElementType::Inert",
+    "EGElementType::Liquid",
+    "EGElementType::PureCold",
+    "EGElementType::PureFire",
+    "EGElementType::PureShock"
+  ],
+  "EGFilterType": [
+    "EGFilterType::BlockList"
+  ],
+  "EGFlairLevel": [
+    "EGFlairLevel::Max",
+    "EGFlairLevel::Moderate"
+  ],
+  "EGGameMode": [
+    "EGGameMode::Capture",
+    "EGGameMode::Duo",
+    "EGGameMode::Practice",
+    "EGGameMode::RumbleSquad",
+    "EGGameMode::Solo",
+    "EGGameMode::Squad",
+    "EGGameMode::TDM",
+    "EGGameMode::Tutorial"
+  ],
+  "EGGameVariantRule": [
+    "EGGameVariantRule::Ranked"
+  ],
+  "EGGauntletHand": [
+    "EGGauntletHand::Both",
+    "EGGauntletHand::Left",
+    "EGGauntletHand::Right"
+  ],
+  "EGInputEnableSetting": [
+    "EGInputEnableSetting::OnlyWhenPlaying",
+    "EGInputEnableSetting::OnlyWhenPlayingWithGameInput"
+  ],
+  "EGInstigatorTargetRequirement": [
+    "EGInstigatorTargetRequirement::InstigatorCannotMatchTargetTeam",
+    "EGInstigatorTargetRequirement::InstigatorMustMatchTargetTeam"
+  ],
+  "EGLevitateAutoActivateMode": [
+    "EGLevitateAutoActivateMode::Tap",
+    "EGLevitateAutoActivateMode::Toggle"
+  ],
+  "EGPartyReadinessState": [
+    "EGPartyReadinessState::Disconnected",
+    "EGPartyReadinessState::Empty",
+    "EGPartyReadinessState::InMatch",
+    "EGPartyReadinessState::NotReady",
+    "EGPartyReadinessState::Ready"
+  ],
+  "EGPingMode": [
+    "EGPingMode::EGPingMode_PressHold"
+  ],
+  "EGPingReactionType": [
+    "EGPingReactionType::EGPingReactionType_Negative",
+    "EGPingReactionType::EGPingReactionType_Positive"
+  ],
+  "EGPlatformIconSize": [
+    "EGPlatformIconSize::Large"
+  ],
+  "EGQuestAllowedMode": [
+    "EGQuestAllowedMode::Any",
+    "EGQuestAllowedMode::BR",
+    "EGQuestAllowedMode::Capture"
+  ],
+  "EGQuestQueryOperation": [
+    "EGQuestQueryOperation::NextStep",
+    "EGQuestQueryOperation::Restart"
+  ],
+  "EGRumbleActionBarContextAction": [
+    "EGRumbleActionBarContextAction::AddFriend",
+    "EGRumbleActionBarContextAction::Block",
+    "EGRumbleActionBarContextAction::Cancel",
+    "EGRumbleActionBarContextAction::Mute",
+    "EGRumbleActionBarContextAction::Report",
+    "EGRumbleActionBarContextAction::Unblock",
+    "EGRumbleActionBarContextAction::Unmute",
+    "EGRumbleActionBarContextAction::ViewProfile_Xbox"
+  ],
+  "EGRuneType": [
+    "EGRuneType::Blink",
+    "EGRuneType::Chronomaster",
+    "EGRuneType::Dash",
+    "EGRuneType::Disruption",
+    "EGRuneType::Featherfall",
+    "EGRuneType::Flight",
+    "EGRuneType::Gateway",
+    "EGRuneType::Invisibility",
+    "EGRuneType::Shadowstep",
+    "EGRuneType::Shielding",
+    "EGRuneType::Springstep",
+    "EGRuneType::Teleportation",
+    "EGRuneType::Wolfsblood"
+  ],
+  "EGTargetingType": [
+    "EGTargetingType::Ground",
+    "EGTargetingType::Self"
+  ],
+  "EGTextCaseMode": [
+    "EGTextCaseMode::Uppercase"
+  ],
+  "EGWeaponType": [
+    "EGWeaponType::Earth",
+    "EGWeaponType::Fire",
+    "EGWeaponType::Ice",
+    "EGWeaponType::None",
+    "EGWeaponType::Poison",
+    "EGWeaponType::Shock",
+    "EGWeaponType::Wind"
+  ],
+  "EXActionCueVisibility": [
+    "EXActionCueVisibility::VisibleForSelfAndTeammatesOnly",
+    "EXActionCueVisibility::VisibleForSelfOnly"
+  ],
+  "EXAimingMode": [
+    "EXAimingMode::SecondaryWeapon"
+  ],
+  "EXAttributeModificationType": [
+    "EXAttributeModificationType::Add",
+    "EXAttributeModificationType::BaseValueMultiplier",
+    "EXAttributeModificationType::Multiply",
+    "EXAttributeModificationType::Set",
+    "EXAttributeModificationType::Subtract"
+  ],
+  "EXBotDifficultyLevel": [
+    "EXBotDifficultyLevel::Easy",
+    "EXBotDifficultyLevel::Hard",
+    "EXBotDifficultyLevel::Medium",
+    "EXBotDifficultyLevel::VeryEasy"
+  ],
+  "EXCharacterGridID": [
+    "EXCharacterGridID::PlayersAndBots"
+  ],
+  "EXDurationSource": [
+    "EXDurationSource::ElectrificationDuration",
+    "EXDurationSource::FreezeDuration"
+  ],
+  "EXEQSGenActorGridID": [
+    "EXEQSGenActorGridID::LootVolumes"
+  ],
+  "EXElementalFXParamType": [
+    "EXElementalFXParamType::Scalar"
+  ],
+  "EXFireStatus": [
+    "EXFireStatus::XFS_CloakInCooldown",
+    "EXFireStatus::XFS_InCooldown",
+    "EXFireStatus::XFS_InvalidMode",
+    "EXFireStatus::XFS_InvalidTarget",
+    "EXFireStatus::XFS_Silenced"
+  ],
+  "EXGameTime": [
+    "EXGameTime::Early",
+    "EXGameTime::End",
+    "EXGameTime::Late",
+    "EXGameTime::Midgame",
+    "EXGameTime::Start"
+  ],
+  "EXGameplayEffectAggregationPolicy": [
+    "EXGameplayEffectAggregationPolicy::NoChange",
+    "EXGameplayEffectAggregationPolicy::RefreshDuration"
+  ],
+  "EXGameplayEffectApplicationType": [
+    "EXGameplayEffectApplicationType::Permanent",
+    "EXGameplayEffectApplicationType::Temporary"
+  ],
+  "EXGameplayEffectStackLimitOverflowBehavior": [
+    "EXGameplayEffectStackLimitOverflowBehavior::ReplaceFirst",
+    "EXGameplayEffectStackLimitOverflowBehavior::ReplaceLowestRemainingDuration"
+  ],
+  "EXGameplayEffectStackingBehavior": [
+    "EXGameplayEffectStackingBehavior::Cancel",
+    "EXGameplayEffectStackingBehavior::Mask"
+  ],
+  "EXItemUseFailureReason": [
+    "EXItemUseFailureReason::IFR_ArmorMaxed",
+    "EXItemUseFailureReason::IFR_EmptySlot",
+    "EXItemUseFailureReason::IFR_HealthArmorMaxed",
+    "EXItemUseFailureReason::IFR_HealthMaxed",
+    "EXItemUseFailureReason::IFR_NoArmor"
+  ],
+  "EXNetworkedInputType": [
+    "EXNetworkedInputType::Jump",
+    "EXNetworkedInputType::LeftSecondaryAttack",
+    "EXNetworkedInputType::RightPrimaryAttack",
+    "EXNetworkedInputType::RightSecondaryAttack"
+  ],
+  "EXRangedAttackPayload": [
+    "EXRangedAttackPayload::FlipVFXHorizontally"
+  ],
+  "EXRarity": [
+    "EXRarity::Common",
+    "EXRarity::Epic",
+    "EXRarity::Legendary",
+    "EXRarity::Quest",
+    "EXRarity::Rare",
+    "EXRarity::Uncommon",
+    "EXRarity::Upgradeable"
+  ],
+  "EXScaledDamageEffectApplicationTrigger": [
+    "EXScaledDamageEffectApplicationTrigger::AnyContact",
+    "EXScaledDamageEffectApplicationTrigger::AnyHit"
+  ],
+  "EXTerrainMaskType": [
+    "EXTerrainMaskType::Disappear",
+    "EXTerrainMaskType::Push"
+  ],
+  "EXUsableActorInstructionEmphasis": [
+    "EXUsableActorInstructionEmphasis::Emphasis_High",
+    "EXUsableActorInstructionEmphasis::Emphasis_Low",
+    "EXUsableActorInstructionEmphasis::Emphasis_NonInteractive",
+    "EXUsableActorInstructionEmphasis::Emphasis_Normal"
+  ],
+  "EXValueRelation": [
+    "EXValueRelation::GreaterThan",
+    "EXValueRelation::GreaterThanOrEqualTo",
+    "EXValueRelation::LessThan",
+    "EXValueRelation::LessThanOrEqualTo"
+  ],
+  "EXWeaponParticleOriginType": [
+    "EXWeaponParticleOriginType::WorldSpace"
+  ]
+}

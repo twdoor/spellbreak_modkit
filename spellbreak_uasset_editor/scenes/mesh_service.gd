@@ -123,8 +123,9 @@ func _do_export_gltf(uasset_path: String, output_dir: String) -> Array:
 	DirAccess.make_dir_recursive_absolute(output_dir)
 
 	# umodel command: export as glTF to the output directory
-	# -game=ue4.22 required for Spellbreak's unversioned UE4 4.22 packages
-	var cmd_str := "'%s' -export -gltf -game=ue4.22 -out='%s' '%s'" % [umodel, output_dir, uasset_path]
+	# -game flag must match the UE version of the game being modded
+	var game_flag := _cfg.get_game_profile().umodel_game_flag
+	var cmd_str := "'%s' -export -gltf -game=%s -out='%s' '%s'" % [umodel, game_flag, output_dir, uasset_path]
 	var output: Array = []
 	var code := OS.execute("sh", ["-c", cmd_str], output, true)
 

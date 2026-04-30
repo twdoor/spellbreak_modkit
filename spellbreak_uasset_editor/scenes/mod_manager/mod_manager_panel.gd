@@ -75,18 +75,18 @@ func _build_ui() -> void:
 
 	# ── Toolbar ──
 	var toolbar_margin := MarginContainer.new()
-	toolbar_margin.add_theme_constant_override("margin_left",   8)
-	toolbar_margin.add_theme_constant_override("margin_right",  8)
-	toolbar_margin.add_theme_constant_override("margin_top",    6)
-	toolbar_margin.add_theme_constant_override("margin_bottom", 4)
+	toolbar_margin.add_theme_constant_override("margin_left",   AppTheme.MARGIN_TOOLBAR_H)
+	toolbar_margin.add_theme_constant_override("margin_right",  AppTheme.MARGIN_TOOLBAR_H)
+	toolbar_margin.add_theme_constant_override("margin_top",    AppTheme.MARGIN_TOOLBAR_TOP)
+	toolbar_margin.add_theme_constant_override("margin_bottom", AppTheme.MARGIN_TOOLBAR_BOTTOM)
 	var toolbar := HBoxContainer.new()
-	toolbar.add_theme_constant_override("separation", 6)
+	toolbar.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
 
 	_pack_btn = Button.new()
 	_pack_btn.text = "Pack"
 	_pack_btn.icon = _icon("AssetLib")
-	_pack_btn.tooltip_text = "Pack enabled mods into zzz_mods_P.pak"
-	_pack_btn.add_theme_color_override("font_color", Color(0.952, 0.646, 0.564, 1.0))
+	_pack_btn.tooltip_text = "Pack enabled mods into a .pak file"
+	_pack_btn.add_theme_color_override("font_color", AppTheme.BTN_PACK)
 	_pack_btn.pressed.connect(_on_pack_pressed)
 	toolbar.add_child(_pack_btn)
 
@@ -94,15 +94,15 @@ func _build_ui() -> void:
 	_watch_btn.text = "Watch"
 	_watch_btn.icon = _icon("GuiVisibilityVisible")
 	_watch_btn.tooltip_text = "Auto-pack on file save (toggle)"
-	_watch_btn.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+	AppTheme.style_muted_btn(_watch_btn)
 	_watch_btn.pressed.connect(_on_watch_pressed)
 	toolbar.add_child(_watch_btn)
 
 	var launch_btn := Button.new()
 	launch_btn.text = "Launch"
 	launch_btn.icon = _icon("Play")
-	launch_btn.tooltip_text = "Launch Spellbreak"
-	launch_btn.add_theme_color_override("font_color", Color(0.9, 0.7, 0.3))
+	launch_btn.tooltip_text = "Launch game"
+	launch_btn.add_theme_color_override("font_color", AppTheme.BTN_LAUNCH)
 	launch_btn.pressed.connect(_on_launch_pressed)
 	toolbar.add_child(launch_btn)
 
@@ -115,7 +115,7 @@ func _build_ui() -> void:
 	new_mod_btn.text = "New Mod"
 	new_mod_btn.icon = _icon("FolderCreate")
 	new_mod_btn.tooltip_text = "Create a new mod folder"
-	new_mod_btn.add_theme_color_override("font_color", Color(0.6, 0.85, 0.6))
+	new_mod_btn.add_theme_color_override("font_color", AppTheme.BTN_NEW_MOD)
 	new_mod_btn.pressed.connect(_on_new_mod_pressed)
 	toolbar.add_child(new_mod_btn)
 
@@ -123,7 +123,7 @@ func _build_ui() -> void:
 	settings_btn.text = "Settings"
 	settings_btn.icon = _icon("Tools")
 	settings_btn.tooltip_text = "Configure paths"
-	settings_btn.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+	AppTheme.style_muted_btn(settings_btn)
 	settings_btn.pressed.connect(func() -> void: open_settings_requested.emit())
 	toolbar.add_child(settings_btn)
 
@@ -153,13 +153,12 @@ func _build_ui() -> void:
 	_log_scroll.visible = false
 
 	var log_margin := MarginContainer.new()
-	log_margin.add_theme_constant_override("margin_left",   10)
-	log_margin.add_theme_constant_override("margin_right",  10)
-	log_margin.add_theme_constant_override("margin_top",     2)
-	log_margin.add_theme_constant_override("margin_bottom",  6)
+	log_margin.add_theme_constant_override("margin_left",   AppTheme.MARGIN_LOG_H)
+	log_margin.add_theme_constant_override("margin_right",  AppTheme.MARGIN_LOG_H)
+	log_margin.add_theme_constant_override("margin_top",    AppTheme.MARGIN_LOG_TOP)
+	log_margin.add_theme_constant_override("margin_bottom", AppTheme.MARGIN_LOG_BOTTOM)
 	_log_label = Label.new()
-	#_log_label.add_theme_font_size_override("font_size", 11)
-	_log_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+	AppTheme.style_muted(_log_label)
 	_log_label.autowrap_mode = TextServer.AUTOWRAP_WORD
 	log_margin.add_child(_log_label)
 	_log_scroll.add_child(log_margin)
@@ -176,7 +175,8 @@ func _icon(icon_name: String) -> Texture2D:
 # ── Mod list ───────────────────────────────────────────────────────────────────
 
 func _refresh_mods() -> void:
-	_mods = ModDiscovery.scan(_cfg.mods_dir)
+	var content_root := _cfg.get_game_profile().content_root
+	_mods = ModDiscovery.scan(_cfg.mods_dir, content_root)
 	var names := _mods.map(func(m): return m["name"] as String)
 	_state.prune(names)
 	_rebuild_mod_list()
@@ -194,7 +194,7 @@ func _rebuild_mod_list() -> void:
 		var item := _mod_tree.create_item(root)
 		item.set_text(0, "No mods found" if not _cfg.mods_dir.is_empty()
 				else "Configure mods_dir in Settings")
-		item.set_custom_color(0, Color(0.45, 0.45, 0.45))
+		item.set_custom_color(0, AppTheme.MOD_PLACEHOLDER)
 		item.set_selectable(0, false)
 		return
 
@@ -227,7 +227,7 @@ func _build_mod_item(root: TreeItem, mod: Dictionary) -> void:
 	var item := _mod_tree.create_item(root)
 	item.set_text(0, mod_name)
 	#item.set_custom_font_size(0, 14)
-	item.set_custom_color(0, Color(0.45, 0.9, 0.45) if enabled else Color(0.82, 0.82, 0.82))
+	item.set_custom_color(0, AppTheme.MOD_ENABLED if enabled else AppTheme.MOD_DISABLED)
 	item.set_icon(0, _icon("GuiVisibilityVisible" if enabled else "GuiVisibilityHidden"))
 	item.set_tooltip_text(0, "%d files · %s\n%s  (right-click to toggle)" % [
 		mod["file_count"],
@@ -248,7 +248,8 @@ func _build_mod_item(root: TreeItem, mod: Dictionary) -> void:
 
 func _build_mod_files(mod_item: TreeItem, mod: Dictionary) -> void:
 	var mod_name: String = mod["name"]
-	var files := ModDiscovery.list_mod_files(mod["path"])
+	var content_root := _cfg.get_game_profile().content_root
+	var files := ModDiscovery.list_mod_files(mod["path"], content_root)
 
 	# Group files by relative directory, preserving discovery order.
 	var dir_order: Array    = []
@@ -266,7 +267,7 @@ func _build_mod_files(mod_item: TreeItem, mod: Dictionary) -> void:
 		var dir_item := _mod_tree.create_item(mod_item)
 		dir_item.set_text(0, dir + "/")
 		#dir_item.set_custom_font_size(0, 12)
-		dir_item.set_custom_color(0, Color(0.5, 0.5, 0.58))
+		dir_item.set_custom_color(0, AppTheme.MOD_DIR)
 		dir_item.set_selectable(0, false)
 		dir_item.set_metadata(0, {"type": "folder", "key": dir_key})
 		dir_item.collapsed = _collapsed_dirs.get(dir_key, false)
@@ -280,7 +281,7 @@ func _build_mod_files(mod_item: TreeItem, mod: Dictionary) -> void:
 			#file_item.set_custom_font_size(0, 13)
 			file_item.set_tooltip_text(0, rel_path)
 			file_item.set_custom_color(0,
-				Color(0.5, 0.75, 1.0) if is_uasset else Color(0.62, 0.62, 0.62))
+				AppTheme.MOD_FILE_UASSET if is_uasset else AppTheme.MOD_FILE_OTHER)
 			file_item.set_selectable(0, true)
 			file_item.set_metadata(0, {
 				"type": "file", "mod": mod,
@@ -475,6 +476,7 @@ func delete_selection() -> void:
 		dialog.dialog_text = "Permanently delete %d mod(s)?\n\n%s" % [
 			mods.size(), "\n".join(names)]
 		dialog.ok_button_text = "Delete"
+		AppTheme.apply_theme(dialog)
 		add_child(dialog)
 		dialog.confirmed.connect(func() -> void:
 			for m: Dictionary in mods:
@@ -638,7 +640,7 @@ func _on_new_mod_pressed() -> void:
 	dialog.min_size = Vector2i(300, 0)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 6)
+	vbox.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
 	var lbl := Label.new()
 	lbl.text = "Mod folder name:"
 	var edit := LineEdit.new()
@@ -646,6 +648,7 @@ func _on_new_mod_pressed() -> void:
 	vbox.add_child(lbl)
 	vbox.add_child(edit)
 	dialog.add_child(vbox)
+	AppTheme.apply_theme(dialog)
 	add_child(dialog)
 
 	dialog.confirmed.connect(func() -> void:
@@ -658,7 +661,8 @@ func _on_new_mod_pressed() -> void:
 			_set_status("Mod '%s' already exists" % mod_name, true)
 			dialog.queue_free()
 			return
-		var err := DirAccess.make_dir_recursive_absolute(mod_path.path_join("g3/Content"))
+		var cr := _cfg.get_game_profile().content_root
+		var err := DirAccess.make_dir_recursive_absolute(mod_path.path_join(cr + "/Content"))
 		if err != OK:
 			_set_status("Failed to create mod folder", true)
 			dialog.queue_free()
@@ -760,12 +764,12 @@ func _on_watch_status_changed(active: bool) -> void:
 	if active:
 		_watch_btn.text = "Watching"
 		_watch_btn.icon = _icon("GuiVisibilityVisible")
-		_watch_btn.add_theme_color_override("font_color", Color(0.3, 0.9, 0.3))
+		_watch_btn.add_theme_color_override("font_color", AppTheme.STATUS_ACTIVE)
 		_set_status("Watching for changes...")
 	else:
 		_watch_btn.text = "Watch"
 		_watch_btn.icon = _icon("GuiVisibilityHidden")
-		_watch_btn.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+		_watch_btn.add_theme_color_override("font_color", AppTheme.BTN_MUTED)
 		_set_status("Watcher stopped")
 
 

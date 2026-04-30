@@ -22,8 +22,7 @@ func _build_impl() -> void:
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.flat = true
 		btn.text = "▸ [%d]  %s  · %s" % [i + 1, expo.object_name, expo.export_type]
-		btn.add_theme_color_override("font_color", Color(0.5, 0.7, 1.0))
-		btn.add_theme_color_override("font_hover_color", Color(0.7, 0.85, 1.0))
+		AppTheme.style_nav_btn(btn)
 		btn.pressed.connect(func():
 			sel.handle_click(expo, func(): return asset.exports)
 			if not Input.is_key_pressed(KEY_SHIFT) and not Input.is_key_pressed(KEY_CTRL):
@@ -37,8 +36,7 @@ func _build_impl() -> void:
 			up_btn.text = "↑"
 			up_btn.flat = true
 			up_btn.tooltip_text = "Move up (swap with previous export, updates all index references)"
-			up_btn.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
-			up_btn.add_theme_color_override("font_hover_color", Color(0.9, 0.9, 0.9))
+			AppTheme.style_muted_btn(up_btn)
 			up_btn.pressed.connect(func(): _request_swap(i, i - 1))
 			row.add_child(up_btn)
 
@@ -47,8 +45,7 @@ func _build_impl() -> void:
 			dn_btn.text = "↓"
 			dn_btn.flat = true
 			dn_btn.tooltip_text = "Move down (swap with next export, updates all index references)"
-			dn_btn.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
-			dn_btn.add_theme_color_override("font_hover_color", Color(0.9, 0.9, 0.9))
+			AppTheme.style_muted_btn(dn_btn)
 			dn_btn.pressed.connect(func(): _request_swap(i, i + 1))
 			row.add_child(dn_btn)
 

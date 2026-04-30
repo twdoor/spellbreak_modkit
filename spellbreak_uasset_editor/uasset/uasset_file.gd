@@ -26,6 +26,10 @@ const MESH_CLASSES := ["StaticMesh", "SkeletalMesh"]
 ## The raw top-level JSON dict - kept for round-trip fidelity
 var raw: Dictionary
 
+## Active game profile — provides enum/tag data for the property editor.
+## Set by main.gd after loading, before creating the editor tab.
+var game_profile: GameProfile = null
+
 ## File info
 var file_path: String
 ## Set when loaded from a .uasset binary; save_file() writes back to binary instead of JSON

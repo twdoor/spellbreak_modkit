@@ -60,25 +60,23 @@ func build_tree_item(_parent: TreeItem) -> void:
 func _add_header(text: String) -> void:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", 16)
+	AppTheme.style_header(label)
 	_container.add_child(label)
 
 
 func _add_type_badge(text: String) -> void:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", 11)
-	label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+	AppTheme.style_badge(label)
 	_container.add_child(label)
 
 
 func _add_section_label(text: String) -> void:
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_top", 6)
+	margin.add_theme_constant_override("margin_top", AppTheme.MARGIN_SELECTABLE_V * 2)
 	var label := Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", 12)
-	label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.4))
+	AppTheme.style_section(label)
 	margin.add_child(label)
 	_container.add_child(margin)
 
@@ -90,18 +88,18 @@ func _add_separator() -> void:
 func _add_info(text: String) -> void:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+	AppTheme.style_dim(label)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD
 	_container.add_child(label)
 
 
 func _add_info_row(key: String, value: String) -> void:
 	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 8)
+	hbox.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
 	var klabel := Label.new()
 	klabel.text = key
 	klabel.custom_minimum_size.x = 120
-	klabel.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+	AppTheme.style_dim(klabel)
 	hbox.add_child(klabel)
 	var vlabel := Label.new()
 	vlabel.text = value
@@ -116,8 +114,7 @@ func _add_back_button() -> void:
 	btn.text = "◂ Back"
 	btn.flat = true
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	btn.add_theme_color_override("font_color", Color(0.5, 0.7, 1.0))
-	btn.add_theme_color_override("font_hover_color", Color(0.7, 0.85, 1.0))
+	AppTheme.style_nav_btn(btn)
 	btn.pressed.connect(_ctx["navigate_back"])
 	_container.add_child(btn)
 
@@ -137,8 +134,7 @@ func _add_nav_button(prop: UAssetProperty) -> void:
 			btn.text = "▸ %s  [%d tags]" % [prop.prop_name, count]
 		_:
 			btn.text = "▸ %s" % prop.prop_name
-	btn.add_theme_color_override("font_color", Color(0.5, 0.7, 1.0))
-	btn.add_theme_color_override("font_hover_color", Color(0.7, 0.85, 1.0))
+	AppTheme.style_nav_btn(btn)
 	btn.pressed.connect(func(): _ctx["navigate_to"].call(prop, prop.prop_name))
 	_container.add_child(btn)
 
@@ -152,20 +148,19 @@ func _add_nav_button_indexed(prop: UAssetProperty, index: int) -> void:
 	if prop.prop_type == "Struct" and not prop.struct_type.is_empty():
 		label += " %s" % prop.struct_type
 	btn.text = "▸ %s  [%d children]" % [label, prop.children.size()]
-	btn.add_theme_color_override("font_color", Color(0.5, 0.7, 1.0))
-	btn.add_theme_color_override("font_hover_color", Color(0.7, 0.85, 1.0))
+	AppTheme.style_nav_btn(btn)
 	btn.pressed.connect(func(): _ctx["navigate_to"].call(prop, "[%d]" % index))
 	_container.add_child(btn)
 
 
 func _add_field_editor(label_text: String, current_value: String, on_change: Callable) -> void:
 	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 8)
+	hbox.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
 	var label := Label.new()
 	label.text = label_text
 	label.custom_minimum_size.x = PropertyRow.LABEL_MIN_WIDTH
 	label.size_flags_horizontal = Control.SIZE_FILL
-	label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+	AppTheme.style_dim(label)
 	hbox.add_child(label)
 	var line := LineEdit.new()
 	line.text = current_value
@@ -177,12 +172,12 @@ func _add_field_editor(label_text: String, current_value: String, on_change: Cal
 
 func _add_field_int(label_text: String, current_value: int, on_change: Callable) -> void:
 	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 8)
+	hbox.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
 	var label := Label.new()
 	label.text = label_text
 	label.custom_minimum_size.x = PropertyRow.LABEL_MIN_WIDTH
 	label.size_flags_horizontal = Control.SIZE_FILL
-	label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+	AppTheme.style_dim(label)
 	hbox.add_child(label)
 	var spin := SpinBox.new()
 	spin.min_value = -2147483648
@@ -281,13 +276,12 @@ func _build_array_detail(prop: UAssetProperty) -> void:
 		if _is_simple_struct(child):
 			var vbox := VBoxContainer.new()
 			vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			vbox.add_theme_constant_override("separation", 3)
+			vbox.add_theme_constant_override("separation", AppTheme.SPACING_TAGS)
 			var lbl := Label.new()
 			lbl.text = "[%d]" % i
 			if not child.struct_type.is_empty():
 				lbl.text += "  %s" % child.struct_type
-			lbl.add_theme_font_size_override("font_size", 12)
-			lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.4))
+			AppTheme.style_section(lbl)
 			vbox.add_child(lbl)
 			var saved := _container
 			_container = vbox
@@ -298,13 +292,12 @@ func _build_array_detail(prop: UAssetProperty) -> void:
 		elif child.prop_type in ["Struct", "Array", "GameplayTagContainer"] and not child.children.is_empty():
 			var vbox := VBoxContainer.new()
 			vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			vbox.add_theme_constant_override("separation", 3)
+			vbox.add_theme_constant_override("separation", AppTheme.SPACING_TAGS)
 			var lbl := Label.new()
 			lbl.text = "[%d]" % i
 			if child.prop_type == "Struct" and not child.struct_type.is_empty():
 				lbl.text += "  %s" % child.struct_type
-			lbl.add_theme_font_size_override("font_size", 12)
-			lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.4))
+			AppTheme.style_section(lbl)
 			vbox.add_child(lbl)
 			var saved := _container
 			_container = vbox
@@ -320,10 +313,10 @@ func _build_array_detail(prop: UAssetProperty) -> void:
 		# ── Wrap in margin, then make selectable ─────────────────────────────
 		var margin := MarginContainer.new()
 		margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		margin.add_theme_constant_override("margin_left",   6)
-		margin.add_theme_constant_override("margin_right",  4)
-		margin.add_theme_constant_override("margin_top",    3)
-		margin.add_theme_constant_override("margin_bottom", 3)
+		margin.add_theme_constant_override("margin_left",   AppTheme.MARGIN_SELECTABLE_H_L)
+		margin.add_theme_constant_override("margin_right",  AppTheme.MARGIN_SELECTABLE_H_R)
+		margin.add_theme_constant_override("margin_top",    AppTheme.MARGIN_SELECTABLE_V)
+		margin.add_theme_constant_override("margin_bottom", AppTheme.MARGIN_SELECTABLE_V)
 		margin.add_child(content)
 
 		_container.add_child(sel.make_selectable_row(
@@ -377,8 +370,7 @@ static func _make_delete_btn(on_pressed: Callable) -> Button:
 	var btn := Button.new()
 	btn.text = "✕"
 	btn.flat = true
-	btn.add_theme_color_override("font_color", Color(0.9, 0.4, 0.4))
-	btn.add_theme_color_override("font_hover_color", Color(1.0, 0.5, 0.5))
+	AppTheme.style_delete_btn(btn)
 	btn.pressed.connect(on_pressed)
 	return btn
 
@@ -390,10 +382,162 @@ static func _make_add_btn(label: String, on_pressed: Callable) -> Button:
 	btn.flat = true
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.add_theme_color_override("font_color", Color(0.4, 0.8, 0.4))
-	btn.add_theme_color_override("font_hover_color", Color(0.6, 1.0, 0.6))
+	AppTheme.style_add_btn(btn)
 	btn.pressed.connect(on_pressed)
 	return btn
+
+
+## Create a standard HBoxContainer row with SPACING_FIELD separation and expand-fill.
+static func _make_row() -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
+	return row
+
+
+## Create a LineEdit that commits on Enter and on focus loss.
+## commit_fn receives (new_text: String). Marks dirty automatically when auto_dirty is true.
+## Returns the LineEdit so the caller can add it to a row.
+func _make_commit_line(
+	current_value: String,
+	commit_fn: Callable,
+	placeholder: String = "",
+	min_width: float = 0.0,
+	expand: bool = true,
+	auto_dirty: bool = true
+) -> LineEdit:
+	var line := LineEdit.new()
+	line.text = current_value
+	line.placeholder_text = placeholder
+	if min_width > 0.0:
+		line.custom_minimum_size.x = min_width
+	if expand:
+		line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.text_submitted.connect(func(t: String) -> void:
+		commit_fn.call(t)
+		if auto_dirty:
+			_ctx["set_dirty"].call()
+	)
+	line.focus_exited.connect(func() -> void:
+		if is_instance_valid(line):
+			commit_fn.call(line.text)
+			if auto_dirty:
+				_ctx["set_dirty"].call()
+	)
+	return line
+
+
+## Add a row of column header labels.
+## Each entry: [text, min_width] — width of 0 means SIZE_EXPAND_FILL.
+## Optional 3rd element for font size override (e.g. AppTheme.FONT_TINY).
+func _add_column_headers(columns: Array) -> void:
+	var hdr := _make_row()
+	for col in columns:
+		var lbl := Label.new()
+		lbl.text = col[0]
+		lbl.add_theme_color_override("font_color", AppTheme.TEXT_VERY_MUTED)
+		if col.size() > 2:
+			lbl.add_theme_font_size_override("font_size", col[2])
+		if col[1] > 0:
+			lbl.custom_minimum_size.x = col[1]
+		else:
+			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hdr.add_child(lbl)
+	_container.add_child(hdr)
+
+
+# ── Shared export reference / dependency helpers ─────────────────────────────
+
+func _add_ref_row(label_text: String, current_index: int, on_change: Callable) -> void:
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
+
+	var label := Label.new()
+	label.text = label_text
+	label.custom_minimum_size.x = PropertyRow.LABEL_MIN_WIDTH
+	label.size_flags_horizontal = Control.SIZE_FILL
+	AppTheme.style_dim(label)
+	hbox.add_child(label)
+
+	var spin := SpinBox.new()
+	spin.min_value = -2147483648
+	spin.max_value = 2147483647
+	spin.allow_greater = true
+	spin.allow_lesser = true
+	spin.rounded = true
+	spin.step = 1
+	spin.custom_minimum_size.x = 80
+	spin.value = current_index
+	hbox.add_child(spin)
+
+	var ref_label := Label.new()
+	ref_label.text = PropertyRow._resolve_ref_name(current_index, _ctx["asset"])
+	ref_label.tooltip_text = PropertyRow._resolve_ref_type(current_index, _ctx["asset"])
+	AppTheme.style_ref(ref_label, AppTheme.FONT_STATUS)
+	ref_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ref_label.clip_text = true
+	ref_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	hbox.add_child(ref_label)
+
+	spin.value_changed.connect(func(v):
+		_ctx["set_dirty"].call()
+		on_change.call(int(v))
+		ref_label.text = PropertyRow._resolve_ref_name(int(v), _ctx["asset"])
+		ref_label.tooltip_text = PropertyRow._resolve_ref_type(int(v), _ctx["asset"])
+	)
+	_container.add_child(hbox)
+
+
+func _add_dep_array_row(field: String, expo: UAssetExport) -> void:
+	var raw_val = expo.raw.get(field)
+	var indices: Array = raw_val if raw_val is Array else []
+
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
+
+	var label := Label.new()
+	label.text = field.replace("Dependencies", "Deps")
+	label.custom_minimum_size.x = PropertyRow.LABEL_MIN_WIDTH
+	label.size_flags_horizontal = Control.SIZE_FILL
+	AppTheme.style_dim(label)
+	label.tooltip_text = field
+	hbox.add_child(label)
+
+	var tip_parts: PackedStringArray = []
+	for idx in indices:
+		tip_parts.append("%d → %s" % [idx, _resolve_dep_index(idx)])
+
+	var line := LineEdit.new()
+	line.text = ", ".join(PackedStringArray(indices.map(func(i): return str(i))))
+	line.placeholder_text = "(empty)"
+	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.tooltip_text = "\n".join(tip_parts) if tip_parts.size() > 0 else "(none)"
+	line.text_submitted.connect(func(t: String):
+		var new_indices: Array = []
+		for part in t.split(","):
+			var s := part.strip_edges()
+			if s.is_empty(): continue
+			if s.is_valid_int(): new_indices.append(s.to_int())
+		expo.raw[field] = new_indices
+		_ctx["set_dirty"].call()
+		var new_tip: PackedStringArray = []
+		for idx in new_indices:
+			new_tip.append("%d → %s" % [idx, _resolve_dep_index(idx)])
+		line.tooltip_text = "\n".join(new_tip) if new_tip.size() > 0 else "(none)"
+	)
+	hbox.add_child(line)
+	_container.add_child(hbox)
+
+
+func _resolve_dep_index(idx: int) -> String:
+	var asset: UAssetFile = _ctx["asset"]
+	if idx > 0 and idx <= asset.exports.size():
+		return asset.exports[idx - 1].object_name
+	if idx < 0:
+		var imp := asset.get_import(idx)
+		if imp:
+			return imp.object_name
+	return "?"
 
 
 func _on_row_value_changed(prop: UAssetProperty, old_value: Variant, _new_value: Variant) -> void:

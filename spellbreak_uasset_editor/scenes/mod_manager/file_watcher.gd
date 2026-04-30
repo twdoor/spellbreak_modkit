@@ -97,7 +97,7 @@ func _watch_loop() -> void:
 		var enabled_names := _state.get_enabled_names()
 		if enabled_names.is_empty():
 			continue
-		var all_mods := ModDiscovery.scan(_cfg.mods_dir)
+		var all_mods := ModDiscovery.scan(_cfg.mods_dir, _cfg.get_game_profile().content_root)
 		var enabled_mods := all_mods.filter(func(m): return m["name"] in enabled_names)
 		if enabled_mods.is_empty():
 			continue
@@ -142,11 +142,12 @@ func _snapshot() -> int:
 	dir.list_dir_end()
 	names.sort()
 
+	var content_root := _cfg.get_game_profile().content_root
 	for mod_name in names:
-		var g3 := _cfg.mods_dir.path_join(mod_name).path_join("g3")
-		if not DirAccess.dir_exists_absolute(g3):
+		var mod_content := _cfg.mods_dir.path_join(mod_name).path_join(content_root)
+		if not DirAccess.dir_exists_absolute(mod_content):
 			continue
-		h = _hash_dir(g3, h)  # accumulate returned hash — ints are pass-by-value in GDScript
+		h = _hash_dir(mod_content, h)  # accumulate returned hash — ints are pass-by-value in GDScript
 
 	return h
 

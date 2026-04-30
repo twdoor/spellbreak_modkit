@@ -73,18 +73,22 @@ func _do_pack(enabled_mods: Array) -> Array:
 	var merged  := tmp_dir.path_join("merged")
 	DirAccess.make_dir_recursive_absolute(merged)
 
+	var profile := _cfg.get_game_profile()
+	var content_root := profile.content_root
+
 	_emit_log("Merging %d mod(s):" % enabled_mods.size())
 	for mod in enabled_mods:
 		_emit_log("  → %s" % mod["name"])
-		var g3 := (mod["path"] as String).path_join("g3")
-		if not DirAccess.dir_exists_absolute(g3):
+		var mod_content := (mod["path"] as String).path_join(content_root)
+		if not DirAccess.dir_exists_absolute(mod_content):
 			continue
-		_copy_dir_recursive(g3, merged.path_join("g3"), mod["path"])
+		_copy_dir_recursive(mod_content, merged.path_join(content_root), mod["path"])
 
 	_emit_log("")
 	_emit_log("Packing...")
 
-	var pak_path := paks_dir.path_join("zzz_mods_P.pak")
+	var pak_name := profile.pak_output_name
+	var pak_path := paks_dir.path_join(pak_name + ".pak")
 	# Remove old pak
 	if FileAccess.file_exists(pak_path):
 		DirAccess.remove_absolute(pak_path)
@@ -122,22 +126,26 @@ func _do_pack(enabled_mods: Array) -> Array:
 	if fa:
 		pak_size = fa.get_length()
 		fa.close()
-	return [true, "Packed zzz_mods_P.pak + .sig (%s)" % ModDiscovery.fmt_size(pak_size)]
+	return [true, "Packed %s.pak + .sig (%s)" % [pak_name, ModDiscovery.fmt_size(pak_size)]]
 
 
 func _run_u4pak(u4pak_path: String, pak_path: String, merged_dir: String) -> int:
 	# Build platform-appropriate command that runs u4pak from merged_dir as CWD
 	var python := _find_python()
+	var profile := _cfg.get_game_profile()
+	var archive_ver := str(profile.pak_archive_version)
+	var mount_point := profile.pak_mount_point
+	var content_root := profile.content_root + "/"
 	var cmd: String
 	var args: Array
 	if OS.get_name() == "Windows":
 		cmd = "cmd"
-		args = ["/c", "cd /d \"%s\" && \"%s\" \"%s\" pack -z --archive-version=3 --mount-point=../../../  \"%s\" g3/" \
-			% [merged_dir, python, u4pak_path, pak_path]]
+		args = ["/c", "cd /d \"%s\" && \"%s\" \"%s\" pack -z --archive-version=%s --mount-point=%s  \"%s\" %s" \
+			% [merged_dir, python, u4pak_path, archive_ver, mount_point, pak_path, content_root]]
 	else:
 		cmd = "sh"
-		args = ["-c", "cd '%s' && '%s' '%s' pack -z --archive-version=3 --mount-point=../../../  '%s' g3/" \
-			% [merged_dir, python, u4pak_path, pak_path]]
+		args = ["-c", "cd '%s' && '%s' '%s' pack -z --archive-version=%s --mount-point=%s  '%s' %s" \
+			% [merged_dir, python, u4pak_path, archive_ver, mount_point, pak_path, content_root]]
 	var output: Array = []
 	var code := OS.execute(cmd, args, output, true, false)
 	if not output.is_empty():
@@ -157,13 +165,14 @@ func _find_python() -> String:
 
 
 func _find_sig(paks_dir: String) -> String:
+	var pak_name := _cfg.get_game_profile().pak_output_name
 	var dir := DirAccess.open(paks_dir)
 	if not dir:
 		return ""
 	dir.list_dir_begin()
 	var entry := dir.get_next()
 	while not entry.is_empty():
-		if entry.ends_with(".sig") and not entry.begins_with("zzz_mods"):
+		if entry.ends_with(".sig") and not entry.begins_with(pak_name):
 			dir.list_dir_end()
 			return paks_dir.path_join(entry)
 		entry = dir.get_next()
@@ -202,15 +211,16 @@ func _deferred_log(line: String) -> void:
 	pack_log.emit(line)
 
 
-## Remove zzz_mods_P.pak and .sig from the paks directory.
+## Remove the mod pak and .sig from the paks directory.
 func remove_pak() -> Array:
 	var paks_dir := _cfg.get_paks_dir()
+	var pak_name := _cfg.get_game_profile().pak_output_name
 	var removed: Array = []
 	for ext in [".pak", ".sig"]:
-		var f := paks_dir.path_join("zzz_mods_P" + ext)
+		var f := paks_dir.path_join(pak_name + ext)
 		if FileAccess.file_exists(f):
 			DirAccess.remove_absolute(f)
 			removed.append(ext)
 	if not removed.is_empty():
-		return [true, "Removed zzz_mods_P (%s)" % ", ".join(PackedStringArray(removed))]
+		return [true, "Removed %s (%s)" % [pak_name, ", ".join(PackedStringArray(removed))]]
 	return [false, "No mod pak to remove"]

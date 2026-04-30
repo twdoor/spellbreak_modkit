@@ -52,12 +52,15 @@ static func setup(uasset: UAssetFile, texture_service: TextureService = null, so
 
 
 ## Returns the disambiguated title: "ModFolder/FileName"
-## ModFolder is the root directory that contains the "g3" folder.
-## Falls back to the immediate parent folder if "g3" is not found in the path.
+## ModFolder is the root directory that contains the content root folder (e.g. "g3").
+## Falls back to the immediate parent folder if the content root is not found in the path.
 func get_disambig_name() -> String:
 	var parts := tab_asset.file_path.split("/")
-	var g3_idx := parts.find("g3")
-	var mod_folder := parts[g3_idx - 1] if g3_idx > 0 else tab_asset.file_path.get_base_dir().get_file()
+	var content_root := "g3"
+	if tab_asset.game_profile:
+		content_root = tab_asset.game_profile.content_root
+	var cr_idx := parts.find(content_root)
+	var mod_folder := parts[cr_idx - 1] if cr_idx > 0 else tab_asset.file_path.get_base_dir().get_file()
 	return "@" + mod_folder + "/" + _base_name
 
 

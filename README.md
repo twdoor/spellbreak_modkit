@@ -1,14 +1,14 @@
 # Spellbreak Modkit
 
-A visual asset editor and mod manager for **Spellbreak Community Edition**, built with Godot 4.
+A visual `.uasset` editor and mod manager for **Unreal Engine 4/5 games**, built with Godot 4. Originally made for Spellbreak Community Edition, now supports any UE4/UE5 game via a [game profile system](#game-profiles).
 
-> Spellbreak runs on Unreal Engine 4.22. All tools target that version.
+> Spellbreak ships as a built-in profile targeting UE 4.22. Other games can be added through the in-app dialog or by dropping a profile folder into `game_profiles/`.
 
 ---
 
 ## What's Included
 
-This repo contains one thing: `spellbreak_uasset_editor/` — a Godot 4 desktop app with a built-in mod manager and a full `.uasset` editor.
+This repo contains one thing: `spellbreak_uasset_editor/` — a Godot 4 desktop app with a built-in mod manager, a full `.uasset` editor, and a game profile system for multi-game support.
 
 Everything is bundled inside the single binary:
 - [UAssetAPI](https://github.com/atenfyr/UAssetAPI) converter (pre-compiled .NET DLLs)
@@ -52,7 +52,8 @@ Open `spellbreak_uasset_editor/` in Godot 4.6+, then **Project > Export > Linux/
 
 Launch the app, click **Settings**, and fill in:
 
-- **Game directory** — the folder containing `g3/` and `Spellbreak.exe`
+- **Game / UE Version** — select a built-in game (Spellbreak), a UE version, or add a custom game profile
+- **Game directory** — the folder containing your game's content root (e.g. `g3/` for Spellbreak)
 - **Mods directory** — where your mod folders live
 - **Launch command** — optional, used by the Launch button
 - **umodel path** — optional, path to the umodel binary for 3D mesh preview
@@ -84,7 +85,7 @@ Select files with `Click`, `Ctrl+Click` (toggle), or `Shift+Click` (range).
 | `Ctrl+E` | Import files from sources |
 | `Ctrl+C` | Copy selected files |
 | `Ctrl+X` | Cut selected files |
-| `Ctrl+V` | Paste into target mod (preserves `g3/Content/...` folder structure) |
+| `Ctrl+V` | Paste into target mod (preserves `<content_root>/Content/...` folder structure) |
 | `Del / Ctrl+D` | Delete selected files or mods |
 
 **Toolbar:**
@@ -93,9 +94,9 @@ Select files with `Click`, `Ctrl+Click` (toggle), or `Shift+Click` (range).
 |--------|--------|
 | **New Mod** | Create a new mod folder |
 | **Settings** | Open the Settings tab |
-| **Pack** | Pack all enabled mods into `zzz_mods_P.pak` |
+| **Pack** | Pack all enabled mods into a patch pak for the active game |
 | **Watch** | Toggle auto-pack on file save |
-| **Launch** | Launch Spellbreak |
+| **Launch** | Launch the game |
 
 ### Asset editor tabs
 
@@ -155,22 +156,46 @@ When opening a StaticMesh or SkeletalMesh `.uasset`, the detail panel shows:
 
 ---
 
+## Game Profiles
+
+The editor supports any UE4/UE5 game through JSON-based game profiles. Each profile tells the editor which UE version to target, what content root to use, how to pack mods, and which enums/tags/constants are available.
+
+### Built-in profiles
+
+- **Spellbreak** — full profile with enums, gameplay tags, and numeric constants
+- **UE version profiles** (`ue_4.27`, `ue_5.3`, etc.) — auto-generated from the selected version, no files needed
+
+### Adding a custom game
+
+Click **Add Game** in Settings to create a profile. You provide:
+- Game name and UE version
+- Project root directory
+- Optionally import enum, tag, or constant definition files (JSON)
+
+Custom profiles are saved under `game_profiles/<game_name>/`.
+
+### Numeric constants
+
+Game profiles can include named constants for use in Int/Float property fields. Type an expression like `sprint * 5` and it evaluates to the result. An autocomplete popup shows matching constants as you type.
+
+---
+
 ## How the Pak System Works
 
 UE4 loads `.pak` files alphabetically. Files with the `_P` suffix are treated as **patch paks** that override matching paths in the base pak.
 
-This modkit creates `zzz_mods_P.pak` inside the game's `Paks/` folder:
+This modkit creates a patch pak (e.g. `zzz_mods_P.pak` for Spellbreak) inside the game's `Paks/` folder. The output name, archive version, and mount point are all driven by the active game profile.
 - `zzz` prefix ensures it loads **last** (after all base paks)
 - `_P` suffix marks it as a patch override
 - A `.sig` file is copied from an existing game pak (UE4 requires a signature file)
 - The base game is **never modified**
 
-Your mod files must mirror the game's internal folder structure:
+Your mod files must mirror the game's internal folder structure. The content root varies by game (e.g. `g3/` for Spellbreak):
 
 ```
 mods/
 └── my_mod/
-    └── g3/
+    └── <content_root>/
         └── Content/
             └── Blueprints/
                 └── GameModes/
@@ -190,17 +215,22 @@ spellbreak-modkit/
 ├── LICENSE
 └── spellbreak_uasset_editor/       Godot 4 app
     ├── main.gd / main.tscn         Entry point, tab bar, status bar
+    ├── app_theme.gd                Centralized UI theme constants & helpers
     ├── property_row.gd             Inline property editor widget
     ├── converter/                  Bundled UAssetAPI DLLs (pre-compiled)
     ├── u4pak/                      Bundled u4pak (pak packing tool)
     ├── ue4_dds_tools/              Bundled UE4-DDS-Tools + libtexconv
+    ├── game_profiles/              Game profile definitions
+    │   ├── _generic/               Base profile & shared enums
+    │   └── spellbreak/             Spellbreak profile, enums, tags, constants
     ├── uasset/                     Asset parsing & serialization
     │   ├── uasset_file.gd
     │   ├── uasset_export.gd
     │   ├── uasset_import.gd
     │   ├── uasset_property.gd
-    │   ├── ue4_enums.gd
-    │   └── spellbreak_tags.gd
+    │   ├── game_profile.gd         Game profile loader & manager
+    │   ├── ue4_enums.gd            Legacy wrapper (delegates to profile)
+    │   └── spellbreak_tags.gd      Legacy wrapper (delegates to profile)
     ├── scenes/
     │   ├── uasset_tab.gd/tscn      Per-file editor tab
     │   ├── detail_panel_builder.gd
@@ -213,7 +243,7 @@ spellbreak-modkit/
     │   ├── sound_service.gd        Audio extraction/injection service
     │   ├── mesh_service.gd         3D mesh export via umodel
     │   ├── detail_items/           One class per detail-panel view
-    │   │   ├── detail_item.gd
+    │   │   ├── detail_item.gd      Base class with shared table helpers
     │   │   ├── property_detail.gd
     │   │   ├── export_detail.gd
     │   │   ├── texture_detail.gd   Texture preview & import/export
@@ -226,7 +256,8 @@ spellbreak-modkit/
     │   │   └── stringtable_detail.gd
     │   └── mod_manager/
     │       ├── mod_manager_panel.gd
-    │       ├── mod_settings_tab.gd
+    │       ├── mod_settings_tab.gd  Game/version selector UI
+    │       ├── add_game_dialog.gd   Custom game profile creation
     │       ├── config_manager.gd
     │       ├── mod_state_manager.gd
     │       ├── mod_discovery.gd

@@ -1,0 +1,437 @@
+{
+  "EAIParamType": [
+    "EAIParamType::Float"
+  ],
+  "EAlphaBlendOption": [
+    "EAlphaBlendOption::Cubic",
+    "EAlphaBlendOption::CubicInOut",
+    "EAlphaBlendOption::HermiteCubic",
+    "EAlphaBlendOption::Linear"
+  ],
+  "EAnimAlphaInputType": [
+    "EAnimAlphaInputType::Curve",
+    "EAnimAlphaInputType::Float"
+  ],
+  "EAnimGroupRole": [
+    "EAnimGroupRole::CanBeLeader"
+  ],
+  "EAnimInterpolationType": [
+    "EAnimInterpolationType::Step"
+  ],
+  "EAnimLinkMethod": [
+    "EAnimLinkMethod::Absolute"
+  ],
+  "EAnimationMode": [
+    "EAnimationMode::AnimationSingleNode"
+  ],
+  "EAttachLocation": [
+    "EAttachLocation::KeepWorldPosition",
+    "EAttachLocation::SnapToTarget",
+    "EAttachLocation::SnapToTargetIncludingScale"
+  ],
+  "EAttachmentRule": [
+    "EAttachmentRule::KeepRelative"
+  ],
+  "EAttenuationDistanceModel": [
+    "EAttenuationDistanceModel::Logarithmic",
+    "EAttenuationDistanceModel::NaturalSound"
+  ],
+  "EAttributeRequirementOperator": [
+    "EAttributeRequirementOperator::Divide",
+    "EAttributeRequirementOperator::Subtract"
+  ],
+  "EAttributeRequirementRelationship": [
+    "EAttributeRequirementRelationship::Equal",
+    "EAttributeRequirementRelationship::NotEqual",
+    "EAttributeRequirementRelationship::GreaterThan",
+    "EAttributeRequirementRelationship::GreaterThanOrEqual",
+    "EAttributeRequirementRelationship::LessThan",
+    "EAttributeRequirementRelationship::LessThanOrEqual"
+  ],
+  "EAxis": [
+    "EAxis::None",
+    "EAxis::Y",
+    "EAxis::Z"
+  ],
+  "EBTBlackboardRestart": [
+    "EBTBlackboardRestart::ValueChange"
+  ],
+  "EBTFlowAbortMode": [
+    "EBTFlowAbortMode::Both",
+    "EBTFlowAbortMode::LowerPriority",
+    "EBTFlowAbortMode::Self"
+  ],
+  "EBTParallelMode": [
+    "EBTParallelMode::WaitForBackground"
+  ],
+  "EBodyCollisionResponse": [
+    "EBodyCollisionResponse::BodyCollision_Disabled"
+  ],
+  "EBoneFilterActionOption": [
+    "EBoneFilterActionOption::Remove"
+  ],
+  "EBoneTranslationRetargetingMode": [
+    "EBoneTranslationRetargetingMode::Animation",
+    "EBoneTranslationRetargetingMode::AnimationRelative",
+    "EBoneTranslationRetargetingMode::AnimationScaled",
+    "EBoneTranslationRetargetingMode::Skeleton"
+  ],
+  "ECameraAnimPlaySpace": [
+    "ECameraAnimPlaySpace::CameraLocal"
+  ],
+  "ECameraFocusMethod": [
+    "ECameraFocusMethod::None"
+  ],
+  "ECameraProjectionMode": [
+    "ECameraProjectionMode::Orthographic"
+  ],
+  "ECollisionEnabled": [
+    "ECollisionEnabled::NoCollision",
+    "ECollisionEnabled::QueryAndPhysics",
+    "ECollisionEnabled::QueryOnly"
+  ],
+  "EComponentMobility": [
+    "EComponentMobility::Movable",
+    "EComponentMobility::Static",
+    "EComponentMobility::Stationary"
+  ],
+  "EComponentType": [
+    "EComponentType::RotationX",
+    "EComponentType::RotationY",
+    "EComponentType::RotationZ"
+  ],
+  "EConstraintOffsetOption": [
+    "EConstraintOffsetOption::None",
+    "EConstraintOffsetOption::Offset_RefPose"
+  ],
+  "EConsumeMouseWheel": [
+    "EConsumeMouseWheel::Always",
+    "EConsumeMouseWheel::Never"
+  ],
+  "ECurveBlendOption": [
+    "ECurveBlendOption::MaxWeight"
+  ],
+  "EDescendantScrollDestination": [
+    "EDescendantScrollDestination::Center"
+  ],
+  "EDetachmentRule": [
+    "EDetachmentRule::KeepRelative"
+  ],
+  "EDrivenBoneModificationMode": [
+    "EDrivenBoneModificationMode::AddToInput"
+  ],
+  "EDrivenDestinationMode": [
+    "EDrivenDestinationMode::Bone"
+  ],
+  "EEQSNormalizationType": [
+    "EEQSNormalizationType::RelativeToScores"
+  ],
+  "EEnvDirection": [
+    "EEnvDirection::TwoPoints"
+  ],
+  "EEnvOverlapShape": [
+    "EEnvOverlapShape::Capsule"
+  ],
+  "EEnvQueryRunMode": [
+    "EEnvQueryRunMode::RandomBest25Pct",
+    "EEnvQueryRunMode::RandomBest5Pct"
+  ],
+  "EEnvQueryTestClamping": [
+    "EEnvQueryTestClamping::SpecifiedValue"
+  ],
+  "EEnvQueryTrace": [
+    "EEnvQueryTrace::Navigation",
+    "EEnvQueryTrace::None"
+  ],
+  "EEnvTestDistance": [
+    "EEnvTestDistance::Distance2D"
+  ],
+  "EEnvTestDot": [
+    "EEnvTestDot::Dot2D"
+  ],
+  "EEnvTestFilterType": [
+    "EEnvTestFilterType::Maximum",
+    "EEnvTestFilterType::Minimum",
+    "EEnvTestFilterType::Range"
+  ],
+  "EEnvTestPathfinding": [
+    "EEnvTestPathfinding::PathCost"
+  ],
+  "EEnvTestPurpose": [
+    "EEnvTestPurpose::Filter",
+    "EEnvTestPurpose::Score"
+  ],
+  "EEnvTestScoreEquation": [
+    "EEnvTestScoreEquation::Constant",
+    "EEnvTestScoreEquation::InverseLinear",
+    "EEnvTestScoreEquation::Linear"
+  ],
+  "EEvaluationMethod": [
+    "EEvaluationMethod::Static",
+    "EEvaluationMethod::Swept"
+  ],
+  "EFoliageScaling": [
+    "EFoliageScaling::Free",
+    "EFoliageScaling::LockXY",
+    "EFoliageScaling::LockYZ"
+  ],
+  "EFontCacheType": [
+    "EFontCacheType::Runtime"
+  ],
+  "EFontLoadingPolicy": [
+    "EFontLoadingPolicy::Inline"
+  ],
+  "EGrassScaling": [
+    "EGrassScaling::Free",
+    "EGrassScaling::LockXY",
+    "EGrassScaling::Uniform"
+  ],
+  "EHasCustomNavigableGeometry": [
+    "EHasCustomNavigableGeometry::No"
+  ],
+  "EIconSizeUnit": [
+    "EIconSizeUnit::WorldSpace"
+  ],
+  "EInterpolationBlend": [
+    "EInterpolationBlend::Linear"
+  ],
+  "EKinematicBonesUpdateToPhysics": [
+    "EKinematicBonesUpdateToPhysics::SkipAllBones"
+  ],
+  "ELandscapeCullingPrecision": [
+    "ELandscapeCullingPrecision::ELandscapeCullingPrecision_MAX",
+    "ELandscapeCullingPrecision::High",
+    "ELandscapeCullingPrecision::Medium"
+  ],
+  "ELightUnits": [
+    "ELightUnits::Candelas"
+  ],
+  "EMapViewSearchOption": [
+    "EMapViewSearchOption::OnMapBackground",
+    "EMapViewSearchOption::OnPlayer"
+  ],
+  "EMeshLODSelectionType": [
+    "EMeshLODSelectionType::CalculateLOD"
+  ],
+  "EMontageNotifyTickType": [
+    "EMontageNotifyTickType::BranchingPoint",
+    "EMontageNotifyTickType::Queued"
+  ],
+  "EMovieSceneBlendType": [
+    "EMovieSceneBlendType::Absolute",
+    "EMovieSceneBlendType::Additive",
+    "EMovieSceneBlendType::Relative"
+  ],
+  "EMovieSceneCompletionMode": [
+    "EMovieSceneCompletionMode::KeepState",
+    "EMovieSceneCompletionMode::RestoreState"
+  ],
+  "EMovieSceneEvaluationType": [
+    "EMovieSceneEvaluationType::FrameLocked"
+  ],
+  "EMovieSceneObjectBindingSpace": [
+    "EMovieSceneObjectBindingSpace::Local",
+    "EMovieSceneObjectBindingSpace::Root"
+  ],
+  "ENodeAdvancedPins": [
+    "ENodeAdvancedPins::Hidden",
+    "ENodeAdvancedPins::Shown"
+  ],
+  "ENodeEnabledState": [
+    "ENodeEnabledState::Disabled"
+  ],
+  "ENotifyFilterType": [
+    "ENotifyFilterType::NoFiltering"
+  ],
+  "EOscillatorWaveform": [
+    "EOscillatorWaveform::PerlinNoise"
+  ],
+  "EParticleSignificanceBucket": [
+    "EParticleSignificanceBucket::ESB_Combat",
+    "EParticleSignificanceBucket::ESB_Cosmetics",
+    "EParticleSignificanceBucket::ESB_Sorcery"
+  ],
+  "EParticleSignificanceLevel": [
+    "EParticleSignificanceLevel::Critical",
+    "EParticleSignificanceLevel::High",
+    "EParticleSignificanceLevel::Low",
+    "EParticleSignificanceLevel::Medium"
+  ],
+  "EParticleSystemInsignificanceReaction": [
+    "EParticleSystemInsignificanceReaction::Complete",
+    "EParticleSystemInsignificanceReaction::DisableTick"
+  ],
+  "EParticleUVFlipMode": [
+    "EParticleUVFlipMode::FlipUOnly",
+    "EParticleUVFlipMode::FlipUV",
+    "EParticleUVFlipMode::FlipVOnly",
+    "EParticleUVFlipMode::RandomFlipUOnly",
+    "EParticleUVFlipMode::RandomFlipUV",
+    "EParticleUVFlipMode::RandomFlipUVIndependent",
+    "EParticleUVFlipMode::RandomFlipVOnly"
+  ],
+  "EPinContainerType": [
+    "EPinContainerType::None"
+  ],
+  "EPoseDriverOutput": [
+    "EPoseDriverOutput::DrivePoses"
+  ],
+  "EPoseDriverSource": [
+    "EPoseDriverSource::Rotation"
+  ],
+  "EPostCopyOperation": [
+    "EPostCopyOperation::LogicalNegateBool",
+    "EPostCopyOperation::None"
+  ],
+  "EProxyNormalComputationMethod": [
+    "EProxyNormalComputationMethod::AngleWeighted",
+    "EProxyNormalComputationMethod::AreaWeighted"
+  ],
+  "ERBFDistanceMethod": [
+    "ERBFDistanceMethod::SwingAngle"
+  ],
+  "ERBFFunctionType": [
+    "ERBFFunctionType::Gaussian"
+  ],
+  "ERangeBoundTypes": [
+    "ERangeBoundTypes::Inclusive"
+  ],
+  "EReflectedAndRefractedRayTracedShadows": [
+    "EReflectedAndRefractedRayTracedShadows::Hard_shadows"
+  ],
+  "EReflectionsType": [
+    "EReflectionsType::RayTracing"
+  ],
+  "ERootMotionRootLock": [
+    "ERootMotionRootLock::AnimFirstFrame"
+  ],
+  "ESceneCapturePrimitiveRenderMode": [
+    "ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList"
+  ],
+  "EScrollWhenFocusChanges": [
+    "EScrollWhenFocusChanges::AnimatedScroll"
+  ],
+  "ESectionEvaluationFlags": [
+    "ESectionEvaluationFlags::None"
+  ],
+  "ESelfContextInfo": [
+    "ESelfContextInfo::NotSelfContext"
+  ],
+  "ESequenceEvalReinit": [
+    "ESequenceEvalReinit::ExplicitTime"
+  ],
+  "ESlateBrushDrawType": [
+    "ESlateBrushDrawType::Border",
+    "ESlateBrushDrawType::Box",
+    "ESlateBrushDrawType::Image",
+    "ESlateBrushDrawType::NoDrawType"
+  ],
+  "ESlateBrushImageType": [
+    "ESlateBrushImageType::FullColor",
+    "ESlateBrushImageType::NoImage"
+  ],
+  "ESlateBrushMirrorType": [
+    "ESlateBrushMirrorType::NoMirror"
+  ],
+  "ESlateBrushTileType": [
+    "ESlateBrushTileType::Horizontal",
+    "ESlateBrushTileType::NoTile"
+  ],
+  "ESlateCheckBoxType": [
+    "ESlateCheckBoxType::ToggleButton"
+  ],
+  "ESlateColorStylingMode": [
+    "ESlateColorStylingMode::UseColor_Foreground",
+    "ESlateColorStylingMode::UseColor_Specified"
+  ],
+  "ESlateSizeRule": [
+    "ESlateSizeRule::Fill"
+  ],
+  "ESlateVisibility": [
+    "ESlateVisibility::Collapsed",
+    "ESlateVisibility::Hidden",
+    "ESlateVisibility::HitTestInvisible",
+    "ESlateVisibility::SelfHitTestInvisible",
+    "ESlateVisibility::Visible"
+  ],
+  "ESnapshotSourceMode": [
+    "ESnapshotSourceMode::SnapshotPin"
+  ],
+  "ESpawnActorCollisionHandlingMethod": [
+    "ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn",
+    "ESpawnActorCollisionHandlingMethod::AlwaysSpawn"
+  ],
+  "ESpawnOwnership": [
+    "ESpawnOwnership::InnerSequence"
+  ],
+  "ESphericalLimitType": [
+    "ESphericalLimitType::Outer"
+  ],
+  "EStretch": [
+    "EStretch::Fill",
+    "EStretch::ScaleBySafeZone",
+    "EStretch::ScaleToFill",
+    "EStretch::ScaleToFitX",
+    "EStretch::ScaleToFitY",
+    "EStretch::UserSpecified"
+  ],
+  "EStretchDirection": [
+    "EStretchDirection::DownOnly"
+  ],
+  "ETextConvertCaseMode": [
+    "ETextConvertCaseMode::Default",
+    "ETextConvertCaseMode::Uppercase"
+  ],
+  "ETextJustify": [
+    "ETextJustify::Center",
+    "ETextJustify::Right"
+  ],
+  "ETransformConstraintType": [
+    "ETransformConstraintType::Parent",
+    "ETransformConstraintType::Rotation",
+    "ETransformConstraintType::Scale",
+    "ETransformConstraintType::Translation"
+  ],
+  "ETransitionLogicType": [
+    "ETransitionLogicType::TLT_StandardBlend"
+  ],
+  "ETranslucencyType": [
+    "ETranslucencyType::Raster"
+  ],
+  "EUINavigation": [
+    "EUINavigation::Left",
+    "EUINavigation::Right",
+    "EUINavigation::Up"
+  ],
+  "EUINavigationRule": [
+    "EUINavigationRule::Custom",
+    "EUINavigationRule::Explicit",
+    "EUINavigationRule::Stop"
+  ],
+  "EUVOutput": [
+    "EUVOutput::DoNotOutputChannel",
+    "EUVOutput::OutputChannel"
+  ],
+  "EUpdateClockSource": [
+    "EUpdateClockSource::Platform"
+  ],
+  "EVirtualKeyboardDismissAction": [
+    "EVirtualKeyboardDismissAction::TextCommitOnAccept"
+  ],
+  "EWidgetClipping": [
+    "EWidgetClipping::ClipToBounds",
+    "EWidgetClipping::ClipToBoundsAlways",
+    "EWidgetClipping::Inherit"
+  ],
+  "EWidgetCompileTimeTickPrediction": [
+    "EWidgetCompileTimeTickPrediction::WillTick"
+  ],
+  "EWidgetSpace": [
+    "EWidgetSpace::Screen",
+    "EWidgetSpace::World"
+  ],
+  "EWidgetTickFrequency": [
+    "EWidgetTickFrequency::Auto",
+    "EWidgetTickFrequency::Never"
+  ]
+}

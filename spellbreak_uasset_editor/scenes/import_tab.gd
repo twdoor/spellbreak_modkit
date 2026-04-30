@@ -4,7 +4,7 @@ class_name ImportTab extends HBoxContainer
 static func setup(imp: UAssetImport, index: int, on_select: Callable = Callable()) -> ImportTab:
 	var tab := ImportTab.new()
 	tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tab.add_theme_constant_override("separation", 6)
+	tab.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
 
 	# Index badge — clickable button when a selection callback is provided
 	var idx_btn := Button.new()
@@ -13,8 +13,7 @@ static func setup(imp: UAssetImport, index: int, on_select: Callable = Callable(
 	idx_btn.focus_mode = Control.FOCUS_NONE
 	idx_btn.custom_minimum_size.x = 32
 	idx_btn.alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	idx_btn.add_theme_color_override("font_color", Color(0.45, 0.45, 0.45))
-	idx_btn.add_theme_color_override("font_hover_color", Color(0.75, 0.85, 1.0))
+	AppTheme.style_index(idx_btn)
 	if on_select.is_valid():
 		idx_btn.pressed.connect(on_select)
 	tab.add_child(idx_btn)

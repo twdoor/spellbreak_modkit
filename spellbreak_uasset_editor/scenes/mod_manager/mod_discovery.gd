@@ -9,7 +9,8 @@ const ASSET_EXTENSIONS := [".uasset", ".uexp", ".ubulk", ".umap"]
 
 ## Returns an Array of Dictionaries:
 ##   { "name": String, "path": String, "file_count": int, "size_bytes": int }
-static func scan(mods_dir: String) -> Array:
+## content_root: the top-level folder inside each mod (e.g. "g3" for Spellbreak, "Content" for generic).
+static func scan(mods_dir: String, content_root: String = "g3") -> Array:
 	var results: Array = []
 	if mods_dir.is_empty() or not DirAccess.dir_exists_absolute(mods_dir):
 		return results
@@ -31,15 +32,15 @@ static func scan(mods_dir: String) -> Array:
 
 	for mod_name in names:
 		var mod_path := mods_dir.path_join(mod_name)
-		var g3_path  := mod_path.path_join("g3")
-		if not DirAccess.dir_exists_absolute(g3_path):
+		var content_path := mod_path.path_join(content_root)
+		if not DirAccess.dir_exists_absolute(content_path):
 			continue
-		var assets := _list_assets(g3_path)
+		var assets := _list_assets(content_path)
 		results.append({
 			"name":       mod_name,
 			"path":       mod_path,
 			"file_count": assets.size(),
-			"size_bytes": _dir_size(g3_path),
+			"size_bytes": _dir_size(content_path),
 		})
 
 	return results
@@ -50,12 +51,13 @@ static func list_assets(base_path: String) -> Array:
 	return _list_assets(base_path)
 
 
-## List all file paths relative to mod_path, recursively under its g3/ folder.
-static func list_mod_files(mod_path: String) -> Array:
-	var g3 := mod_path.path_join("g3")
-	if not DirAccess.dir_exists_absolute(g3):
+## List all file paths relative to mod_path, recursively under its content root folder.
+## content_root: the top-level folder inside the mod (e.g. "g3" for Spellbreak).
+static func list_mod_files(mod_path: String, content_root: String = "g3") -> Array:
+	var root := mod_path.path_join(content_root)
+	if not DirAccess.dir_exists_absolute(root):
 		return []
-	var all_files := _list_all_files(g3)
+	var all_files := _list_all_files(root)
 	var result: Array = []
 	for f in all_files:
 		result.append(f.trim_prefix(mod_path + "/"))

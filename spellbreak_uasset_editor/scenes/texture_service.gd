@@ -132,8 +132,9 @@ func _do_export_png(uasset_path: String, output_png: String) -> Array:
 	var dds_tools_dir := _cfg.get_dds_tools_dir()
 	var python := _find_python()
 
-	var cmd_str := "cd '%s' && '%s' '%s' '%s' --mode export --export_as dds --version 4.20 --save_folder '%s' --skip_non_texture" \
-		% [dds_tools_dir, python, main_py, uasset_path, tmp_dir]
+	var dds_ver := _cfg.get_game_profile().dds_tools_version
+	var cmd_str := "cd '%s' && '%s' '%s' '%s' --mode export --export_as dds --version %s --save_folder '%s' --skip_non_texture" \
+		% [dds_tools_dir, python, main_py, uasset_path, dds_ver, tmp_dir]
 
 	var output: Array = []
 	var code := OS.execute("sh", ["-c", cmd_str], output, true)
@@ -209,8 +210,9 @@ func _do_inject_png(uasset_path: String, png_path: String, output_dir: String) -
 	var dds_tools_dir := _cfg.get_dds_tools_dir()
 	var python := _find_python()
 
-	var cmd_str := "cd '%s' && '%s' '%s' '%s' '%s' --mode inject --version 4.20 --save_folder '%s'" \
-		% [dds_tools_dir, python, main_py, uasset_path, tga_path, output_dir]
+	var dds_ver := _cfg.get_game_profile().dds_tools_version
+	var cmd_str := "cd '%s' && '%s' '%s' '%s' '%s' --mode inject --version %s --save_folder '%s'" \
+		% [dds_tools_dir, python, main_py, uasset_path, tga_path, dds_ver, output_dir]
 
 	var output: Array = []
 	var code := OS.execute("sh", ["-c", cmd_str], output, true)

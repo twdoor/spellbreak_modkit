@@ -27,6 +27,7 @@ var _close_dialog: ConfirmationDialog
 var _tab_pending_close: UassetFileTab
 
 var _status_label: Label
+var _cfg: ModConfigManager
 var _texture_service: TextureService
 var _sound_service: SoundService
 var _mesh_service: MeshService
@@ -65,15 +66,15 @@ func _build_status_bar() -> void:
 	vbox.add_child(HSeparator.new())
 
 	var bar := MarginContainer.new()
-	bar.add_theme_constant_override("margin_left",   10)
-	bar.add_theme_constant_override("margin_right",  10)
-	bar.add_theme_constant_override("margin_top",     3)
-	bar.add_theme_constant_override("margin_bottom",  3)
+	bar.add_theme_constant_override("margin_left",   AppTheme.MARGIN_STATUS_H)
+	bar.add_theme_constant_override("margin_right",  AppTheme.MARGIN_STATUS_H)
+	bar.add_theme_constant_override("margin_top",    AppTheme.MARGIN_STATUS_V)
+	bar.add_theme_constant_override("margin_bottom", AppTheme.MARGIN_STATUS_V)
 
 	_status_label = Label.new()
 	_status_label.text = "Ready"
-	_status_label.add_theme_font_size_override("font_size", 11)
-	_status_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+	_status_label.add_theme_font_size_override("font_size", AppTheme.FONT_STATUS_BAR)
+	AppTheme.style_muted(_status_label)
 	_status_label.clip_text = true
 
 	bar.add_child(_status_label)
@@ -88,9 +89,10 @@ func _setup_mod_tab() -> void:
 	tab_cont.set_tab_title(0, "Mod Manager")
 	panel.open_asset_requested.connect(_on_file_selected)
 	panel.status_changed.connect(_on_mod_status_changed)
-	_texture_service = TextureService.new().setup(panel.get_config())
-	_sound_service = SoundService.new()
-	_mesh_service = MeshService.new().setup(panel.get_config())
+	_cfg = panel.get_config()
+	_texture_service = TextureService.new().setup(_cfg)
+	_sound_service = SoundService.new().setup(_cfg)
+	_mesh_service = MeshService.new().setup(_cfg)
 
 	# When any UassetFileTab is removed, refresh titles so lone survivors revert to short names.
 	tab_cont.child_exiting_tree.connect(func(child: Node) -> void:
@@ -119,30 +121,18 @@ func _setup_mod_tab() -> void:
 
 func _on_mod_status_changed(text: String, is_error: bool) -> void:
 	_status_label.text = text
-	_status_label.add_theme_color_override("font_color",
-		Color(0.9, 0.4, 0.4) if is_error else Color(0.5, 0.5, 0.5))
+	AppTheme.style_status(_status_label, is_error)
 
 
 func _build_toast() -> void:
 	_toast_panel = PanelContainer.new()
 	_toast_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toast_panel.z_index = 100
-
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.1, 0.1, 0.1, 0.93)
-	style.corner_radius_top_left = 8
-	style.corner_radius_top_right = 8
-	style.corner_radius_bottom_left = 8
-	style.corner_radius_bottom_right = 8
-	style.content_margin_left = 22
-	style.content_margin_right = 22
-	style.content_margin_top = 12
-	style.content_margin_bottom = 12
-	_toast_panel.add_theme_stylebox_override("panel", style)
+	_toast_panel.add_theme_stylebox_override("panel", AppTheme.make_toast_style())
 
 	_toast_label = Label.new()
-	_toast_label.add_theme_font_size_override("font_size", 15)
-	_toast_label.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
+	_toast_label.add_theme_font_size_override("font_size", AppTheme.FONT_TOAST)
+	_toast_label.add_theme_color_override("font_color", AppTheme.TEXT_TOAST)
 	_toast_panel.add_child(_toast_label)
 
 	# Anchor bottom-centre, start hidden below the visible area
@@ -194,6 +184,7 @@ func _build_close_dialog() -> void:
 	_close_dialog.add_button("Save & Close", false, "save_close")
 	_close_dialog.confirmed.connect(_on_discard_and_close)
 	_close_dialog.custom_action.connect(_on_save_and_close)
+	AppTheme.apply_theme(_close_dialog)
 	add_child(_close_dialog)
 
 
@@ -234,6 +225,10 @@ func _on_file_selected(path: String) -> void:
 	if asset == null:
 		push_error("Failed to load: " + path)
 		return
+
+	# Attach the active game profile so property editors can access enums/tags
+	if _cfg:
+		asset.game_profile = _cfg.get_game_profile()
 
 	var new_tab := UassetFileTab.setup(asset, _texture_service, _sound_service, _mesh_service)
 	tab_cont.add_child(new_tab)

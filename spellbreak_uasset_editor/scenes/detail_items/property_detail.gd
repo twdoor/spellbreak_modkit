@@ -101,29 +101,16 @@ func _build_tag_container(prop: UAssetProperty) -> void:
 		_add_info("(no tags)")
 
 	for i in tags.size():
-		var hbox := HBoxContainer.new()
-		hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		hbox.add_theme_constant_override("separation", 6)
-
-		var line := LineEdit.new()
-		line.text = str(tags[i])
-		line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		line.placeholder_text = "Tag.Name.Here"
 		var ci := i
-		line.text_submitted.connect(func(t): tags[ci] = t)
-		line.focus_exited.connect(func():
-			if is_instance_valid(line):
-				tags[ci] = line.text
-		)
-		hbox.add_child(line)
-
-		hbox.add_child(_make_delete_btn(func():
+		var row := _make_row()
+		row.add_child(_make_commit_line(str(tags[ci]), func(t): tags[ci] = t, "Tag.Name.Here"))
+		row.add_child(_make_delete_btn(func():
 			tags.remove_at(ci)
 			prop.value = tags
 			prop.raw["Value"] = tags
 			_ctx["show_detail"].call(prop)
 		))
-		_container.add_child(hbox)
+		_container.add_child(row)
 
 	_add_separator()
 	_container.add_child(_make_add_btn("+ Add Tag", func():

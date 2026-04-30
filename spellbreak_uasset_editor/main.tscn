@@ -14,9 +14,7 @@
 [ext_resource type="Resource" uid="uid://dwapj4lckokjm" path="res://guide/shift.tres" id="12_dg77c"]
 [ext_resource type="Resource" uid="uid://6kog7u0g47oc" path="res://guide/cancel.tres" id="13_ycdy4"]
 [ext_resource type="Resource" uid="uid://d04k6gcnu57o1" path="res://guide/create.tres" id="14_w48qg"]
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1bvp3"]
-bg_color = Color(0, 0, 0, 1)
+[ext_resource type="Theme" uid="uid://d3ygy1hpwcbqw" path="res://main_theme.tres" id="theme_main"]
 
 [node name="Main" type="CanvasLayer" unique_id=1562985923]
 script = ExtResource("1_ig7tw")
@@ -40,7 +38,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_1bvp3")
+theme = ExtResource("theme_main")
 
 [node name="VBoxContainer" type="VBoxContainer" parent="Panel" unique_id=1522211695]
 layout_mode = 2

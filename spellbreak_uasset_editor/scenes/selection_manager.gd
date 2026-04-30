@@ -4,9 +4,6 @@ class_name SelectionManager extends RefCounted
 ## Owns the set of selected items, the shift-click anchor, and the row panel map
 ## used for highlight rendering.
 
-const _COLOR_SELECTED := Color(0.15, 0.38, 0.70, 0.55)
-const _COLOR_NORMAL   := Color(0.0,  0.0,  0.0,  0.0)
-
 var _selection: Array = []
 var _last_selected_anchor: Variant = null
 var _row_panels: Dictionary = {}
@@ -18,9 +15,9 @@ var _style_normal: StyleBoxFlat
 
 func _init() -> void:
 	_style_selected = StyleBoxFlat.new()
-	_style_selected.bg_color = _COLOR_SELECTED
+	_style_selected.bg_color = AppTheme.BG_SELECTION
 	_style_normal = StyleBoxFlat.new()
-	_style_normal.bg_color = _COLOR_NORMAL
+	_style_normal.bg_color = Color.TRANSPARENT
 
 ## Emitted whenever the selection changes. current is the single selected item or null.
 signal selection_changed(selection: Array, current: Variant)
