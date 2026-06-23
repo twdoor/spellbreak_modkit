@@ -121,12 +121,10 @@ func save_config() -> void:
 		data["umodel_path"] = umodel_path
 	if not sources.is_empty():
 		data["sources"] = sources
-	var file := FileAccess.open(_config_path, FileAccess.WRITE)
-	if not file:
+	var error := FileUtils.write_bytes_atomic(_config_path, JSON.stringify(data, "  ").to_utf8_buffer())
+	if error != OK:
 		push_error("ModConfigManager: cannot write config to %s" % _config_path)
 		return
-	file.store_string(JSON.stringify(data, "  "))
-	file.close()
 	config_changed.emit()
 
 
@@ -191,6 +189,7 @@ const _DDS_TOOLS_FILES := [
 const _GAME_PROFILE_FILES := [
 	"_generic/profile.json", "_generic/enums.json",
 	"spellbreak/profile.json", "spellbreak/enums.json", "spellbreak/tags.json",
+	"spellbreak/constants.json",
 ]
 
 
@@ -248,7 +247,4 @@ static func _extract_tool_to_user_dir(tool_dir: String, files: Array) -> void:
 		var data := FileAccess.get_file_as_bytes(src)
 		if data.size() == 0:
 			continue
-		var f := FileAccess.open(dst, FileAccess.WRITE)
-		if f:
-			f.store_buffer(data)
-			f.close()
+		FileUtils.write_bytes_atomic(dst, data)

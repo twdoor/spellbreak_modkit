@@ -33,6 +33,8 @@ static func scan(mods_dir: String, content_root: String = "g3") -> Array:
 	for mod_name in names:
 		var mod_path := mods_dir.path_join(mod_name)
 		var content_path := mod_path.path_join(content_root)
+		if not FileUtils.is_path_within(content_path, mod_path):
+			continue
 		if not DirAccess.dir_exists_absolute(content_path):
 			continue
 		var assets := _list_assets(content_path)
@@ -55,6 +57,8 @@ static func list_assets(base_path: String) -> Array:
 ## content_root: the top-level folder inside the mod (e.g. "g3" for Spellbreak).
 static func list_mod_files(mod_path: String, content_root: String = "g3") -> Array:
 	var root := mod_path.path_join(content_root)
+	if not FileUtils.is_path_within(root, mod_path):
+		return []
 	if not DirAccess.dir_exists_absolute(root):
 		return []
 	var all_files := _list_all_files(root)

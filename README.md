@@ -8,7 +8,9 @@ A visual `.uasset` editor and mod manager for **Unreal Engine 4/5 games**, built
 
 ## What's Included
 
-This repo contains one thing: `spellbreak_uasset_editor/` — a Godot 4 desktop app with a built-in mod manager, a full `.uasset` editor, and a game profile system for multi-game support.
+The main project is `spellbreak_uasset_editor/`, a Godot 4 desktop app with a
+built-in mod manager, a full `.uasset` editor, and a game profile system.
+Repository-level scripts and CI run the regression suite.
 
 Everything is bundled inside the single binary:
 - [UAssetAPI](https://github.com/atenfyr/UAssetAPI) converter (pre-compiled .NET DLLs)
@@ -26,7 +28,7 @@ Everything is bundled inside the single binary:
   > Most Linux distros include it. On Windows, install from [imagemagick.org](https://imagemagick.org/script/download.php) and add to PATH.
 
 Optional:
-- **[umodel](https://www.gildor.org/en/projects/umodel)** (UE Viewer) — required for 3D mesh preview (StaticMesh / SkeletalMesh assets). Download a prebuilt binary or [build from source](https://github.com/gildor2/UEViewer). Set the path in **Settings > umodel (3D Preview)**.
+- **[umodel](https://www.gildor.org/en/projects/umodel)** (UE Viewer) — required for 3D mesh and animation preview (StaticMesh / SkeletalMesh / AnimSequence assets). Download a prebuilt binary or [build from source](https://github.com/gildor2/UEViewer). Set the path in **Settings > umodel (3D Preview)**.
 - **Godot 4.6+** — only if building the editor from source (no .NET support needed)
 
 ---
@@ -38,6 +40,8 @@ Optional:
 #### Prebuilt editor (recommended)
 
 Go to the [releases](https://github.com/twdoor/spellbreak_modkit/releases) page, click on the latest version and download the file for your platform.
+
+Release artifacts are packaged as `linux.zip` and `win.zip`.
 
 #### OR: Build from source
 
@@ -56,7 +60,7 @@ Launch the app, click **Settings**, and fill in:
 - **Game directory** — the folder containing your game's content root (e.g. `g3/` for Spellbreak)
 - **Mods directory** — where your mod folders live
 - **Launch command** — optional, used by the Launch button
-- **umodel path** — optional, path to the umodel binary for 3D mesh preview
+- **umodel path** — optional, path to the umodel binary for 3D mesh and animation preview
 - **Sources** — exported asset directories for reference (base game export, older versions, etc.)
 
 Settings are saved to `config.json` next to the executable.
@@ -148,11 +152,12 @@ When opening a SoundWave `.uasset`, the detail panel shows:
 
 When opening a StaticMesh or SkeletalMesh `.uasset`, the detail panel shows:
 
-- **3D preview** — interactive viewport with orbit controls (left-drag to rotate, scroll to zoom)
+- **3D preview** — interactive viewport with orbit, middle-drag pan, scroll zoom, and a resizable preview area
 - **Auto-framing** — camera automatically positions to fit the mesh on load
+- **Animation preview** — on SkeletalMesh assets, auto-find likely AnimSequence `.uasset` files or browse manually, then play, pause, loop, change speed, or scrub on the current mesh
 - **Export as glTF** — save the mesh to a glTF file
 
-> Mesh preview requires [umodel](https://www.gildor.org/en/projects/umodel) to be installed and configured in Settings.
+> Mesh and animation preview require [umodel](https://www.gildor.org/en/projects/umodel) to be installed and configured in Settings.
 
 ---
 
@@ -213,6 +218,8 @@ mods/
 spellbreak-modkit/
 ├── README.md
 ├── LICENSE
+├── scripts/test.sh                 Parser check and regression test entry point
+├── .github/workflows/ci.yml        GitHub Actions test workflow
 └── spellbreak_uasset_editor/       Godot 4 app
     ├── main.gd / main.tscn         Entry point, tab bar, status bar
     ├── app_theme.gd                Centralized UI theme constants & helpers
@@ -232,23 +239,28 @@ spellbreak-modkit/
     │   ├── ue4_enums.gd            Legacy wrapper (delegates to profile)
     │   └── spellbreak_tags.gd      Legacy wrapper (delegates to profile)
     ├── scenes/
+    │   ├── process_utils.gd        Cross-platform subprocess helpers
+    │   ├── asset_document.gd       Asset ownership, save point, undo/redo history
+    │   ├── asset_edit_command.gd   Reversible editor mutation
+    │   ├── asset_editor_context.gd Typed detail-view dependencies and actions
+    │   ├── background_job_runner.gd Application-owned preview jobs and shutdown
     │   ├── uasset_tab.gd/tscn      Per-file editor tab
     │   ├── detail_panel_builder.gd
     │   ├── tree_manager.gd
     │   ├── selection_manager.gd
     │   ├── clipboard_manager.gd
-    │   ├── undo_manager.gd
-    │   ├── export_reorderer.gd
     │   ├── texture_service.gd      Texture extraction/injection service
     │   ├── sound_service.gd        Audio extraction/injection service
-    │   ├── mesh_service.gd         3D mesh export via umodel
+    │   ├── mesh_service.gd         3D mesh/animation export via umodel
+    │   ├── mesh_preview_material_loader.gd
+    │   ├── md5_anim_loader.gd      MD5Anim parser and Godot animation builder
     │   ├── detail_items/           One class per detail-panel view
     │   │   ├── detail_item.gd      Base class with shared table helpers
     │   │   ├── property_detail.gd
     │   │   ├── export_detail.gd
     │   │   ├── texture_detail.gd   Texture preview & import/export
     │   │   ├── sound_detail.gd     Audio playback & import/export
-    │   │   ├── mesh_detail.gd      3D mesh preview & export
+    │   │   ├── mesh_detail.gd      3D mesh, material, and animation preview
     │   │   ├── exports_list_detail.gd
     │   │   ├── import_detail.gd
     │   │   ├── namemap_detail.gd
@@ -265,8 +277,20 @@ spellbreak-modkit/
     │       ├── file_utils.gd
     │       └── packing_service.gd
     ├── guide/                      GUIDE action resources (remappable keybinds)
+    ├── tests/test_core.gd          Core regression tests
     └── addons/                     GUIDE input framework
 ```
+
+## Development
+
+Run the parser check and regression suite with Godot 4.6.3+:
+
+```bash
+./scripts/test.sh
+```
+
+The suite covers package-index remapping, undo restoration, transactional file
+replacement, subprocess argument handling, and pak creation/failure recovery.
 
 ---
 
@@ -277,3 +301,6 @@ spellbreak-modkit/
 - [UE4-DDS-Tools](https://github.com/matyalatte/UE4-DDS-Tools) by matyalatte — UE4 texture extraction/injection (bundled)
 - [Texconv-Custom-DLL](https://github.com/matyalatte/Texconv-Custom-DLL) by matyalatte — Cross-platform texture format converter (bundled as libtexconv)
 - [umodel / UE Viewer](https://www.gildor.org/en/projects/umodel) by Gildor — UE4 mesh viewer/exporter (optional, user-installed)
+- [G.U.I.D.E](https://github.com/godotneers/G.U.I.D.E) by Jan Thomä — Input mapping framework (bundled)
+- [Script IDE](https://github.com/Maran23/script-ide) by Marius Hanl — Godot editor plugin (bundled)
+- [NHB Functions On The Fly](https://github.com/NickHatBoecker/nhb_functions_on_the_fly) by NickHatBoecker — Godot editor plugin (bundled)

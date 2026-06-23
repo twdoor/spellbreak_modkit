@@ -5,8 +5,8 @@ class_name ImportDetail extends DetailItem
 
 
 func _build_impl() -> void:
-	var asset: UAssetFile = _ctx["asset"]
-	var sel: SelectionManager = _ctx["selection"]
+	var asset := _ctx.get_asset()
+	var sel := _ctx.selection
 
 	_add_header("Imports [%d]" % asset.imports.size())
 	_add_separator()
@@ -16,8 +16,9 @@ func _build_impl() -> void:
 		var imp   := asset.imports[i]
 		var index := -(i + 1)
 		var row := ImportTab.setup(imp, index, func():
-			sel.handle_click(imp, func(): return asset.imports)
-		)
+			sel.handle_click(imp, func(): return asset.imports),
+			func(label: String, apply_action: Callable, revert_action: Callable) -> void:
+				_ctx.execute(label, apply_action, revert_action))
 		var panel := sel.make_selectable_row(imp, row,
 			func(ctrl: bool):
 				if ctrl: sel.toggle(imp)

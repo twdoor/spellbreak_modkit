@@ -11,7 +11,7 @@ var _loading_label: Label
 var _export_btn: Button
 var _import_btn: Button
 var _status_label: Label
-var _preview_thread: Thread
+var _preview_job_id := -1
 
 
 func init_data(expo: UAssetExport, cls_name: String) -> TextureDetail:
@@ -38,7 +38,7 @@ func _build_impl() -> void:
 	# ── Texture preview section ───────────────────────────────────────────────
 	_add_section_label("TEXTURE PREVIEW")
 
-	var tex_service: TextureService = _ctx.get("texture_service")
+	var tex_service := _ctx.texture_service
 
 	if tex_service == null or not tex_service.is_configured():
 		_add_info("UE4-DDS-Tools not configured. Set the path in Settings to enable texture preview.")
@@ -110,9 +110,8 @@ func _build_impl() -> void:
 	_add_section_label("REFERENCES")
 	_add_field_editor("ObjectName", expo.object_name, func(v):
 		expo.object_name = v
-		expo.raw["ObjectName"] = v
-		hdr_label.text = "Export: %s" % v
-	)
+		expo.raw["ObjectName"] = v,
+		func(v): hdr_label.text = "Export: %s" % v)
 	_add_ref_row("ClassIndex", expo.class_index, func(v):
 		expo.class_index = v; expo.raw["ClassIndex"] = v)
 	_add_ref_row("SuperIndex", expo.super_index, func(v):
@@ -154,7 +153,7 @@ func _build_impl() -> void:
 
 
 func _load_preview_async(tex_service: TextureService) -> void:
-	var asset: UAssetFile = _ctx["asset"]
+	var asset := _ctx.get_asset()
 	var uasset_path := asset.binary_path if not asset.binary_path.is_empty() else asset.file_path
 	if not uasset_path.ends_with(".uasset"):
 		_loading_label.text = "Preview requires a .uasset file (not JSON)"
@@ -168,26 +167,28 @@ func _load_preview_async(tex_service: TextureService) -> void:
 			_show_preview(img)
 			return
 
-	# Load in background thread
-	_preview_thread = Thread.new()
-	_preview_thread.start(_preview_worker.bind(tex_service, uasset_path))
-
-
-func _preview_worker(tex_service: TextureService, uasset_path: String) -> void:
-	var img := tex_service.get_preview_image(uasset_path)
-	call_deferred("_on_preview_loaded", img)
+	if _ctx.background_jobs == null:
+		_loading_label.text = "Background job service is unavailable"
+		return
+	_preview_job_id = _ctx.background_jobs.run(
+		func() -> Image: return tex_service.get_preview_image(uasset_path),
+		_on_preview_loaded)
 
 
 func _on_preview_loaded(img: Image) -> void:
-	if _preview_thread:
-		_preview_thread.wait_to_finish()
-		_preview_thread = null
+	_preview_job_id = -1
 	if img:
 		_show_preview(img)
 	else:
 		if is_instance_valid(_loading_label):
 			_loading_label.text = "Failed to load preview"
 			_loading_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+
+
+func dispose() -> void:
+	if _preview_job_id >= 0 and _ctx.background_jobs:
+		_ctx.background_jobs.cancel(_preview_job_id)
+		_preview_job_id = -1
 
 
 func _show_preview(img: Image) -> void:
@@ -209,11 +210,11 @@ func _show_preview(img: Image) -> void:
 
 
 func _on_export_pressed() -> void:
-	var tex_service: TextureService = _ctx.get("texture_service")
+	var tex_service := _ctx.texture_service
 	if tex_service == null or tex_service.is_busy():
 		return
 
-	var asset: UAssetFile = _ctx["asset"]
+	var asset := _ctx.get_asset()
 	var uasset_path := asset.binary_path if not asset.binary_path.is_empty() else asset.file_path
 
 	var dialog := FileDialog.new()
@@ -246,11 +247,15 @@ func _on_export_finished(success: bool, message: String) -> void:
 
 
 func _on_import_pressed() -> void:
-	var tex_service: TextureService = _ctx.get("texture_service")
+	var tex_service := _ctx.texture_service
 	if tex_service == null or tex_service.is_busy():
 		return
+	if _ctx.is_dirty():
+		_status_label.text = "Save asset changes before importing a texture"
+		_status_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+		return
 
-	var asset: UAssetFile = _ctx["asset"]
+	var asset := _ctx.get_asset()
 	var uasset_path := asset.binary_path if not asset.binary_path.is_empty() else asset.file_path
 	var output_dir := uasset_path.get_base_dir()
 
@@ -282,6 +287,5 @@ func _on_import_finished(success: bool, message: String) -> void:
 		_import_btn.disabled = false
 	# Reload preview after successful import
 	if success:
-		var tex_service: TextureService = _ctx.get("texture_service")
-		if tex_service and is_instance_valid(_preview_rect):
-			_load_preview_async(tex_service)
+		if _ctx.reload_asset.is_valid():
+			_ctx.reload_asset.call()

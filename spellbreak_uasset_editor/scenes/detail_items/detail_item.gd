@@ -5,19 +5,7 @@ class_name DetailItem extends RefCounted
 ## Subclasses implement _build_impl() to populate a VBoxContainer,
 ## and optionally override get_render_hint() and build_tree_item().
 ##
-## Context dict keys (passed via setup()):
-##   "asset"            : UAssetFile
-##   "selection"        : SelectionManager
-##   "navigate_to"      : Callable  (data: Variant, label: String)
-##   "navigate_back"    : Callable  ()
-##   "set_dirty"        : Callable  ()
-##   "push_undo"        : Callable  (entry: Dictionary)
-##   "rebuild_tree"     : Callable  ()
-##   "show_detail"      : Callable  (data: Variant)
-##   "refresh_tree_item": Callable  (prop: UAssetProperty)
-##   "select_tree_item" : Callable  (data: Variant)
-##   "paste"            : Callable  ()
-##   "detail_stack"     : Array     (direct reference, read-only in detail items)
+## AssetEditorContext provides the active document, services, and editor actions.
 
 enum RenderHint {
 	DETAIL,  ## Only appears in the detail panel (default)
@@ -26,10 +14,10 @@ enum RenderHint {
 }
 
 var _container: Control
-var _ctx: Dictionary
+var _ctx: AssetEditorContext
 
 
-func setup(ctx: Dictionary) -> DetailItem:
+func setup(ctx: AssetEditorContext) -> DetailItem:
 	_ctx = ctx
 	return self
 
@@ -47,6 +35,11 @@ func build_detail(container: Control) -> void:
 
 ## Override this to populate _container with UI nodes.
 func _build_impl() -> void:
+	pass
+
+
+## Called before this temporary renderer is replaced.
+func dispose() -> void:
 	pass
 
 
@@ -115,7 +108,7 @@ func _add_back_button() -> void:
 	btn.flat = true
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	AppTheme.style_nav_btn(btn)
-	btn.pressed.connect(_ctx["navigate_back"])
+	btn.pressed.connect(_ctx.navigate_back)
 	_container.add_child(btn)
 
 
@@ -135,7 +128,7 @@ func _add_nav_button(prop: UAssetProperty) -> void:
 		_:
 			btn.text = "▸ %s" % prop.prop_name
 	AppTheme.style_nav_btn(btn)
-	btn.pressed.connect(func(): _ctx["navigate_to"].call(prop, prop.prop_name))
+	btn.pressed.connect(func(): _ctx.navigate_to.call(prop, prop.prop_name))
 	_container.add_child(btn)
 
 
@@ -149,11 +142,12 @@ func _add_nav_button_indexed(prop: UAssetProperty, index: int) -> void:
 		label += " %s" % prop.struct_type
 	btn.text = "▸ %s  [%d children]" % [label, prop.children.size()]
 	AppTheme.style_nav_btn(btn)
-	btn.pressed.connect(func(): _ctx["navigate_to"].call(prop, "[%d]" % index))
+	btn.pressed.connect(func(): _ctx.navigate_to.call(prop, "[%d]" % index))
 	_container.add_child(btn)
 
 
-func _add_field_editor(label_text: String, current_value: String, on_change: Callable) -> void:
+func _add_field_editor(label_text: String, current_value: String, on_change: Callable,
+		after_change: Callable = Callable()) -> void:
 	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
 	var label := Label.new()
@@ -165,7 +159,20 @@ func _add_field_editor(label_text: String, current_value: String, on_change: Cal
 	var line := LineEdit.new()
 	line.text = current_value
 	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line.text_changed.connect(func(t): _ctx["set_dirty"].call(); on_change.call(t))
+	var committed := {"value": current_value}
+	var commit := func() -> void:
+		var new_value := line.text
+		if new_value == committed["value"]:
+			return
+		var old_value: String = committed["value"]
+		_ctx.execute("Edit %s" % label_text,
+			func() -> void: on_change.call(new_value),
+			func() -> void: on_change.call(old_value))
+		if after_change.is_valid():
+			after_change.call(new_value)
+		committed["value"] = new_value
+	line.text_submitted.connect(func(_text: String) -> void: commit.call())
+	line.focus_exited.connect(commit)
 	hbox.add_child(line)
 	_container.add_child(hbox)
 
@@ -184,7 +191,16 @@ func _add_field_int(label_text: String, current_value: int, on_change: Callable)
 	spin.max_value = 2147483647
 	spin.value = current_value
 	spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	spin.value_changed.connect(func(v): on_change.call(int(v)))
+	var committed := {"value": current_value}
+	spin.value_changed.connect(func(v):
+		var new_value := int(v)
+		if new_value == committed["value"]:
+			return
+		var old_value: int = committed["value"]
+		_ctx.execute("Edit %s" % label_text,
+			func() -> void: on_change.call(new_value),
+			func() -> void: on_change.call(old_value))
+		committed["value"] = new_value)
 	hbox.add_child(spin)
 	_container.add_child(hbox)
 
@@ -209,8 +225,8 @@ func _is_simple_struct(prop: UAssetProperty) -> bool:
 ## the selection to that property, enabling copy/paste/cut/delete from the detail panel.
 ## siblings (optional): callable returning the ordered Array for shift+click range selection.
 func _add_selectable_property_row(prop: UAssetProperty, siblings: Callable = Callable()) -> void:
-	var sel: SelectionManager = _ctx["selection"]
-	var row := PropertyRow.create(prop, _ctx["asset"])
+	var sel := _ctx.selection
+	var row := PropertyRow.create(prop, _ctx.get_asset())
 	row.value_changed.connect(_on_row_value_changed)
 	_container.add_child(sel.make_selectable_row(
 		prop, row,
@@ -265,7 +281,7 @@ func _build_children_sorted(children: Array[UAssetProperty]) -> void:
 ## Copy (Ctrl+C), paste (Ctrl+V), and delete work through the global keyboard handlers.
 ## Large arrays are paginated to avoid per-frame lag.
 func _build_array_detail(prop: UAssetProperty) -> void:
-	var sel: SelectionManager = _ctx["selection"]
+	var sel := _ctx.selection
 
 	_build_virtual(prop.children.size(), func(i: int) -> void:
 		var child := prop.children[i]
@@ -306,7 +322,7 @@ func _build_array_detail(prop: UAssetProperty) -> void:
 			content = vbox
 
 		else:
-			var row := PropertyRow.create(child, _ctx["asset"])
+			var row := PropertyRow.create(child, _ctx.get_asset())
 			row.value_changed.connect(_on_row_value_changed)
 			content = row
 
@@ -404,7 +420,8 @@ func _make_commit_line(
 	placeholder: String = "",
 	min_width: float = 0.0,
 	expand: bool = true,
-	auto_dirty: bool = true
+	auto_dirty: bool = true,
+	after_change: Callable = Callable()
 ) -> LineEdit:
 	var line := LineEdit.new()
 	line.text = current_value
@@ -413,17 +430,23 @@ func _make_commit_line(
 		line.custom_minimum_size.x = min_width
 	if expand:
 		line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line.text_submitted.connect(func(t: String) -> void:
-		commit_fn.call(t)
+	var committed := {"value": current_value}
+	var commit := func() -> void:
+		if not is_instance_valid(line) or line.text == committed["value"]:
+			return
+		var old_value: String = committed["value"]
+		var new_value := line.text
 		if auto_dirty:
-			_ctx["set_dirty"].call()
-	)
-	line.focus_exited.connect(func() -> void:
-		if is_instance_valid(line):
-			commit_fn.call(line.text)
-			if auto_dirty:
-				_ctx["set_dirty"].call()
-	)
+			_ctx.execute("Edit value",
+				func() -> void: commit_fn.call(new_value),
+				func() -> void: commit_fn.call(old_value))
+		else:
+			commit_fn.call(new_value)
+		if after_change.is_valid():
+			after_change.call(new_value)
+		committed["value"] = new_value
+	line.text_submitted.connect(func(_text: String) -> void: commit.call())
+	line.focus_exited.connect(commit)
 	return line
 
 
@@ -471,19 +494,26 @@ func _add_ref_row(label_text: String, current_index: int, on_change: Callable) -
 	hbox.add_child(spin)
 
 	var ref_label := Label.new()
-	ref_label.text = PropertyRow._resolve_ref_name(current_index, _ctx["asset"])
-	ref_label.tooltip_text = PropertyRow._resolve_ref_type(current_index, _ctx["asset"])
+	ref_label.text = PropertyRow._resolve_ref_name(current_index, _ctx.get_asset())
+	ref_label.tooltip_text = PropertyRow._resolve_ref_type(current_index, _ctx.get_asset())
 	AppTheme.style_ref(ref_label, AppTheme.FONT_STATUS)
 	ref_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ref_label.clip_text = true
 	ref_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hbox.add_child(ref_label)
 
+	var committed := {"index": current_index}
 	spin.value_changed.connect(func(v):
-		_ctx["set_dirty"].call()
-		on_change.call(int(v))
-		ref_label.text = PropertyRow._resolve_ref_name(int(v), _ctx["asset"])
-		ref_label.tooltip_text = PropertyRow._resolve_ref_type(int(v), _ctx["asset"])
+		var new_index := int(v)
+		if new_index == committed["index"]:
+			return
+		var old_index: int = committed["index"]
+		_ctx.execute("Edit %s" % label_text,
+			func() -> void: on_change.call(new_index),
+			func() -> void: on_change.call(old_index))
+		committed["index"] = new_index
+		ref_label.text = PropertyRow._resolve_ref_name(new_index, _ctx.get_asset())
+		ref_label.tooltip_text = PropertyRow._resolve_ref_type(new_index, _ctx.get_asset())
 	)
 	_container.add_child(hbox)
 
@@ -518,8 +548,13 @@ func _add_dep_array_row(field: String, expo: UAssetExport) -> void:
 			var s := part.strip_edges()
 			if s.is_empty(): continue
 			if s.is_valid_int(): new_indices.append(s.to_int())
-		expo.raw[field] = new_indices
-		_ctx["set_dirty"].call()
+		if new_indices == indices:
+			return
+		var old_indices := indices.duplicate()
+		_ctx.execute("Edit %s" % field,
+			func() -> void: expo.raw[field] = new_indices.duplicate(),
+			func() -> void: expo.raw[field] = old_indices.duplicate())
+		indices = new_indices
 		var new_tip: PackedStringArray = []
 		for idx in new_indices:
 			new_tip.append("%d → %s" % [idx, _resolve_dep_index(idx)])
@@ -530,7 +565,7 @@ func _add_dep_array_row(field: String, expo: UAssetExport) -> void:
 
 
 func _resolve_dep_index(idx: int) -> String:
-	var asset: UAssetFile = _ctx["asset"]
+	var asset := _ctx.get_asset()
 	if idx > 0 and idx <= asset.exports.size():
 		return asset.exports[idx - 1].object_name
 	if idx < 0:
@@ -540,7 +575,12 @@ func _resolve_dep_index(idx: int) -> String:
 	return "?"
 
 
-func _on_row_value_changed(prop: UAssetProperty, old_value: Variant, _new_value: Variant) -> void:
-	_ctx["set_dirty"].call()
-	_ctx["push_undo"].call({"action": "set_value", "prop": prop, "value": old_value})
-	_ctx["refresh_tree_item"].call(prop)
+func _on_row_value_changed(prop: UAssetProperty, old_value: Variant, new_value: Variant) -> void:
+	if not old_value is Dictionary or not new_value is Dictionary:
+		return
+	var old_state := (old_value as Dictionary).duplicate(true)
+	var new_state := (new_value as Dictionary).duplicate(true)
+	_ctx.record_applied("Edit %s" % prop.prop_name,
+		func() -> void: prop.restore_state(new_state),
+		func() -> void: prop.restore_state(old_state))
+	_ctx.refresh_tree_item.call(prop)

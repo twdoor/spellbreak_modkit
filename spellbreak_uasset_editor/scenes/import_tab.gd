@@ -1,7 +1,8 @@
 class_name ImportTab extends HBoxContainer
 
 
-static func setup(imp: UAssetImport, index: int, on_select: Callable = Callable()) -> ImportTab:
+static func setup(imp: UAssetImport, index: int, on_select: Callable = Callable(),
+		on_change: Callable = Callable()) -> ImportTab:
 	var tab := ImportTab.new()
 	tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tab.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
@@ -19,13 +20,28 @@ static func setup(imp: UAssetImport, index: int, on_select: Callable = Callable(
 	tab.add_child(idx_btn)
 
 	# ClassPackage
-	tab.add_child(_make_edit(imp.class_package, 180, func(t): imp.class_package = t))
+	tab.add_child(_make_edit(imp.class_package, 180, func(t):
+		if imp.class_package != t:
+			var old := imp.class_package
+			_apply_change(on_change, "Edit import class package",
+				func() -> void: imp.class_package = t,
+				func() -> void: imp.class_package = old)))
 
 	# ClassName
-	tab.add_child(_make_edit(imp.class_name_str, 140, func(t): imp.class_name_str = t))
+	tab.add_child(_make_edit(imp.class_name_str, 140, func(t):
+		if imp.class_name_str != t:
+			var old := imp.class_name_str
+			_apply_change(on_change, "Edit import class name",
+				func() -> void: imp.class_name_str = t,
+				func() -> void: imp.class_name_str = old)))
 
 	# ObjectName
-	tab.add_child(_make_edit(imp.object_name, 0, func(t): imp.object_name = t, true))
+	tab.add_child(_make_edit(imp.object_name, 0, func(t):
+		if imp.object_name != t:
+			var old := imp.object_name
+			_apply_change(on_change, "Edit import object name",
+				func() -> void: imp.object_name = t,
+				func() -> void: imp.object_name = old), true))
 
 	# OuterIndex
 	var outer := SpinBox.new()
@@ -37,7 +53,13 @@ static func setup(imp: UAssetImport, index: int, on_select: Callable = Callable(
 	outer.rounded = true
 	outer.value = imp.outer_index
 	outer.custom_minimum_size.x = 72
-	outer.value_changed.connect(func(v): imp.outer_index = int(v))
+	outer.value_changed.connect(func(v):
+		var new_value := int(v)
+		if imp.outer_index != new_value:
+			var old_value := imp.outer_index
+			_apply_change(on_change, "Edit import outer index",
+				func() -> void: imp.outer_index = new_value,
+				func() -> void: imp.outer_index = old_value))
 	tab.add_child(outer)
 
 	## PackageName
@@ -57,3 +79,11 @@ static func _make_edit(text: String, min_width: int, on_submit: Callable, expand
 	line.text_submitted.connect(on_submit)
 	line.focus_exited.connect(func(): on_submit.call(line.text))
 	return line
+
+
+static func _apply_change(on_change: Callable, label: String,
+		apply_action: Callable, revert_action: Callable) -> void:
+	if on_change.is_valid():
+		on_change.call(label, apply_action, revert_action)
+	else:
+		apply_action.call()

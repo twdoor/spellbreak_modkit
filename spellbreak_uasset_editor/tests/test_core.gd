@@ -1,0 +1,683 @@
+extends SceneTree
+
+var _failures: Array[String] = []
+
+
+func _init() -> void:
+	_run()
+	if _failures.is_empty():
+		print("PASS: core regression tests")
+		quit(0)
+	else:
+		for failure in _failures:
+			printerr("FAIL: " + failure)
+		quit(1)
+
+
+func _run() -> void:
+	_test_export_insert()
+	_test_export_remove()
+	_test_import_insert_remove()
+	_test_swap_and_snapshot_restore()
+	_test_asset_document_history()
+	_test_property_state_restore()
+	_test_mesh_preview_materials()
+	_test_md5_animation_loader()
+	_test_animation_candidate_discovery()
+	_test_mesh_animation_controls_build()
+	_test_texture_injection_preserves_companions()
+	_test_texture_companion_recovery()
+	_test_background_job_shutdown()
+	_test_atomic_file_install()
+	_test_path_safety()
+	_test_process_arguments()
+	_test_packing_transaction()
+
+
+func _test_export_insert() -> void:
+	var asset := _make_asset()
+	var first := asset.exports[0]
+	var first_import := asset.imports[0]
+	var added := [
+		_make_export("AddedA", 2, -2, 3, [2, 3, -2], 3),
+		_make_export("AddedB", 2, -2, 3, [2, 3, -2], 3),
+	]
+	asset.insert_exports(1, added)
+
+	_expect(asset.exports.size() == 5, "bulk export insert changes table size")
+	_expect(first.outer_index == 4, "existing export positive metadata shifts by insert count")
+	_expect(first.class_index == -2, "export insert leaves import references unchanged")
+	_expect(_object_value(first) == 5, "existing ObjectProperty reference shifts")
+	_expect(first.raw["CreateBeforeCreateDependencies"] == [4, 5, -2],
+		"existing dependency references shift")
+	_expect(added[0].outer_index == 4 and _object_value(added[0]) == 5,
+		"new exports are remapped from the pre-insert coordinate system")
+	_expect(first_import.outer_index == 4, "import outer export reference shifts")
+
+
+func _test_export_remove() -> void:
+	var asset := _make_asset()
+	var first := asset.exports[0]
+	asset.imports[0].outer_index = 3
+	asset.imports[0].raw["OuterIndex"] = 3
+	asset.remove_export_at(1)
+
+	_expect(asset.exports.size() == 2, "export removal changes table size")
+	_expect(first.outer_index == 0, "references to a deleted export are cleared")
+	_expect(_object_value(first) == 2, "references after a deleted export shift down")
+	_expect(first.raw["CreateBeforeCreateDependencies"] == [2, -2],
+		"deleted dependencies are removed and later dependencies shift")
+	_expect(asset.imports[0].outer_index == 2, "import outer reference shifts after export removal")
+
+
+func _test_import_insert_remove() -> void:
+	var asset := _make_asset()
+	var first := asset.exports[0]
+	var added := [
+		_make_import("AddedA", -2),
+		_make_import("AddedB", -3),
+	]
+	asset.insert_imports(1, added)
+
+	_expect(first.class_index == -4, "existing import reference shifts by bulk insert count")
+	_expect(added[0].outer_index == -4, "new import references use pre-insert coordinates")
+	_expect(asset.imports[1].super_index == -2 and asset.imports[2].super_index == -3,
+		"display indices are synchronized after import insertion")
+
+	asset = _make_asset()
+	first = asset.exports[0]
+	first.class_index = -2
+	first.template_index = -3
+	first.raw["ClassIndex"] = -2
+	first.raw["TemplateIndex"] = -3
+	first.properties[0].value = -2
+	first.properties[0].raw["Value"] = -2
+	first.raw["CreateBeforeCreateDependencies"] = [-2, -3, 1]
+	asset.remove_import_at(1)
+
+	_expect(first.class_index == 0 and _object_value(first) == 0,
+		"references to a deleted import are cleared")
+	_expect(first.template_index == -2, "later import references shift toward zero")
+	_expect(first.raw["CreateBeforeCreateDependencies"] == [-2, 1],
+		"import dependency references are remapped")
+
+
+func _test_swap_and_snapshot_restore() -> void:
+	var asset := _make_asset()
+	var snapshot := asset.capture_package_tables()
+	var first := asset.exports[0]
+	asset.swap_exports(1, 2)
+	_expect(first.outer_index == 3 and _object_value(first) == 2,
+		"export swap remaps metadata and ObjectProperty references")
+	_expect(first.raw["CreateBeforeCreateDependencies"] == [3, 2, -2],
+		"export swap remaps dependencies")
+
+	asset.remove_export_at(1)
+	asset.remove_import_at(0)
+	asset.restore_package_tables(snapshot)
+	_expect(asset.exports.size() == 3 and asset.imports.size() == 3,
+		"package table snapshot restores table sizes")
+	_expect(asset.exports[0].outer_index == 2 and _object_value(asset.exports[0]) == 3,
+		"package table snapshot restores exact references")
+
+
+func _test_asset_document_history() -> void:
+	var asset := _make_asset()
+	var document := AssetDocument.new(asset)
+	var state := {"value": 1}
+	var first := AssetEditCommand.new("Set two",
+		func() -> void: state["value"] = 2,
+		func() -> void: state["value"] = 1)
+	_expect(document.execute(first) and state["value"] == 2, "document executes commands")
+	_expect(document.is_dirty() and document.can_undo(), "executed command marks document dirty")
+	document.mark_saved()
+	_expect(not document.is_dirty(), "mark_saved establishes a clean history position")
+
+	var second := AssetEditCommand.new("Set three",
+		func() -> void: state["value"] = 3,
+		func() -> void: state["value"] = 2)
+	document.execute(second)
+	_expect(state["value"] == 3 and document.is_dirty(), "later commands move beyond the save point")
+	_expect(document.undo() and state["value"] == 2 and not document.is_dirty(),
+		"undo returns to the saved state")
+	_expect(document.redo() and state["value"] == 3 and document.is_dirty(), "redo reapplies a command")
+
+	document.undo()
+	document.undo()
+	var branch := AssetEditCommand.new("Set four",
+		func() -> void: state["value"] = 4,
+		func() -> void: state["value"] = 1)
+	document.execute(branch)
+	_expect(state["value"] == 4 and not document.can_redo(), "new edits discard the redo branch")
+	_expect(document.is_dirty(), "discarding the saved branch keeps the document dirty")
+
+
+func _test_property_state_restore() -> void:
+	var prop := UAssetProperty.from_dict({
+		"$type": "UAssetAPI.PropertyTypes.Objects.StructPropertyData, UAssetAPI",
+		"Name": "Container",
+		"StructType": "TestStruct",
+		"Value": [{
+			"$type": "UAssetAPI.PropertyTypes.Objects.NamePropertyData, UAssetAPI",
+			"Name": "TagName",
+			"Value": "Before",
+		}],
+	})
+	var before := prop.capture_state()
+	prop.children[0].set_value("After")
+	var after := prop.capture_state()
+	prop.restore_state(before)
+	_expect(prop.children[0].value == "Before" and prop.to_dict() == before,
+		"property restore synchronizes parsed and raw state")
+	prop.restore_state(after)
+	_expect(prop.children[0].value == "After" and prop.to_dict() == after,
+		"property snapshots can be reapplied for redo")
+
+
+func _test_mesh_preview_materials() -> void:
+	var root := OS.get_temp_dir().path_join("sb_test_mesh_material_%d" % Time.get_ticks_usec())
+	DirAccess.make_dir_recursive_absolute(root)
+	FileUtils.write_bytes_atomic(root.path_join("Body.mat"),
+		"Diffuse=BodyColor\nNormal=BodyNormal\n".to_utf8_buffer())
+	FileUtils.write_bytes_atomic(root.path_join("Body.props.txt"),
+		("BlendMode = BLEND_Masked (1)\n" +
+		"TwoSided = true\n").to_utf8_buffer())
+	var color_image := Image.create(2, 2, false, Image.FORMAT_RGBA8)
+	color_image.fill(Color(0.2, 0.4, 0.8, 1.0))
+	color_image.save_png(root.path_join("BodyColor.png"))
+	var normal_image := Image.create(2, 2, false, Image.FORMAT_RGBA8)
+	normal_image.fill(Color(0.5, 0.5, 1.0, 1.0))
+	normal_image.save_png(root.path_join("BodyNormal.png"))
+
+	var source_material := StandardMaterial3D.new()
+	source_material.resource_name = "Body"
+	var quad := QuadMesh.new()
+	quad.material = source_material
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.mesh = quad
+	var result := MeshPreviewMaterialLoader.apply_to_scene(mesh_instance, root)
+	var material := mesh_instance.get_surface_override_material(0) as StandardMaterial3D
+	_expect(result["applied"] == 1 and material != null,
+		"mesh preview reconstructs an exported material slot")
+	_expect(material.albedo_texture != null and material.normal_texture != null,
+		"mesh preview attaches diffuse and normal textures")
+	_expect(material.cull_mode == BaseMaterial3D.CULL_DISABLED,
+		"mesh preview preserves two-sided material metadata")
+	mesh_instance.free()
+	FileUtils.remove_dir_recursive(root)
+
+
+func _test_md5_animation_loader() -> void:
+	var md5_text := """
+MD5Version 10
+numFrames 2
+numJoints 2
+frameRate 30
+numAnimatedComponents 12
+hierarchy {
+	"root" -1 63 0
+	"hand_r" 0 63 6
+}
+bounds {
+	( -1 -1 -1 ) ( 1 1 1 )
+	( -1 -1 -1 ) ( 1 1 1 )
+}
+baseframe {
+	( 0 0 0 ) ( 0 0 0 )
+	( 0 0 0 ) ( 0 0 0 )
+}
+frame 0 {
+	( 0 0 0 ) ( 0 0 0 )
+	( 0 0 0 ) ( 0 0 0 )
+}
+frame 1 {
+	( 100 0 0 ) ( 0 0 0 )
+	( 0 50 0 ) ( 0 0 0.70710678 )
+}
+"""
+	var parsed := Md5AnimLoader.parse_text(md5_text, "Synthetic")
+	_expect(bool(parsed.get("ok", false)), "MD5 animation parser accepts umodel-style data")
+	_expect(int(parsed["num_frames"]) == 2 and int(parsed["num_joints"]) == 2,
+		"MD5 animation parser preserves header counts")
+
+	var frames: Array = parsed["frames"]
+	var root_frame: Dictionary = frames[1][0]
+	var hand_frame: Dictionary = frames[1][1]
+	_expect(_approx_vec3(root_frame["position"], Vector3(1.0, 0.0, 0.0)),
+		"MD5 animation loader converts positions from centimeters to Godot axes")
+	_expect(_approx_vec3(hand_frame["position"], Vector3(0.0, 0.0, -0.5)),
+		"MD5 animation loader mirrors Unreal Y into Godot Z")
+
+	var preview_root := Node3D.new()
+	var skeleton := Skeleton3D.new()
+	skeleton.name = "Rig"
+	skeleton.add_bone("root")
+	skeleton.add_bone("hand_r")
+	skeleton.set_bone_parent(1, 0)
+	preview_root.add_child(skeleton)
+
+	var built := Md5AnimLoader.build_animation(parsed, skeleton, preview_root, true)
+	_expect(bool(built.get("ok", false)), "MD5 animation builder targets matching skeleton bones")
+	var animation := built.get("animation") as Animation
+	_expect(animation != null and animation.get_track_count() == 4,
+		"MD5 animation builder creates position and rotation tracks per matched bone")
+	if animation != null:
+		_expect(str(animation.track_get_path(0)) == "Rig:root",
+			"MD5 animation tracks address skeleton bones relative to the preview root")
+		_expect(is_equal_approx(animation.length, 1.0 / 30.0),
+			"MD5 animation length reflects frame count and frame rate")
+		_expect(animation.loop_mode == Animation.LOOP_LINEAR,
+			"MD5 animation builder applies requested loop mode")
+	preview_root.free()
+
+	var sparse_text := """
+MD5Version 10
+numFrames 1
+numJoints 1
+frameRate 24
+numAnimatedComponents 1
+hierarchy {
+	"root" -1 2 0
+}
+baseframe {
+	( 10 20 30 ) ( 0 0 0 )
+}
+frame 0 {
+	50
+}
+"""
+	var sparse := Md5AnimLoader.parse_text(sparse_text, "Sparse")
+	_expect(bool(sparse.get("ok", false)), "MD5 animation parser accepts sparse component frames")
+	var sparse_frames: Array = sparse["frames"]
+	var sparse_root: Dictionary = sparse_frames[0][0]
+	_expect(_approx_vec3(sparse_root["position"], Vector3(0.1, 0.3, -0.5)),
+		"MD5 animation parser overlays animated components onto the base frame")
+
+	var flat_root := Node3D.new()
+	var flat_skeleton := Skeleton3D.new()
+	flat_skeleton.name = "FlatRig"
+	flat_skeleton.add_bone("root")
+	for index in range(1, 10):
+		flat_skeleton.add_bone("bone_%d" % index)
+		flat_skeleton.set_bone_parent(index, index - 1)
+	var flat_child_rest := Transform3D.IDENTITY
+	flat_child_rest.basis = Basis(Quaternion(Vector3.FORWARD, deg_to_rad(90.0)))
+	flat_skeleton.set_bone_rest(1, flat_child_rest)
+	flat_root.add_child(flat_skeleton)
+	var flat_joints: Array = [{"name": "root", "parent": -1, "flags": 63, "start": 0}]
+	var flat_frame: Array = [{
+		"position": Vector3.ZERO,
+		"rotation": Quaternion(Vector3.FORWARD, deg_to_rad(10.0)),
+	}]
+	for index in range(1, 10):
+		flat_joints.append({"name": "bone_%d" % index, "parent": 0, "flags": 63, "start": index * 6})
+		flat_frame.append({
+			"position": Vector3.ZERO,
+			"rotation": Quaternion(Vector3.FORWARD, deg_to_rad(20.0)),
+		})
+	var flat_parsed := {
+		"ok": true,
+		"name": "Flattened",
+		"num_frames": 1,
+		"num_joints": flat_joints.size(),
+		"frame_rate": 30.0,
+		"joints": flat_joints,
+		"frames": [flat_frame],
+	}
+	var flat_built := Md5AnimLoader.build_animation(flat_parsed, flat_skeleton, flat_root, true)
+	_expect(bool(flat_built.get("ok", false)), "MD5 animation builder accepts flattened umodel hierarchy")
+	var flat_animation := flat_built.get("animation") as Animation
+	_expect(bool(flat_built.get("flattened_hierarchy", false)),
+		"MD5 animation builder detects flattened umodel hierarchy")
+	_expect(int(flat_built.get("position_bones", -1)) == 0,
+		"MD5 animation builder skips child position tracks for flattened hierarchy")
+	_expect(str(flat_built.get("rotation_mode", "")) == Md5AnimLoader.FLATTENED_ROTATION_LOCAL,
+		"flattened MD5 animation keeps absolute local rotations when frames contain a full pose")
+	if flat_animation != null:
+		_expect(flat_animation.get_track_count() == flat_joints.size(),
+			"flattened MD5 animation emits rotation tracks without collapsing positions")
+		var local_rotation := flat_animation.track_get_key_value(1, 0) as Quaternion
+		_expect(_approx_quat(local_rotation, Quaternion(Vector3.FORWARD, deg_to_rad(20.0))),
+			"flattened MD5 animation preserves absolute local child rotation")
+
+	var delta_frame: Array = [{
+		"position": Vector3.ZERO,
+		"rotation": Quaternion.IDENTITY,
+	}]
+	for index in range(1, 10):
+		var rotation := Quaternion.IDENTITY
+		if index == 1:
+			rotation = Quaternion(Vector3.FORWARD, deg_to_rad(10.0))
+		delta_frame.append({
+			"position": Vector3.ZERO,
+			"rotation": rotation,
+		})
+	var delta_parsed := {
+		"ok": true,
+		"name": "FlattenedDelta",
+		"num_frames": 1,
+		"num_joints": flat_joints.size(),
+		"frame_rate": 30.0,
+		"joints": flat_joints,
+		"frames": [delta_frame],
+	}
+	var delta_built := Md5AnimLoader.build_animation(delta_parsed, flat_skeleton, flat_root, true)
+	var delta_animation := delta_built.get("animation") as Animation
+	_expect(str(delta_built.get("rotation_mode", "")) == Md5AnimLoader.FLATTENED_ROTATION_DELTA,
+		"flattened MD5 animation detects mostly identity pose-delta rotations")
+	if delta_animation != null:
+		var delta_rotation := delta_animation.track_get_key_value(1, 0) as Quaternion
+		var expected_delta_rotation := flat_child_rest.basis.get_rotation_quaternion() * Quaternion(
+			Vector3.FORWARD, deg_to_rad(10.0))
+		_expect(_approx_quat(delta_rotation, expected_delta_rotation),
+			"flattened MD5 animation composes pose-delta rotations with target rest rotation")
+	flat_root.free()
+
+
+func _test_animation_candidate_discovery() -> void:
+	var root := OS.get_temp_dir().path_join("sb_test_anim_candidates_%d" % Time.get_ticks_usec())
+	var mod_root := root.path_join("Mods/TestMod")
+	var source_root := root.path_join("Unchanged")
+	var mesh_path := mod_root.path_join("g3/Content/Characters/Human/Hero/HeroBody.uasset")
+	var idle_path := source_root.path_join("g3/Content/Characters/Human/Animations/Female_Idle_Breathing.uasset")
+	var attack_path := source_root.path_join("g3/Content/Characters/Human/Animations/Combat/FireballAttackToIdleR.uasset")
+	var anim_bp_path := source_root.path_join("g3/Content/Characters/Human/Animations/Human_AnimBlueprint.uasset")
+	var blueprint_path := source_root.path_join("g3/Content/Characters/Human/Animations/BP_NotAnAnimation.uasset")
+	for path in [mesh_path, idle_path, attack_path, anim_bp_path, blueprint_path]:
+		FileUtils.write_bytes_atomic(path, "asset".to_utf8_buffer())
+
+	var config := ModConfigManager.new()
+	config.mods_dir = root.path_join("Mods")
+	config.sources = [{"name": "Base", "path": source_root}]
+	config.set_game_profile_id("spellbreak")
+	var service := MeshService.new().setup(config)
+	var candidates := service.find_animation_assets_for_mesh(mesh_path, 20)
+	_expect(idle_path in candidates and attack_path in candidates,
+		"animation discovery finds likely source animations for a human skeletal mesh")
+	_expect(not anim_bp_path in candidates and not blueprint_path in candidates,
+		"animation discovery filters animation blueprints and regular blueprints")
+	_expect(candidates.find(idle_path) < candidates.find(attack_path),
+		"animation discovery ranks idle animations before attack candidates")
+	FileUtils.remove_dir_recursive(root)
+
+
+func _test_texture_injection_preserves_companions() -> void:
+	var root := OS.get_temp_dir().path_join("sb_test_tex_install_%d" % Time.get_ticks_usec())
+	var original_dir := root.path_join("original")
+	var staged_dir := root.path_join("staged")
+	var output_dir := root.path_join("output")
+	DirAccess.make_dir_recursive_absolute(original_dir)
+	DirAccess.make_dir_recursive_absolute(staged_dir)
+	DirAccess.make_dir_recursive_absolute(output_dir)
+
+	var original_uasset := original_dir.path_join("Texture.uasset")
+	var original_uexp := original_dir.path_join("Texture.uexp")
+	var original_ubulk := original_dir.path_join("Texture.ubulk")
+	FileUtils.write_bytes_atomic(original_uasset, "old-uasset".to_utf8_buffer())
+	FileUtils.write_bytes_atomic(original_uexp, "old-uexp".to_utf8_buffer())
+	FileUtils.write_bytes_atomic(original_ubulk, "old-ubulk".to_utf8_buffer())
+	FileUtils.write_bytes_atomic(staged_dir.path_join("Texture.uasset"), "new-uasset".to_utf8_buffer())
+	FileUtils.write_bytes_atomic(staged_dir.path_join("Texture.uexp"), "new-uexp".to_utf8_buffer())
+
+	var service := TextureService.new()
+	var collected := service._collect_injected_texture_files(
+		original_uasset, staged_dir, original_dir, "Texture")
+	_expect(bool(collected.get("ok", false)),
+		"texture injection collects generated files for in-place install")
+	var install_error := FileUtils.install_staged_files(collected["files"])
+	_expect(install_error == OK, "texture injection staged install succeeds")
+	_expect(FileAccess.get_file_as_string(original_uasset) == "new-uasset",
+		"texture injection replaces generated uasset")
+	_expect(FileAccess.get_file_as_string(original_uexp) == "new-uexp",
+		"texture injection replaces generated uexp")
+	_expect(FileAccess.get_file_as_string(original_ubulk) == "old-ubulk",
+		"texture injection preserves existing ubulk when injector omits it")
+
+	staged_dir = root.path_join("staged_external")
+	DirAccess.make_dir_recursive_absolute(staged_dir)
+	FileUtils.write_bytes_atomic(staged_dir.path_join("Texture.uasset"), "external-uasset".to_utf8_buffer())
+	collected = service._collect_injected_texture_files(original_uasset, staged_dir, output_dir, "Texture")
+	_expect(bool(collected.get("ok", false)),
+		"texture injection collects preserved companions for alternate output")
+	install_error = FileUtils.install_staged_files(collected["files"])
+	_expect(install_error == OK, "texture injection alternate output install succeeds")
+	_expect(FileAccess.get_file_as_string(output_dir.path_join("Texture.uasset")) == "external-uasset",
+		"texture injection writes generated uasset to alternate output")
+	_expect(FileAccess.get_file_as_string(output_dir.path_join("Texture.uexp")) == "new-uexp",
+		"texture injection copies original uexp to alternate output when omitted")
+	_expect(FileAccess.get_file_as_string(output_dir.path_join("Texture.ubulk")) == "old-ubulk",
+		"texture injection copies original ubulk to alternate output when omitted")
+	FileUtils.remove_dir_recursive(root)
+
+
+func _test_texture_companion_recovery() -> void:
+	var root := OS.get_temp_dir().path_join("sb_test_tex_recover_%d" % Time.get_ticks_usec())
+	var mod_dir := root.path_join("Mods/TestMod")
+	var source_dir := root.path_join("Unchanged")
+	var relative := "g3/Content/Characters/Human/Test/Texture"
+	DirAccess.make_dir_recursive_absolute(mod_dir.path_join(relative.get_base_dir()))
+	DirAccess.make_dir_recursive_absolute(source_dir.path_join(relative.get_base_dir()))
+
+	var uasset_path := mod_dir.path_join(relative + ".uasset")
+	var source_ubulk := source_dir.path_join(relative + ".ubulk")
+	var target_ubulk := mod_dir.path_join(relative + ".ubulk")
+	FileUtils.write_bytes_atomic(uasset_path, "uasset".to_utf8_buffer())
+	FileUtils.write_bytes_atomic(source_ubulk, "source-ubulk".to_utf8_buffer())
+
+	var config := ModConfigManager.new()
+	config.mods_dir = root.path_join("Mods")
+	config.sources = [{"name": "Base", "path": source_dir}]
+	config.set_game_profile_id("spellbreak")
+	var service := TextureService.new().setup(config)
+	var recovered := service._restore_missing_texture_companions(uasset_path)
+	_expect(bool(recovered.get("ok", false)),
+		"texture recovery succeeds when a configured source has the missing companion")
+	_expect(FileAccess.get_file_as_string(target_ubulk) == "source-ubulk",
+		"texture recovery restores missing ubulk before DDS tools read the package")
+	FileUtils.remove_dir_recursive(root)
+
+
+func _test_mesh_animation_controls_build() -> void:
+	var detail := MeshDetail.new()
+	var container := VBoxContainer.new()
+	detail._container = container
+	detail._preview_scene = Node3D.new()
+	detail._preview_skeleton = Skeleton3D.new()
+	detail._preview_skeleton.add_bone("root")
+	detail._set_animation_controls_ready(true)
+	detail._build_animation_controls()
+	detail._set_animation_controls_ready(detail._preview_skeleton != null)
+	_expect(container.get_child_count() > 0,
+		"mesh animation controls build without runtime property errors")
+	_expect(not detail._anim_auto_btn.disabled and not detail._anim_load_btn.disabled,
+		"mesh animation controls enable when cached mesh preview already found a skeleton")
+	_expect(detail._anim_speed_spin is SpinBox and not detail._anim_speed_spin.editable,
+		"mesh animation speed control starts read-only")
+	_expect(detail._anim_slider is HSlider and not detail._anim_slider.editable,
+		"mesh animation scrub control starts read-only")
+	detail._set_animation_loaded(true)
+	_expect(detail._anim_speed_spin.editable,
+		"mesh animation speed control becomes editable when animation is loaded")
+	_expect(detail._anim_slider.editable,
+		"mesh animation scrub control becomes editable when animation is loaded")
+	detail._set_animation_loaded(false)
+	_expect(not detail._anim_speed_spin.editable,
+		"mesh animation speed control returns to read-only when animation is cleared")
+	_expect(not detail._anim_slider.editable,
+		"mesh animation scrub control returns to read-only when animation is cleared")
+	detail._preview_skeleton.set_bone_pose_rotation(0, Quaternion(Vector3.FORWARD, deg_to_rad(20.0)))
+	detail._reset_preview_skeleton_pose()
+	_expect(_approx_quat(detail._preview_skeleton.get_bone_pose_rotation(0), Quaternion.IDENTITY),
+		"mesh animation preview resets stale bone poses before loading another animation")
+	detail._preview_scene.free()
+	container.free()
+
+
+func _test_background_job_shutdown() -> void:
+	var root := OS.get_temp_dir().path_join("sb_test_job_%d" % Time.get_ticks_usec())
+	DirAccess.make_dir_recursive_absolute(root)
+	var marker := root.path_join("finished.txt")
+	var runner := BackgroundJobRunner.new()
+	var job_id := runner.run(func() -> bool:
+		OS.delay_msec(10)
+		return FileUtils.write_bytes_atomic(marker, "done".to_utf8_buffer()) == OK,
+		Callable())
+	_expect(job_id >= 0, "background runner accepts work")
+	runner.wait_to_finish()
+	_expect(FileAccess.get_file_as_string(marker) == "done",
+		"background runner joins active work during shutdown")
+	FileUtils.remove_dir_recursive(root)
+
+
+func _test_atomic_file_install() -> void:
+	var root := OS.get_temp_dir().path_join("sb_test_files_%d" % Time.get_ticks_usec())
+	DirAccess.make_dir_recursive_absolute(root)
+	var target := root.path_join("target.bin")
+	var staged := root.path_join("staged.bin")
+	var obsolete := root.path_join("obsolete.bin")
+	FileUtils.write_bytes_atomic(target, "old".to_utf8_buffer())
+	FileUtils.write_bytes_atomic(staged, "new".to_utf8_buffer())
+	FileUtils.write_bytes_atomic(obsolete, "stale".to_utf8_buffer())
+	var error := FileUtils.install_staged_files(
+		[{"source": staged, "target": target}], [obsolete])
+	_expect(error == OK, "atomic file install succeeds")
+	_expect(FileAccess.get_file_as_string(target) == "new", "atomic file install replaces content")
+	_expect(not FileAccess.file_exists(staged), "atomic file install consumes staged file")
+	_expect(not FileAccess.file_exists(obsolete), "atomic file install removes obsolete companions")
+	FileUtils.remove_dir_recursive(root)
+
+
+func _test_path_safety() -> void:
+	_expect(FileUtils.is_path_within("/mods/example/Content/a.uasset", "/mods/example"),
+		"path containment accepts descendants")
+	_expect(not FileUtils.is_path_within("/mods/example2/a.uasset", "/mods/example"),
+		"path containment rejects prefix collisions")
+	_expect(not FileUtils.is_path_within("/mods/example/../outside", "/mods/example"),
+		"path containment rejects parent traversal")
+	_expect(FileUtils.is_safe_filename("My Mod") and not FileUtils.is_safe_filename("../outside"),
+		"folder name validation rejects path components")
+
+
+func _test_process_arguments() -> void:
+	var python := ProcessUtils.find_python()
+	if python.is_empty():
+		return
+	var root := OS.get_temp_dir().path_join("sb test's args %d" % Time.get_ticks_usec())
+	DirAccess.make_dir_recursive_absolute(root)
+	var script := root.path_join("print_args.py")
+	FileUtils.write_bytes_atomic(script,
+		"import os, sys\nprint(os.getcwd())\nprint(sys.argv[1])\n".to_utf8_buffer())
+	var output: Array = []
+	var argument := "value with spaces and 'quotes'"
+	var code := ProcessUtils.run_python_script(python, script, root, [argument], output)
+	var text := ProcessUtils.output_text(output, "")
+	_expect(code == 0, "Python working-directory wrapper succeeds")
+	_expect(root.get_file() in text and argument in text,
+		"subprocess paths and arguments are passed literally")
+	FileUtils.remove_dir_recursive(root)
+
+
+func _test_packing_transaction() -> void:
+	if ProcessUtils.find_python().is_empty():
+		return
+	var root := OS.get_temp_dir().path_join("sb_test_pack_%d" % Time.get_ticks_usec())
+	var game_dir := root.path_join("game")
+	var paks_dir := game_dir.path_join("Content/Paks")
+	var mod_dir := root.path_join("mods/TestMod")
+	DirAccess.make_dir_recursive_absolute(paks_dir)
+	FileUtils.write_bytes_atomic(mod_dir.path_join("Content/example.bin"), "payload".to_utf8_buffer())
+
+	var config := ModConfigManager.new()
+	config.game_dir = game_dir
+	config.mods_dir = root.path_join("mods")
+	config.u4pak_dir = ProjectSettings.globalize_path("res://u4pak")
+	config.set_game_profile_id("ue_4.27")
+	var packer := PackingService.new().setup(config)
+	var result := packer._do_pack([{"name": "TestMod", "path": mod_dir}])
+	var pak_path := paks_dir.path_join("zzz_mods_P.pak")
+	_expect(result[0] and FileAccess.file_exists(pak_path), "u4pak integration produces a pak")
+
+	if FileAccess.file_exists(pak_path):
+		var previous := FileAccess.get_file_as_bytes(pak_path)
+		var failing_tool_dir := root.path_join("failing_u4pak")
+		DirAccess.make_dir_recursive_absolute(failing_tool_dir)
+		FileUtils.write_bytes_atomic(failing_tool_dir.path_join("u4pak.py"),
+			"raise SystemExit(7)\n".to_utf8_buffer())
+		config.u4pak_dir = failing_tool_dir
+		var failed_result := packer._do_pack([{"name": "TestMod", "path": mod_dir}])
+		_expect(not failed_result[0], "packing reports subprocess failure")
+		_expect(FileAccess.get_file_as_bytes(pak_path) == previous,
+			"failed packing preserves the previously installed pak")
+
+	FileUtils.remove_dir_recursive(root)
+
+
+func _make_asset() -> UAssetFile:
+	var asset := UAssetFile.new()
+	asset.raw = {}
+	asset.name_map = PackedStringArray(["One", "Two", "Three"])
+	asset.imports = [
+		_make_import("Import1", 2),
+		_make_import("Import2", -1),
+		_make_import("Import3", -2),
+	]
+	asset.exports = [
+		_make_export("Export1", 2, -2, 0, [2, 3, -2], 3),
+		_make_export("Export2", 1, -1, 0, [1], 1),
+		_make_export("Export3", 1, -3, 0, [1, -3], 1),
+	]
+	return asset
+
+
+func _make_import(name: String, outer: int) -> UAssetImport:
+	return UAssetImport.from_dict({
+		"$type": "UAssetAPI.Import, UAssetAPI",
+		"ObjectName": name,
+		"ClassName": "Class",
+		"ClassPackage": "/Script/CoreUObject",
+		"PackageName": null,
+		"OuterIndex": outer,
+		"bImportOptional": false,
+	}, 0)
+
+
+func _make_export(name: String, outer: int, class_index: int, template: int,
+		dependencies: Array, object_value: int) -> UAssetExport:
+	return UAssetExport.from_dict({
+		"$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI",
+		"ObjectName": name,
+		"OuterIndex": outer,
+		"ClassIndex": class_index,
+		"SuperIndex": 0,
+		"TemplateIndex": template,
+		"SerialSize": 0,
+		"SerialOffset": 0,
+		"CreateBeforeCreateDependencies": dependencies.duplicate(),
+		"CreateBeforeSerializationDependencies": [],
+		"SerializationBeforeCreateDependencies": [],
+		"SerializationBeforeSerializationDependencies": [],
+		"Data": [{
+			"$type": "UAssetAPI.PropertyTypes.Objects.ObjectPropertyData, UAssetAPI",
+			"Name": "ObjectRef",
+			"ArrayIndex": 0,
+			"IsZero": false,
+			"Value": object_value,
+		}],
+	})
+
+
+func _object_value(expo: UAssetExport) -> int:
+	return int(expo.properties[0].value)
+
+
+func _expect(condition: bool, message: String) -> void:
+	if not condition:
+		_failures.append(message)
+
+
+func _approx_vec3(actual: Vector3, expected: Vector3, epsilon: float = 0.0001) -> bool:
+	return actual.distance_to(expected) <= epsilon
+
+
+func _approx_quat(actual: Quaternion, expected: Quaternion, epsilon: float = 0.0001) -> bool:
+	return abs(actual.normalized().dot(expected.normalized())) >= 1.0 - epsilon

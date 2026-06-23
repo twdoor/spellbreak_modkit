@@ -93,11 +93,17 @@ func _on_confirmed() -> void:
 	var project_root := _root_edit.text.strip_edges()
 	if project_root.is_empty():
 		project_root = "Content"
+	if not FileUtils.is_safe_filename(project_root):
+		_root_edit.grab_focus()
+		return
 
 	# Sanitize the profile directory name
 	var profile_id := game_name.to_lower().replace(" ", "_")
 	for ch in [".", "/", "\\", ":", "*", "?", "\"", "<", ">", "|"]:
 		profile_id = profile_id.replace(ch, "")
+	if profile_id.is_empty():
+		_name_edit.grab_focus()
+		return
 
 	# Create the profile directory
 	var profiles_dir := GameProfile.get_user_profiles_dir()
@@ -127,10 +133,9 @@ func _on_confirmed() -> void:
 		"has_constants": _constants_check.button_pressed,
 	}
 	var profile_json := JSON.stringify(profile_data, "  ")
-	var f := FileAccess.open(profile_dir.path_join("profile.json"), FileAccess.WRITE)
-	if f:
-		f.store_string(profile_json)
-		f.close()
+	var profile_path := profile_dir.path_join("profile.json")
+	if FileUtils.write_bytes_atomic(profile_path, profile_json.to_utf8_buffer()) != OK:
+		return
 
 	# Chain file-import dialogs for each checked optional JSON, then emit.
 	var _steps: Array[Callable] = []
@@ -166,13 +171,7 @@ func _import_json_file(profile_dir: String, filename: String, dialog_title: Stri
 	dialog.use_native_dialog = true
 	dialog.file_selected.connect(func(path: String) -> void:
 		# Copy the selected JSON file into the profile directory
-		var data := FileAccess.get_file_as_bytes(path)
-		if data.size() > 0:
-			var dst := profile_dir.path_join(filename)
-			var out := FileAccess.open(dst, FileAccess.WRITE)
-			if out:
-				out.store_buffer(data)
-				out.close()
+		FileUtils.copy_file(path, profile_dir.path_join(filename))
 		dialog.queue_free()
 		on_done.call()
 	)

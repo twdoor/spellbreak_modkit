@@ -31,11 +31,13 @@ var _cfg: ModConfigManager
 var _texture_service: TextureService
 var _sound_service: SoundService
 var _mesh_service: MeshService
+var _background_jobs: BackgroundJobRunner
 
 const _TOAST_HIDDEN_Y := -8.0   # resting offset_bottom when hidden (just off-screen bottom)
 const _TOAST_SHOWN_Y  := -72.0  # offset_bottom when fully visible
 
 func _ready() -> void:
+	_background_jobs = BackgroundJobRunner.new()
 	GUIDE.enable_mapping_context(mapping)
 
 	open_file_popup.file_selected.connect(_on_file_selected)
@@ -58,6 +60,17 @@ func _ready() -> void:
 	_build_close_dialog()
 	_build_status_bar()
 	_setup_mod_tab()
+
+
+func _exit_tree() -> void:
+	if _background_jobs:
+		_background_jobs.wait_to_finish()
+	if _texture_service:
+		_texture_service.wait_to_finish()
+	if _sound_service:
+		_sound_service.wait_to_finish()
+	if _mesh_service:
+		_mesh_service.wait_to_finish()
 
 
 func _build_status_bar() -> void:
@@ -198,7 +211,11 @@ func _on_save_and_close(action: StringName) -> void:
 	if action != &"save_close":
 		return
 	if is_instance_valid(_tab_pending_close):
-		_tab_pending_close.save_asset()
+		var error := _tab_pending_close.save_asset()
+		if error != OK:
+			_show_toast("Save failed (error %d)" % error)
+			_close_dialog.hide()
+			return
 		_show_toast("Saved  " + _tab_pending_close.tab_asset.file_path.get_file())
 		_tab_pending_close.queue_free()
 	_tab_pending_close = null
@@ -230,7 +247,8 @@ func _on_file_selected(path: String) -> void:
 	if _cfg:
 		asset.game_profile = _cfg.get_game_profile()
 
-	var new_tab := UassetFileTab.setup(asset, _texture_service, _sound_service, _mesh_service)
+	var new_tab := UassetFileTab.setup(asset, _texture_service, _sound_service,
+		_mesh_service, _background_jobs)
 	tab_cont.add_child(new_tab)
 	# Refresh all tab titles: duplicates get "ParentFolder/Name", unique ones stay short.
 	_refresh_tab_titles()
@@ -281,8 +299,11 @@ func _close_current_tab() -> void:
 func _save_current_tab() -> void:
 	var tab = tab_cont.get_current_tab_control()
 	if tab and tab is UassetFileTab:
-		tab.save_asset()
-		_show_toast("Saved  " + tab.tab_asset.file_path.get_file())
+		var error: Error = tab.save_asset()
+		if error == OK:
+			_show_toast("Saved  " + tab.tab_asset.file_path.get_file())
+		else:
+			_show_toast("Save failed (error %d)" % error)
 
 
 func _copy_selection() -> void:

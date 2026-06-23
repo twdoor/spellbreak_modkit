@@ -131,10 +131,7 @@ static func _extract_converter_to_user_dir(user_dir: String) -> void:
 		var data := FileAccess.get_file_as_bytes(src)
 		if data.size() == 0:
 			continue
-		var f := FileAccess.open(dst, FileAccess.WRITE)
-		if f:
-			f.store_buffer(data)
-			f.close()
+		FileUtils.write_bytes_atomic(dst, data)
 
 
 ## Load a UAssetAPI JSON or binary .uasset file and parse it into objects.
@@ -223,9 +220,10 @@ static func _from_dict(data: Dictionary, path: String) -> UAssetFile:
 	# Imports
 	var imp_arr = data.get("Imports")
 	if imp_arr is Array:
-		for imp_dict in imp_arr:
+		for i in imp_arr.size():
+			var imp_dict: Variant = imp_arr[i]
 			if imp_dict is Dictionary:
-				asset.imports.append(UAssetImport.from_dict(imp_dict, -1 * (imp_arr.find(imp_dict) + 1)))
+				asset.imports.append(UAssetImport.from_dict(imp_dict, -(i + 1)))
 	
 	# Exports
 	var exp_arr = data.get("Exports")
@@ -314,6 +312,12 @@ func save_file(path: String = "") -> Error:
 		var out_uasset := target if target.ends_with(".uasset") else binary_path
 		var tmp_json := OS.get_temp_dir().path_join("sb_edit_%d.json" % Time.get_ticks_msec())
 		var dll := _get_converter_dll()
+		if dll.is_empty() or not FileAccess.file_exists(dll):
+			push_error("UAssetFile: Converter not found")
+			return ERR_FILE_NOT_FOUND
+		var stage_stem := out_uasset.get_base_dir().path_join(
+			".%s.sb_save_%d" % [out_uasset.get_file().get_basename(), Time.get_ticks_usec()])
+		var staged_uasset := stage_stem + ".uasset"
 
 		# Retry loop: if the converter reports a missing FName, add it to the
 		# NameMap, regenerate the JSON, and try again.  Any other error is fatal.
@@ -327,8 +331,9 @@ func save_file(path: String = "") -> Error:
 			tmp_file.store_string(json_string)
 			tmp_file.close()
 
+			_remove_staged_asset_files(stage_stem)
 			var output: Array = []
-			var exit_code := OS.execute("dotnet", [dll, "fromjson", tmp_json, out_uasset], output, true)
+			var exit_code := OS.execute("dotnet", [dll, "fromjson", tmp_json, staged_uasset], output, true)
 
 			if exit_code == 0:
 				break  # success
@@ -338,6 +343,7 @@ func save_file(path: String = "") -> Error:
 
 			if missing.is_empty() or retries >= MAX_NAME_RETRIES:
 				DirAccess.remove_absolute(tmp_json)
+				_remove_staged_asset_files(stage_stem)
 				push_error("UAssetFile: Converter failed (exit %d): %s" % [exit_code, err_text])
 				return ERR_FILE_CANT_WRITE
 
@@ -349,22 +355,48 @@ func save_file(path: String = "") -> Error:
 			retries += 1
 
 		DirAccess.remove_absolute(tmp_json)
+		var staged_files: Array = []
+		var removed_targets: Array[String] = []
+		for extension in ["uasset", "uexp", "ubulk", "uptnl"]:
+			var source: String = stage_stem + "." + extension
+			var companion_target: String = out_uasset.get_basename() + "." + extension
+			if FileAccess.file_exists(source):
+				staged_files.append({
+					"source": source,
+					"target": companion_target,
+				})
+			elif extension != "uasset" and FileAccess.file_exists(companion_target):
+				removed_targets.append(companion_target)
+		if staged_files.is_empty() or not FileAccess.file_exists(staged_uasset):
+			_remove_staged_asset_files(stage_stem)
+			push_error("UAssetFile: Converter did not produce a .uasset file")
+			return ERR_FILE_CANT_WRITE
+		var install_error := FileUtils.install_staged_files(staged_files, removed_targets)
+		if install_error != OK:
+			_remove_staged_asset_files(stage_stem)
+			push_error("UAssetFile: Could not install converted asset (error %d)" % install_error)
+			return install_error
 		binary_path = out_uasset
+		file_path = out_uasset
 		file_saved.emit(out_uasset)
 		return OK
 
 	# JSON save path
-	var file := FileAccess.open(target, FileAccess.WRITE)
-	if not file:
+	var write_error := FileUtils.write_bytes_atomic(target, json_string.to_utf8_buffer())
+	if write_error != OK:
 		push_error("UAssetFile: Cannot write: " + target)
-		return ERR_FILE_CANT_WRITE
-
-	file.store_string(json_string)
-	file.close()
+		return write_error
 
 	file_path = target
 	file_saved.emit(target)
 	return OK
+
+
+static func _remove_staged_asset_files(stage_stem: String) -> void:
+	for extension in ["uasset", "uexp", "ubulk", "uptnl"]:
+		var path: String = stage_stem + "." + extension
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(path)
 
 
 ## Godot's JSON parser turns all ints into floats (0 → 0.0).
@@ -405,6 +437,233 @@ func _to_dict() -> Dictionary:
 	data["Exports"] = exp_arr
 	
 	return data
+
+
+# ── Package index table mutations ─────────────────────────────────────────────
+
+const _DEPENDENCY_FIELDS := [
+	"CreateBeforeCreateDependencies",
+	"CreateBeforeSerializationDependencies",
+	"SerializationBeforeCreateDependencies",
+	"SerializationBeforeSerializationDependencies",
+]
+
+
+## Capture the two package-indexed tables for an exact undo restore.
+func capture_package_tables() -> Dictionary:
+	var import_data: Array = []
+	for imp in imports:
+		import_data.append(imp.to_dict())
+	var export_data: Array = []
+	for expo in exports:
+		export_data.append(expo.to_dict())
+	return {"imports": import_data, "exports": export_data}
+
+
+## Restore a snapshot returned by capture_package_tables().
+func restore_package_tables(snapshot: Dictionary) -> void:
+	imports.clear()
+	exports.clear()
+	var import_data: Array = snapshot.get("imports", [])
+	for i in import_data.size():
+		imports.append(UAssetImport.from_dict((import_data[i] as Dictionary).duplicate(true), -(i + 1)))
+	var export_data: Array = snapshot.get("exports", [])
+	for raw_export in export_data:
+		exports.append(UAssetExport.from_dict((raw_export as Dictionary).duplicate(true)))
+
+
+## Insert exports while preserving every positive package index reference.
+func insert_exports(at: int, new_exports: Array) -> void:
+	if new_exports.is_empty():
+		return
+	at = clampi(at, 0, exports.size())
+	var first_index := at + 1
+	var count := new_exports.size()
+	var index_mapper := func(value: int) -> int:
+		return value + count if value > 0 and value >= first_index else value
+	_remap_all_package_indices(index_mapper)
+	for expo in new_exports:
+		_remap_export(expo, index_mapper)
+	for i in new_exports.size():
+		exports.insert(at + i, new_exports[i])
+
+
+func insert_export(at: int, expo: UAssetExport) -> void:
+	insert_exports(at, [expo])
+
+
+## Remove exports and clear references to deleted entries.
+func remove_exports(indices: Array) -> void:
+	var normalized := _normalized_indices(indices, exports.size())
+	if normalized.is_empty():
+		return
+	var deleted_package_indices: Array[int] = []
+	for index in normalized:
+		deleted_package_indices.append(index + 1)
+	for i in range(normalized.size() - 1, -1, -1):
+		exports.remove_at(normalized[i])
+	var index_mapper := func(value: int) -> int:
+		if value <= 0:
+			return value
+		if value in deleted_package_indices:
+			return 0
+		var shift := 0
+		for deleted in deleted_package_indices:
+			if deleted < value:
+				shift += 1
+		return value - shift
+	_remap_all_package_indices(index_mapper)
+
+
+func remove_export_at(index: int) -> void:
+	remove_exports([index])
+
+
+## Insert imports while preserving every negative package index reference.
+func insert_imports(at: int, new_imports: Array) -> void:
+	if new_imports.is_empty():
+		return
+	at = clampi(at, 0, imports.size())
+	var first_absolute_index := at + 1
+	var count := new_imports.size()
+	var index_mapper := func(value: int) -> int:
+		return value - count if value < 0 and -value >= first_absolute_index else value
+	_remap_all_package_indices(index_mapper)
+	for imp in new_imports:
+		_remap_import(imp, index_mapper)
+	for i in new_imports.size():
+		imports.insert(at + i, new_imports[i])
+	_sync_import_indices()
+
+
+func insert_import(at: int, imp: UAssetImport) -> void:
+	insert_imports(at, [imp])
+
+
+## Remove imports and clear references to deleted entries.
+func remove_imports(indices: Array) -> void:
+	var normalized := _normalized_indices(indices, imports.size())
+	if normalized.is_empty():
+		return
+	var deleted_package_indices: Array[int] = []
+	for index in normalized:
+		deleted_package_indices.append(-(index + 1))
+	for i in range(normalized.size() - 1, -1, -1):
+		imports.remove_at(normalized[i])
+	var index_mapper := func(value: int) -> int:
+		if value >= 0:
+			return value
+		if value in deleted_package_indices:
+			return 0
+		var shift := 0
+		for deleted in deleted_package_indices:
+			if deleted > value:
+				shift += 1
+		return value + shift
+	_remap_all_package_indices(index_mapper)
+	_sync_import_indices()
+
+
+func remove_import_at(index: int) -> void:
+	remove_imports([index])
+
+
+## Swap exports and remap references to the two positive package indices.
+func swap_exports(a: int, b: int) -> void:
+	if a < 0 or b < 0 or a >= exports.size() or b >= exports.size() or a == b:
+		return
+	var index_a := a + 1
+	var index_b := b + 1
+	var temp := exports[a]
+	exports[a] = exports[b]
+	exports[b] = temp
+	var index_mapper := func(value: int) -> int:
+		if value == index_a:
+			return index_b
+		if value == index_b:
+			return index_a
+		return value
+	_remap_all_package_indices(index_mapper)
+
+
+func _remap_all_package_indices(index_mapper: Callable) -> void:
+	for expo in exports:
+		_remap_export(expo, index_mapper)
+	for imp in imports:
+		_remap_import(imp, index_mapper)
+
+
+func _remap_export(expo: UAssetExport, index_mapper: Callable) -> void:
+	expo.outer_index = index_mapper.call(expo.outer_index)
+	expo.class_index = index_mapper.call(expo.class_index)
+	expo.super_index = index_mapper.call(expo.super_index)
+	expo.template_index = index_mapper.call(expo.template_index)
+	expo.raw["OuterIndex"] = expo.outer_index
+	expo.raw["ClassIndex"] = expo.class_index
+	expo.raw["SuperIndex"] = expo.super_index
+	expo.raw["TemplateIndex"] = expo.template_index
+	for field in _DEPENDENCY_FIELDS:
+		var raw_dependencies: Variant = expo.raw.get(field)
+		if raw_dependencies is Array:
+			var dependencies: Array = []
+			for raw_index in raw_dependencies:
+				var new_index: int = index_mapper.call(int(raw_index))
+				if new_index != 0:
+					dependencies.append(new_index)
+			expo.raw[field] = dependencies
+	for prop in expo.properties:
+		_remap_property_indices(prop, index_mapper)
+
+
+func _remap_import(imp: UAssetImport, index_mapper: Callable) -> void:
+	imp.outer_index = index_mapper.call(imp.outer_index)
+	imp.raw["OuterIndex"] = imp.outer_index
+
+
+func _remap_property_indices(prop: UAssetProperty, index_mapper: Callable) -> void:
+	if prop.prop_type == "Object":
+		var value := int(prop.value) if prop.value != null else 0
+		prop.value = index_mapper.call(value)
+		prop.raw["Value"] = prop.value
+	elif prop.value is Dictionary or prop.value is Array:
+		_remap_raw_object_references(prop.value, index_mapper)
+	for child in prop.children:
+		_remap_property_indices(child, index_mapper)
+
+
+func _remap_raw_object_references(value: Variant, index_mapper: Callable) -> void:
+	if value is Dictionary:
+		var dictionary := value as Dictionary
+		var type_name := str(dictionary.get("$type", ""))
+		if "ObjectPropertyData" in type_name \
+				and (dictionary.get("Value") is int or dictionary.get("Value") is float):
+			dictionary["Value"] = index_mapper.call(int(dictionary["Value"]))
+		for key in dictionary:
+			var child: Variant = dictionary[key]
+			if child is Dictionary or child is Array:
+				_remap_raw_object_references(child, index_mapper)
+	elif value is Array:
+		for child in value:
+			if child is Dictionary or child is Array:
+				_remap_raw_object_references(child, index_mapper)
+
+
+func _sync_import_indices() -> void:
+	for i in imports.size():
+		imports[i].super_index = -(i + 1)
+
+
+static func _normalized_indices(indices: Array, table_size: int) -> Array[int]:
+	var unique: Dictionary = {}
+	for raw_index in indices:
+		var index := int(raw_index)
+		if index >= 0 and index < table_size:
+			unique[index] = true
+	var result: Array[int] = []
+	for index in unique:
+		result.append(index)
+	result.sort()
+	return result
 
 
 # ── Convenience Methods ────────────────────────────────────────

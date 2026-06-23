@@ -121,26 +121,33 @@ func _do_export_png(uasset_path: String, output_png: String) -> Array:
 	if main_py.is_empty() or not FileAccess.file_exists(main_py):
 		return [false, "UE4-DDS-Tools not configured", ""]
 
+	var repaired := _restore_missing_texture_companions(uasset_path)
+	if not bool(repaired.get("ok", false)):
+		return [false, str(repaired.get("error", "Texture package is missing companion files")), ""]
+
 	var magick := _find_magick()
 	if magick.is_empty():
 		return [false, "ImageMagick (magick) not found in PATH", ""]
 
 	# Step 1: Export to DDS in temp dir
-	var tmp_dir := OS.get_temp_dir().path_join("sb_tex_%d" % Time.get_ticks_msec())
+	var tmp_dir := OS.get_temp_dir().path_join("sb_tex_%d" % Time.get_ticks_usec())
 	DirAccess.make_dir_recursive_absolute(tmp_dir)
 
 	var dds_tools_dir := _cfg.get_dds_tools_dir()
-	var python := _find_python()
+	var python := ProcessUtils.find_python()
+	if python.is_empty():
+		_remove_dir(tmp_dir)
+		return [false, "Python was not found in PATH", ""]
 
 	var dds_ver := _cfg.get_game_profile().dds_tools_version
-	var cmd_str := "cd '%s' && '%s' '%s' '%s' --mode export --export_as dds --version %s --save_folder '%s' --skip_non_texture" \
-		% [dds_tools_dir, python, main_py, uasset_path, dds_ver, tmp_dir]
-
 	var output: Array = []
-	var code := OS.execute("sh", ["-c", cmd_str], output, true)
+	var code := ProcessUtils.run_python_script(python, main_py, dds_tools_dir, [
+		uasset_path, "--mode", "export", "--export_as", "dds", "--version", dds_ver,
+		"--save_folder", tmp_dir, "--skip_non_texture",
+	], output)
 	if code != 0:
 		_remove_dir(tmp_dir)
-		var err_text: String = output[0] if output.size() > 0 else "no output"
+		var err_text := ProcessUtils.output_text(output)
 		return [false, "DDS export failed (exit %d): %s" % [code, err_text], ""]
 
 	# Find the exported DDS file
@@ -157,19 +164,22 @@ func _do_export_png(uasset_path: String, output_png: String) -> Array:
 		DirAccess.make_dir_recursive_absolute(cache_dir)
 		target_png = cache_dir.path_join(_cache_key(uasset_path) + ".png")
 
-	var convert_cmd := "'%s' '%s' '%s'" % [magick, dds_path, target_png]
+	var staged_png := tmp_dir.path_join("converted.png")
 	var convert_output: Array = []
-	var convert_code := OS.execute("sh", ["-c", convert_cmd], convert_output, true)
-
-	# Clean up temp DDS
-	_remove_dir(tmp_dir)
+	var convert_code := OS.execute(magick, [dds_path, staged_png], convert_output, true, false)
 
 	if convert_code != 0:
-		var err_text: String = convert_output[0] if convert_output.size() > 0 else "no output"
+		_remove_dir(tmp_dir)
+		var err_text := ProcessUtils.output_text(convert_output)
 		return [false, "DDS->PNG conversion failed: %s" % err_text, ""]
 
-	if not FileAccess.file_exists(target_png):
+	if not FileAccess.file_exists(staged_png):
+		_remove_dir(tmp_dir)
 		return [false, "PNG file was not created", ""]
+	var install_error := FileUtils.install_staged_files([{"source": staged_png, "target": target_png}])
+	_remove_dir(tmp_dir)
+	if install_error != OK:
+		return [false, "Could not install PNG (error %d)" % install_error, ""]
 
 	return [true, "Exported to %s" % target_png.get_file(), target_png]
 
@@ -186,42 +196,63 @@ func _do_inject_png(uasset_path: String, png_path: String, output_dir: String) -
 	if not FileAccess.file_exists(png_path):
 		return [false, "PNG file not found: %s" % png_path]
 
+	var repaired := _restore_missing_texture_companions(uasset_path)
+	if not bool(repaired.get("ok", false)):
+		return [false, str(repaired.get("error", "Texture package is missing companion files"))]
+
 	var magick := _find_magick()
 	if magick.is_empty():
 		return [false, "ImageMagick (magick) not found in PATH"]
 
-	var tmp_dir := OS.get_temp_dir().path_join("sb_inject_%d" % Time.get_ticks_msec())
+	var tmp_dir := OS.get_temp_dir().path_join("sb_inject_%d" % Time.get_ticks_usec())
 	DirAccess.make_dir_recursive_absolute(tmp_dir)
 
 	# Step 1: Convert PNG to TGA via ImageMagick (lossless, no compression issues)
 	# TGA is natively supported by texconv on all platforms (no WIC needed).
 	var tga_path := tmp_dir.path_join("texture.tga")
-	var convert_cmd := "'%s' '%s' '%s'" % [magick, png_path, tga_path]
 	var convert_output: Array = []
-	var convert_code := OS.execute("sh", ["-c", convert_cmd], convert_output, true)
+	var convert_code := OS.execute(magick, [png_path, tga_path], convert_output, true, false)
 
 	if convert_code != 0:
 		_remove_dir(tmp_dir)
-		var err_text: String = convert_output[0] if convert_output.size() > 0 else "no output"
+		var err_text := ProcessUtils.output_text(convert_output)
 		return [false, "PNG->TGA conversion failed: %s" % err_text]
 
 	# Step 2: Inject TGA into uasset (texconv handles BC format matching)
 	DirAccess.make_dir_recursive_absolute(output_dir)
 	var dds_tools_dir := _cfg.get_dds_tools_dir()
-	var python := _find_python()
+	var python := ProcessUtils.find_python()
+	if python.is_empty():
+		_remove_dir(tmp_dir)
+		return [false, "Python was not found in PATH"]
+	var staged_output := tmp_dir.path_join("output")
+	DirAccess.make_dir_recursive_absolute(staged_output)
 
 	var dds_ver := _cfg.get_game_profile().dds_tools_version
-	var cmd_str := "cd '%s' && '%s' '%s' '%s' '%s' --mode inject --version %s --save_folder '%s'" \
-		% [dds_tools_dir, python, main_py, uasset_path, tga_path, dds_ver, output_dir]
-
 	var output: Array = []
-	var code := OS.execute("sh", ["-c", cmd_str], output, true)
-
-	_remove_dir(tmp_dir)
+	var code := ProcessUtils.run_python_script(python, main_py, dds_tools_dir, [
+		uasset_path, tga_path, "--mode", "inject", "--version", dds_ver,
+		"--save_folder", staged_output,
+	], output)
 
 	if code != 0:
-		var err_text: String = output[0] if output.size() > 0 else "no output"
+		_remove_dir(tmp_dir)
+		var err_text := ProcessUtils.output_text(output)
 		return [false, "Injection failed (exit %d): %s" % [code, err_text]]
+
+	var base_name := uasset_path.get_file().get_basename()
+	var staged_uasset := staged_output.path_join(base_name + ".uasset")
+	if not FileAccess.file_exists(staged_uasset):
+		_remove_dir(tmp_dir)
+		return [false, "Injection did not produce a .uasset file"]
+	var collected := _collect_injected_texture_files(uasset_path, staged_output, output_dir, base_name)
+	if not bool(collected.get("ok", false)):
+		_remove_dir(tmp_dir)
+		return [false, str(collected.get("error", "Could not prepare injected texture files"))]
+	var install_error := FileUtils.install_staged_files(collected["files"])
+	_remove_dir(tmp_dir)
+	if install_error != OK:
+		return [false, "Could not install injected texture (error %d)" % install_error]
 
 	return [true, "Injected texture into %s" % uasset_path.get_file()]
 
@@ -265,23 +296,124 @@ func _invalidate_cache(uasset_path: String) -> void:
 	dir.list_dir_end()
 
 
+func _collect_injected_texture_files(uasset_path: String, staged_output: String,
+		output_dir: String, base_name: String) -> Dictionary:
+	var staged_files: Array = []
+	var source_dir := uasset_path.get_base_dir()
+	for extension_value in ["uasset", "uexp", "ubulk", "uptnl"]:
+		var extension := str(extension_value)
+		var file_name := base_name + "." + extension
+		var generated := staged_output.path_join(file_name)
+		var target := output_dir.path_join(file_name)
+		if FileAccess.file_exists(generated):
+			staged_files.append({
+				"source": generated,
+				"target": target,
+			})
+			continue
+
+		# UE4-DDS-Tools may omit a companion file that is still part of the
+		# original texture package. Preserve it instead of treating it as stale.
+		if extension == "uasset":
+			continue
+		var original := source_dir.path_join(file_name)
+		if not FileAccess.file_exists(original) or FileUtils.same_path(original, target):
+			continue
+		var preserved := staged_output.path_join("__preserve_" + file_name)
+		var copy_error := FileUtils.copy_file(original, preserved)
+		if copy_error != OK:
+			return {
+				"ok": false,
+				"error": "Could not preserve %s (error %d)" % [file_name, copy_error],
+			}
+		staged_files.append({
+			"source": preserved,
+			"target": target,
+		})
+	if staged_files.is_empty():
+		return {"ok": false, "error": "Injection did not produce installable files"}
+	return {"ok": true, "files": staged_files}
+
+
+func _restore_missing_texture_companions(uasset_path: String) -> Dictionary:
+	if _cfg == null:
+		return {"ok": true, "restored": []}
+	var base_path := uasset_path.get_basename()
+	var restored: Array[String] = []
+	for extension_value in ["uexp", "ubulk", "uptnl"]:
+		var extension := str(extension_value)
+		var target := base_path + "." + extension
+		if FileAccess.file_exists(target):
+			continue
+		var source := _find_source_companion(uasset_path, extension)
+		if source.is_empty():
+			continue
+		var copy_error := FileUtils.copy_file(source, target)
+		if copy_error != OK:
+			return {
+				"ok": false,
+				"error": "Missing %s and could not restore it from %s (error %d)" % [
+					target.get_file(), source, copy_error],
+			}
+		restored.append(target.get_file())
+	return {"ok": true, "restored": restored}
+
+
+func _find_source_companion(uasset_path: String, extension: String) -> String:
+	var relative_path := _game_relative_path(uasset_path)
+	if relative_path.is_empty():
+		return ""
+	relative_path = relative_path.get_basename() + "." + extension
+	var roots := _reference_roots()
+	for root in roots:
+		var candidate := root.path_join(relative_path)
+		if FileAccess.file_exists(candidate):
+			return candidate
+	return ""
+
+
+func _reference_roots() -> Array[String]:
+	var roots: Array[String] = []
+	for source_entry in _cfg.sources:
+		if source_entry is Dictionary:
+			var source_path := str(source_entry.get("path", "")).rstrip("/")
+			if not source_path.is_empty() and DirAccess.dir_exists_absolute(source_path):
+				roots.append(source_path)
+
+	var mods_dir := _cfg.mods_dir.rstrip("/")
+	if not mods_dir.is_empty():
+		var modding_dir := mods_dir.get_base_dir()
+		for sibling in ["Unchanged", "BaseGame", "Base", "New"]:
+			var candidate := modding_dir.path_join(sibling)
+			if DirAccess.dir_exists_absolute(candidate) and candidate not in roots:
+				roots.append(candidate)
+	return roots
+
+
+func _game_relative_path(path: String) -> String:
+	var normalized := path.replace("\\", "/").simplify_path()
+	var content_root := _cfg.get_game_profile().content_root.replace("\\", "/").strip_edges()
+	content_root = content_root.trim_prefix("/").trim_suffix("/")
+	var markers: Array[String] = []
+	if not content_root.is_empty():
+		markers.append("/" + content_root + "/Content/")
+		markers.append("/" + content_root + "/")
+	markers.append("/Content/")
+	for marker in markers:
+		var index := normalized.find(marker)
+		if index >= 0:
+			return normalized.substr(index + 1)
+	return ""
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-func _find_python() -> String:
-	for py in ["python3", "python"]:
-		var out: Array = []
-		if OS.execute("which" if OS.get_name() != "Windows" else "where", [py], out, true, false) == 0:
-			return py
-	return "python3"
-
-
 func _find_magick() -> String:
-	for cmd in ["magick", "convert"]:
-		var out: Array = []
-		if OS.execute("which" if OS.get_name() != "Windows" else "where", [cmd], out, true, false) == 0:
-			return cmd
-	return ""
+	var candidates: Array[String] = ["magick"]
+	if OS.get_name() != "Windows":
+		candidates.append("convert")
+	return ProcessUtils.find_executable(candidates)
 
 
 ## Find the first file with a given extension in a directory.
@@ -302,14 +434,4 @@ func _find_file_in_dir(dir_path: String, ext: String) -> String:
 
 ## Remove a temp directory and all its contents.
 func _remove_dir(dir_path: String) -> void:
-	var dir := DirAccess.open(dir_path)
-	if not dir:
-		return
-	dir.list_dir_begin()
-	var entry := dir.get_next()
-	while not entry.is_empty():
-		if not dir.current_is_dir():
-			DirAccess.remove_absolute(dir_path.path_join(entry))
-		entry = dir.get_next()
-	dir.list_dir_end()
-	DirAccess.remove_absolute(dir_path)
+	FileUtils.remove_dir_recursive(dir_path)

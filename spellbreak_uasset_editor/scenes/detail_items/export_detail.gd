@@ -30,9 +30,8 @@ func _build_impl() -> void:
 	_add_section_label("REFERENCES")
 	_add_field_editor("ObjectName", expo.object_name, func(v):
 		expo.object_name = v
-		expo.raw["ObjectName"] = v
-		hdr_label.text = "Export: %s" % v
-	)
+		expo.raw["ObjectName"] = v,
+		func(v): hdr_label.text = "Export: %s" % v)
 	_add_ref_row("ClassIndex", expo.class_index, func(v):
 		expo.class_index = v; expo.raw["ClassIndex"] = v)
 	_add_ref_row("SuperIndex", expo.super_index, func(v):

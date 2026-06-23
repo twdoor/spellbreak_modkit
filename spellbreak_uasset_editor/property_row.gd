@@ -206,9 +206,9 @@ static func _create_editor(prop: UAssetProperty, row: PropertyRow, asset: UAsset
 				if prop.value is Dictionary:
 					var asset_path = prop.value.get("AssetPath", {})
 					if asset_path is Dictionary:
-						var old = asset_path.get("PackageName", "")
+						var old_state := prop.capture_state()
 						asset_path["PackageName"] = t if t != "" else null
-						row.value_changed.emit(prop, old, t)
+						row.value_changed.emit(prop, old_state, prop.capture_state())
 			)
 			return line
 
@@ -222,9 +222,9 @@ static func _create_editor(prop: UAssetProperty, row: PropertyRow, asset: UAsset
 					if tag_child:
 						var current := str(tag_child.value) if tag_child.value != null else ""
 						return _make_tag_autocomplete(current, func(new_tag: String):
-							tag_child.value = new_tag
-							tag_child.raw["Value"] = new_tag
-							row.value_changed.emit(prop, current, new_tag)
+							var old_state := prop.capture_state()
+							tag_child.set_value(new_tag)
+							row.value_changed.emit(prop, old_state, prop.capture_state())
 						, _tag_list)
 				"GameplayTagContainer":
 					var inner: UAssetProperty = null
@@ -321,7 +321,7 @@ static func _get_text_content(prop: UAssetProperty) -> String:
 ## Updates the correct text content field and emits value_changed.
 static func _on_text_content_change(row: PropertyRow, new_text: String) -> void:
 	var prop: UAssetProperty = row.property
-	var old: String = _get_text_content(prop)
+	var old_state := prop.capture_state()
 	# Write to whichever field was populated; default to culture_invariant
 	if not prop.source_string.is_empty() and prop.culture_invariant.is_empty():
 		prop.source_string = new_text
@@ -329,13 +329,13 @@ static func _on_text_content_change(row: PropertyRow, new_text: String) -> void:
 	else:
 		prop.culture_invariant = new_text
 		prop.raw["CultureInvariantString"] = new_text
-	row.value_changed.emit(prop, old, new_text)
+	row.value_changed.emit(prop, old_state, prop.capture_state())
 
 
 static func _on_change(row: PropertyRow, new_value: Variant) -> void:
-	var old_value: Variant = row.property.value
-	row.property.value = new_value
-	row.value_changed.emit(row.property, old_value, new_value)
+	var old_state := row.property.capture_state()
+	row.property.set_value(new_value)
+	row.value_changed.emit(row.property, old_state, row.property.capture_state())
 
 
 ## Creates a LineEdit with a filter-as-you-type tag autocomplete popup.
@@ -414,9 +414,10 @@ static func _rebuild_tag_list(vbox: VBoxContainer, prop: UAssetProperty, row: Pr
 		hbox.add_theme_constant_override("separation", AppTheme.SPACING_TIGHT)
 
 		var autocomplete := _make_tag_autocomplete(tag_str, func(new_tag: String):
+			var old_state := prop.capture_state()
 			tags[i] = new_tag
 			prop.raw["Value"] = tags
-			row.value_changed.emit(prop, null, null)
+			row.value_changed.emit(prop, old_state, prop.capture_state())
 		, tag_list)
 		autocomplete.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		hbox.add_child(autocomplete)
@@ -426,9 +427,10 @@ static func _rebuild_tag_list(vbox: VBoxContainer, prop: UAssetProperty, row: Pr
 		del_btn.flat = true
 		del_btn.custom_minimum_size.x = 24
 		del_btn.pressed.connect(func():
+			var old_state := prop.capture_state()
 			tags.remove_at(i)
 			prop.raw["Value"] = tags
-			row.value_changed.emit(prop, null, null)
+			row.value_changed.emit(prop, old_state, prop.capture_state())
 			PropertyRow._rebuild_tag_list(vbox, prop, row, tag_list)
 		)
 		hbox.add_child(del_btn)
@@ -438,8 +440,10 @@ static func _rebuild_tag_list(vbox: VBoxContainer, prop: UAssetProperty, row: Pr
 	add_btn.text = "+ Add Tag"
 	add_btn.flat = true
 	add_btn.pressed.connect(func():
+		var old_state := prop.capture_state()
 		tags.append("")
 		prop.raw["Value"] = tags
+		row.value_changed.emit(prop, old_state, prop.capture_state())
 		PropertyRow._rebuild_tag_list(vbox, prop, row, tag_list)
 	)
 	vbox.add_child(add_btn)

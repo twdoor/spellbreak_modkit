@@ -6,8 +6,7 @@ class_name UassetFileTab extends MarginContainer
 ##   DetailPanelBuilder — routes selections to DetailItem subclasses
 ##   SelectionManager  — multi-item selection state
 ##   ClipboardManager  — static clipboard (copy/paste/cut)
-##   UndoManager       — bounded undo stack
-##   ExportReorderer   — swap exports + remap references
+##   AssetDocument     — asset ownership, dirty state, undo, and redo
 
 @export var tree: Tree
 @export var detail_panel: VBoxContainer
@@ -24,6 +23,7 @@ var _dirty: bool = false:
 var _detail_stack: Array = []
 ## Currently focused data object (single item from last non-stack navigation).
 var _current_data: Variant = null
+var _document: AssetDocument
 
 const UASSET_TAB = preload("uid://dxsn1gcs66ay8")
 
@@ -31,22 +31,26 @@ const UASSET_TAB = preload("uid://dxsn1gcs66ay8")
 var _tree_manager:    TreeManager
 var _detail_builder:  DetailPanelBuilder
 var _selection:       SelectionManager
-var _undo_manager:    UndoManager
-var _reorderer:       ExportReorderer
 var _texture_service: TextureService
 var _sound_service: SoundService
 var _mesh_service: MeshService
+var _background_jobs: BackgroundJobRunner
+var _detail_context: AssetEditorContext
 
 
-static func setup(uasset: UAssetFile, texture_service: TextureService = null, sound_service: SoundService = null, mesh_service: MeshService = null) -> UassetFileTab:
+static func setup(uasset: UAssetFile, texture_service: TextureService = null,
+		sound_service: SoundService = null, mesh_service: MeshService = null,
+		background_jobs: BackgroundJobRunner = null) -> UassetFileTab:
 	var asset_name: String = uasset.file_path.get_file().get_basename()
 	var tab: UassetFileTab = UASSET_TAB.instantiate()
 	tab.tab_asset = uasset
+	tab._document = AssetDocument.new(uasset)
 	tab._base_name = asset_name
 	tab._display_base = asset_name   # main.gd may override this via _refresh_tab_titles
 	tab._texture_service = texture_service
 	tab._sound_service = sound_service
 	tab._mesh_service = mesh_service
+	tab._background_jobs = background_jobs
 	tab.name = asset_name
 	return tab
 
@@ -76,10 +80,10 @@ func _update_tab_title() -> void:
 func _ready() -> void:
 	# Instantiate components
 	_selection    = SelectionManager.new()
-	_undo_manager = UndoManager.new()
-	_reorderer    = ExportReorderer.new()
 	_tree_manager = TreeManager.new().setup(tree, tab_asset)
-	_detail_builder = DetailPanelBuilder.new().setup(detail_panel, _make_context())
+	_document.dirty_changed.connect(_on_document_dirty_changed)
+	_detail_context = _make_context()
+	_detail_builder = DetailPanelBuilder.new().setup(detail_panel, _detail_context)
 
 	# Wire tree signals
 	tree.item_selected.connect(_on_tree_selected)
@@ -94,40 +98,71 @@ func _ready() -> void:
 	_tree_manager.build_tree()
 
 
+func _exit_tree() -> void:
+	if _detail_builder:
+		_detail_builder.clear()
+
+
 func load_asset(path: String) -> void:
-	tab_asset = UAssetFile.load_file(path)
-	if tab_asset:
+	var loaded := UAssetFile.load_file(path)
+	if loaded:
 		_base_name = path.get_file().get_basename()
-		_dirty = false
-		_tree_manager.set_asset(tab_asset)
-		_tree_manager.build_tree()
+		_set_asset(loaded)
 
 
-# ── Context dict (shared with all DetailItems) ─────────────────────────────────
+# ── Typed context shared with all DetailItems ──────────────────────────────────
 
-func _make_context() -> Dictionary:
-	return {
-		"asset":             tab_asset,
-		"selection":         _selection,
-		"navigate_to":       _navigate_to,
-		"navigate_back":     _navigate_back,
-		"set_dirty":         _mark_dirty,
-		"push_undo":         _undo_manager.push,
-		"rebuild_tree":      _rebuild_tree,
-		"show_detail":       _show_detail,
-		"refresh_tree_item": _tree_manager.refresh_item_text,
-		"select_tree_item":  _tree_manager.select_item,
-		"paste":             paste_clipboard,
-		"swap_exports":      _do_swap,
-		"detail_stack":      _detail_stack,
-		"texture_service":   _texture_service,
-		"sound_service":     _sound_service,
-		"mesh_service":      _mesh_service,
-	}
+func _make_context() -> AssetEditorContext:
+	var context := AssetEditorContext.new()
+	context.document = _document
+	context.selection = _selection
+	context.navigate_to = _navigate_to
+	context.navigate_back = _navigate_back
+	context.rebuild_tree = _rebuild_tree
+	context.show_detail = _show_detail
+	context.refresh_tree_item = _tree_manager.refresh_item_text
+	context.select_tree_item = _tree_manager.select_item
+	context.swap_exports = _do_swap
+	context.detail_stack = _detail_stack
+	context.texture_service = _texture_service
+	context.sound_service = _sound_service
+	context.mesh_service = _mesh_service
+	context.background_jobs = _background_jobs
+	context.reload_asset = _reload_asset_from_disk
+	return context
 
 
-func _mark_dirty() -> void:
-	_dirty = true
+func _on_document_dirty_changed(is_dirty: bool) -> void:
+	_dirty = is_dirty
+
+
+func _reload_asset_from_disk() -> bool:
+	var path := tab_asset.binary_path if not tab_asset.binary_path.is_empty() else tab_asset.file_path
+	var profile := tab_asset.game_profile
+	var current_export_index := -1
+	var current_export := _find_context_export()
+	if current_export:
+		current_export_index = tab_asset.exports.find(current_export)
+	var loaded := UAssetFile.load_file(path)
+	if loaded == null:
+		return false
+	loaded.game_profile = profile
+	_set_asset(loaded)
+	if current_export_index >= 0 and current_export_index < tab_asset.exports.size():
+		_show_detail(tab_asset.exports[current_export_index])
+	else:
+		_show_detail(&"exports")
+	return true
+
+
+func _set_asset(asset: UAssetFile) -> void:
+	tab_asset = asset
+	_current_data = null
+	_detail_stack.clear()
+	_selection.clear()
+	_document.replace_asset(asset)
+	_tree_manager.set_asset(tab_asset)
+	_tree_manager.build_tree()
 
 
 # ── Tree events ────────────────────────────────────────────────────────────────
@@ -189,17 +224,11 @@ func save_asset(path: String = "") -> Error:
 		return ERR_DOES_NOT_EXIST
 	var err := tab_asset.save_file(path)
 	if err == OK:
-		_dirty = false
+		_document.mark_saved()
 	return err
 
 
 # ── Value change (from PropertyRow via DetailItem) ────────────────────────────
-
-func _on_value_changed(prop: UAssetProperty, old_value: Variant, _new_value: Variant) -> void:
-	_dirty = true
-	_undo_manager.push({"action": "set_value", "prop": prop, "value": old_value})
-	_tree_manager.refresh_item_text(prop)
-
 
 # ── Clipboard ──────────────────────────────────────────────────────────────────
 
@@ -224,18 +253,8 @@ func paste_clipboard() -> void:
 			var pp: Variant = result.get("parent_prop")
 			if pp is UAssetProperty and (pp as UAssetProperty).prop_type == "Array":
 				array_context = pp
-	ClipboardManager.paste({
-		"asset":            tab_asset,
-		"current_data":     _current_data,
-		"detail_stack":     _detail_stack,
-		"selection":        _selection.get_selection(),
-		"set_dirty":        _mark_dirty,
-		"push_undo":        _undo_manager.push,
-		"rebuild_tree":     _rebuild_tree,
-		"show_detail":      _show_detail,
-		"select_tree_item": _tree_manager.select_item,
-		"array_context":    array_context,
-	})
+	ClipboardManager.paste(_detail_context, _current_data,
+		_selection.get_selection(), array_context)
 
 
 func cut_selection() -> void:
@@ -246,8 +265,11 @@ func cut_selection() -> void:
 # ── Export reorder (called by ExportsListDetail) ───────────────────────────────
 
 func _do_swap(a: int, b: int) -> void:
-	_reorderer.swap(a, b, tab_asset)
-	_dirty = true
+	if not _document.execute(AssetEditCommand.new(
+		"Reorder exports",
+		func() -> void: tab_asset.swap_exports(a, b),
+		func() -> void: tab_asset.swap_exports(a, b))):
+		return
 	_rebuild_tree()
 	_detail_stack.clear()
 	_show_detail(&"exports")
@@ -260,27 +282,23 @@ func delete_selection() -> void:
 
 	# Multi-delete exports
 	if sel.size() > 1 and sel[0] is UAssetExport:
-		_dirty = true
-		var sorted := sel.duplicate()
-		sorted.sort_custom(func(a, b): return tab_asset.exports.find(a) > tab_asset.exports.find(b))
-		for expo in sorted:
-			var idx := tab_asset.exports.find(expo)
-			if idx >= 0:
-				_undo_manager.push({"action": "insert_export", "index": idx, "raw": expo.to_dict()})
-				tab_asset.exports.remove_at(idx)
+		var snapshot := tab_asset.capture_package_tables()
+		var indices: Array = sel.map(func(expo): return tab_asset.exports.find(expo))
+		_document.execute(AssetEditCommand.new(
+			"Delete exports",
+			func() -> void: tab_asset.remove_exports(indices),
+			func() -> void: tab_asset.restore_package_tables(snapshot)))
 		_rebuild_tree(); _detail_stack.clear(); _show_detail(&"exports")
 		return
 
 	# Multi-delete imports
 	if sel.size() > 1 and sel[0] is UAssetImport:
-		_dirty = true
-		var sorted := sel.duplicate()
-		sorted.sort_custom(func(a, b): return tab_asset.imports.find(a) > tab_asset.imports.find(b))
-		for imp in sorted:
-			var idx := tab_asset.imports.find(imp)
-			if idx >= 0:
-				_undo_manager.push({"action": "insert_import", "index": -(idx + 1), "raw": imp.to_dict()})
-				tab_asset.imports.remove_at(idx)
+		var snapshot := tab_asset.capture_package_tables()
+		var indices: Array = sel.map(func(imp): return tab_asset.imports.find(imp))
+		_document.execute(AssetEditCommand.new(
+			"Delete imports",
+			func() -> void: tab_asset.remove_imports(indices),
+			func() -> void: tab_asset.restore_package_tables(snapshot)))
 		_current_data = null
 		_rebuild_tree(); _detail_stack.clear(); _show_detail(&"importmap")
 		return
@@ -295,26 +313,36 @@ func delete_selection() -> void:
 			go_back_to = _detail_stack.back()["data"]
 		if go_back_to == null:
 			go_back_to = _find_context_export()
-		_dirty = true
-		var sorted := sel.duplicate()
-		sorted.sort_custom(func(a, b): return arr.find(a) > arr.find(b))
-		for item in sorted:
+		var removals: Array = []
+		for item in sel:
 			var idx := arr.find(item)
-			if idx < 0: continue
-			_undo_manager.push({"action": "insert_property", "array": arr, "index": idx,
-				"raw": (item as UAssetProperty).to_dict()})
-			arr.remove_at(idx)
+			if idx >= 0:
+				removals.append({"index": idx, "property": item})
+		removals.sort_custom(func(a, b): return a["index"] < b["index"])
+		_document.execute(AssetEditCommand.new(
+			"Delete properties",
+			func() -> void:
+				for i in range(removals.size() - 1, -1, -1):
+					arr.remove_at(removals[i]["index"]),
+			func() -> void:
+				for removal in removals:
+					arr.insert(removal["index"], removal["property"])))
 		_rebuild_tree(); _detail_stack.clear()
 		_show_detail(go_back_to if go_back_to != null else &"exports")
 		return
 
 	# Multi-delete name map entries (sort descending so indices stay valid)
 	if sel.size() >= 1 and sel[0] is int:
-		_dirty = true
+		var old_names := tab_asset.name_map.duplicate()
+		var new_names := old_names.duplicate()
 		var sorted_idx := sel.duplicate()
 		sorted_idx.sort_custom(func(a, b): return a > b)
 		for i in sorted_idx:
-			tab_asset.name_map.remove_at(i)
+			new_names.remove_at(i)
+		_document.execute(AssetEditCommand.new(
+			"Delete names",
+			func() -> void: tab_asset.name_map = new_names.duplicate(),
+			func() -> void: tab_asset.name_map = old_names.duplicate()))
 		_current_data = null
 		_detail_stack.clear(); _show_detail(&"namemap")
 		return
@@ -323,17 +351,21 @@ func delete_selection() -> void:
 	if _current_data is UAssetExport:
 		var idx := tab_asset.exports.find(_current_data)
 		if idx < 0: return
-		_dirty = true
-		_undo_manager.push({"action": "insert_export", "index": idx, "raw": _current_data.to_dict()})
-		tab_asset.exports.remove_at(idx)
+		var snapshot := tab_asset.capture_package_tables()
+		_document.execute(AssetEditCommand.new(
+			"Delete export",
+			func() -> void: tab_asset.remove_export_at(idx),
+			func() -> void: tab_asset.restore_package_tables(snapshot)))
 		_rebuild_tree(); _detail_stack.clear(); _show_detail(&"exports")
 
 	elif _current_data is UAssetImport:
 		var idx := tab_asset.imports.find(_current_data)
 		if idx < 0: return
-		_dirty = true
-		_undo_manager.push({"action": "insert_import", "index": -(idx + 1), "raw": _current_data.to_dict()})
-		tab_asset.imports.remove_at(idx)
+		var snapshot := tab_asset.capture_package_tables()
+		_document.execute(AssetEditCommand.new(
+			"Delete import",
+			func() -> void: tab_asset.remove_import_at(idx),
+			func() -> void: tab_asset.restore_package_tables(snapshot)))
 		_current_data = null
 		_rebuild_tree(); _detail_stack.clear(); _show_detail(&"importmap")
 
@@ -348,9 +380,11 @@ func delete_selection() -> void:
 			go_back_to = _detail_stack.back()["data"]
 		if go_back_to == null:
 			go_back_to = _find_context_export()
-		_dirty = true
-		_undo_manager.push({"action": "insert_property", "array": arr, "index": idx, "raw": _current_data.to_dict()})
-		arr.remove_at(idx)
+		var removed_property: UAssetProperty = _current_data
+		_document.execute(AssetEditCommand.new(
+			"Delete property",
+			func() -> void: arr.remove_at(idx),
+			func() -> void: arr.insert(idx, removed_property)))
 		_rebuild_tree(); _detail_stack.clear()
 		_show_detail(go_back_to if go_back_to != null else &"exports")
 
@@ -360,10 +394,11 @@ func delete_selection() -> void:
 		var rows_raw: Array = expo.get_datatable_rows()
 		var idx := DataTableRowDetail.row_index(row, rows_raw)
 		if idx < 0: return
-		_dirty = true
-		_undo_manager.push({"action": "datatable_insert_row", "rows_raw": rows_raw, "index": idx,
-			"raw": row.raw.duplicate(true), "expo": expo})
-		rows_raw.remove_at(idx)
+		var removed_raw := row.raw.duplicate(true)
+		_document.execute(AssetEditCommand.new(
+			"Delete data table row",
+			func() -> void: rows_raw.remove_at(idx),
+			func() -> void: rows_raw.insert(idx, removed_raw.duplicate(true))))
 		_current_data = null
 		_rebuild_tree(); _detail_stack.clear(); _show_detail(expo)
 
@@ -371,69 +406,30 @@ func delete_selection() -> void:
 # ── Undo ───────────────────────────────────────────────────────────────────────
 
 func undo() -> void:
-	if _undo_manager.is_empty():
+	if not _document.undo():
 		return
-	_dirty = true
-	var entry: Dictionary = _undo_manager.pop()
-	match entry["action"]:
-		"set_value":
-			var prop: UAssetProperty = entry["prop"]
-			prop.value = entry["value"]
-			_tree_manager.refresh_item_text(prop)
-			if _current_data == prop:
-				_show_detail(prop)
+	_rebuild_tree()
+	_detail_stack.clear()
+	if _current_data is UAssetProperty and not _find_property_parent(_current_data).is_empty():
+		_show_detail(_current_data)
+	elif _current_data is UAssetExport and tab_asset.exports.has(_current_data):
+		_show_detail(_current_data)
+	elif _current_data is UAssetImport and tab_asset.imports.has(_current_data):
+		_show_detail(&"importmap")
+	elif _current_data is int:
+		_show_detail(&"namemap")
+	else:
+		_current_data = null
+		_show_detail(&"exports")
 
-		"insert_export":
-			var expo := UAssetExport.from_dict(entry["raw"])
-			tab_asset.exports.insert(entry["index"], expo)
-			_rebuild_tree(); _detail_stack.clear()
-			_show_detail(expo); _tree_manager.select_item(expo)
 
-		"remove_export":
-			var expo: UAssetExport = entry["export"]
-			tab_asset.exports.erase(expo)
-			_rebuild_tree(); _detail_stack.clear(); _show_detail(&"exports")
-
-		"insert_property":
-			var arr: Array = entry["array"]
-			var prop := UAssetProperty.from_dict(entry["raw"])
-			arr.insert(entry["index"], prop)
-			_rebuild_tree(); _detail_stack.clear(); _show_detail(prop)
-
-		"remove_property":
-			var expo: UAssetExport   = entry["export"]
-			var prop: UAssetProperty = entry["prop"]
-			expo.properties.erase(prop)
-			_rebuild_tree(); _detail_stack.clear(); _show_detail(expo)
-
-		"remove_from_array":
-			var arr: Array           = entry["array"]
-			var prop: UAssetProperty = entry["prop"]
-			arr.erase(prop)
-			_rebuild_tree(); _detail_stack.clear()
-			_show_detail(entry.get("show", &"exports"))
-
-		"insert_import":
-			var imp := UAssetImport.from_dict(entry["raw"], entry["index"])
-			tab_asset.imports.insert(-entry["index"] - 1, imp)
-			_rebuild_tree(); _detail_stack.clear(); _show_detail(&"importmap")
-
-		"remove_import":
-			var imp: UAssetImport = entry["import"]
-			tab_asset.imports.erase(imp)
-			_rebuild_tree(); _detail_stack.clear(); _show_detail(&"importmap")
-
-		"datatable_remove_row":
-			var rows_raw: Array = entry["rows_raw"]
-			rows_raw.remove_at(entry["index"])
-			_rebuild_tree(); _detail_stack.clear()
-			_show_detail(entry.get("expo", _find_context_export()))
-
-		"datatable_insert_row":
-			var rows_raw: Array = entry["rows_raw"]
-			rows_raw.insert(entry["index"], entry["raw"])
-			_rebuild_tree(); _detail_stack.clear()
-			_show_detail(entry.get("expo", _find_context_export()))
+func redo() -> void:
+	if not _document.redo():
+		return
+	_rebuild_tree()
+	_detail_stack.clear()
+	_current_data = null
+	_show_detail(&"exports")
 
 
 # ── Private helpers ────────────────────────────────────────────────────────────
