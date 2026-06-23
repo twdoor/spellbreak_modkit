@@ -6,8 +6,8 @@ class_name ExportsListDetail extends DetailItem
 
 
 func _build_impl() -> void:
-	var asset: UAssetFile = _ctx["asset"]
-	var sel: SelectionManager = _ctx["selection"]
+	var asset := _ctx.get_asset()
+	var sel := _ctx.selection
 
 	_add_header("Exports")
 	_add_separator()
@@ -26,8 +26,8 @@ func _build_impl() -> void:
 		btn.pressed.connect(func():
 			sel.handle_click(expo, func(): return asset.exports)
 			if not Input.is_key_pressed(KEY_SHIFT) and not Input.is_key_pressed(KEY_CTRL):
-				_ctx["select_tree_item"].call(expo)
-				_ctx["navigate_to"].call(expo, "[%d] %s" % [i + 1, expo.object_name])
+				_ctx.select_tree_item.call(expo)
+				_ctx.navigate_to.call(expo, "[%d] %s" % [i + 1, expo.object_name])
 		)
 		row.add_child(btn)
 
@@ -62,4 +62,4 @@ func _build_impl() -> void:
 ## Ask the tab to perform a swap (context callback "swap_exports" → UassetFileTab._do_swap).
 func _request_swap(a: int, b: int) -> void:
 	if _ctx.has("swap_exports"):
-		_ctx["swap_exports"].call(a, b)
+		_ctx.swap_exports.call(a, b)

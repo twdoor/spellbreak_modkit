@@ -15,7 +15,7 @@ var _seek_slider: HSlider
 var _export_btn: Button
 var _import_btn: Button
 var _status_label: Label
-var _extract_thread: Thread
+var _extract_job_id := -1
 
 var _audio_bytes: PackedByteArray
 var _updating_slider: bool = false
@@ -45,7 +45,7 @@ func _build_impl() -> void:
 	# ── Audio preview section ────────────────────────────────────────────────
 	_add_section_label("AUDIO PREVIEW")
 
-	var snd_service: SoundService = _ctx.get("sound_service")
+	var snd_service := _ctx.sound_service
 
 	if snd_service == null:
 		_add_info("SoundService not available.")
@@ -144,9 +144,8 @@ func _build_impl() -> void:
 	_add_section_label("REFERENCES")
 	_add_field_editor("ObjectName", expo.object_name, func(v):
 		expo.object_name = v
-		expo.raw["ObjectName"] = v
-		hdr_label.text = "Export: %s" % v
-	)
+		expo.raw["ObjectName"] = v,
+		func(v): hdr_label.text = "Export: %s" % v)
 	_add_ref_row("ClassIndex", expo.class_index, func(v):
 		expo.class_index = v; expo.raw["ClassIndex"] = v)
 	_add_ref_row("SuperIndex", expo.super_index, func(v):
@@ -188,7 +187,7 @@ func _build_impl() -> void:
 
 
 func _load_audio_async(snd_service: SoundService) -> void:
-	var asset: UAssetFile = _ctx["asset"]
+	var asset := _ctx.get_asset()
 	var uasset_path := asset.binary_path if not asset.binary_path.is_empty() else asset.file_path
 	if not uasset_path.ends_with(".uasset"):
 		_status_label.text = "Audio preview requires a .uasset file (not JSON)"
@@ -205,26 +204,30 @@ func _load_audio_async(snd_service: SoundService) -> void:
 				_on_audio_extracted(data)
 				return
 
-	# Extract in background thread
-	_extract_thread = Thread.new()
-	_extract_thread.start(_extract_worker.bind(snd_service, uasset_path))
-
-
-func _extract_worker(snd_service: SoundService, uasset_path: String) -> void:
-	var data := snd_service.get_audio_data(uasset_path)
-	call_deferred("_on_audio_loaded", data)
+	if _ctx.background_jobs == null:
+		_status_label.text = "Background job service is unavailable"
+		return
+	_extract_job_id = _ctx.background_jobs.run(
+		func() -> PackedByteArray: return snd_service.get_audio_data(uasset_path),
+		_on_audio_loaded)
 
 
 func _on_audio_loaded(data: PackedByteArray) -> void:
-	if _extract_thread:
-		_extract_thread.wait_to_finish()
-		_extract_thread = null
+	_extract_job_id = -1
 	if not data.is_empty():
 		_on_audio_extracted(data)
 	else:
 		if is_instance_valid(_status_label):
 			_status_label.text = "No audio data found in this asset"
 			_status_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+
+
+func dispose() -> void:
+	if _extract_job_id >= 0 and _ctx.background_jobs:
+		_ctx.background_jobs.cancel(_extract_job_id)
+		_extract_job_id = -1
+	if is_instance_valid(_player):
+		_player.stop()
 
 
 func _on_audio_extracted(data: PackedByteArray) -> void:
@@ -349,7 +352,7 @@ func _update_time_label(pos: float) -> void:
 
 
 func _on_export_pressed() -> void:
-	var snd_service: SoundService = _ctx.get("sound_service")
+	var snd_service := _ctx.sound_service
 	if snd_service == null or snd_service.is_busy():
 		return
 
@@ -360,7 +363,7 @@ func _on_export_pressed() -> void:
 			_status_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
 		return
 
-	var asset: UAssetFile = _ctx["asset"]
+	var asset := _ctx.get_asset()
 	var uasset_path := asset.binary_path if not asset.binary_path.is_empty() else asset.file_path
 
 	var dialog := FileDialog.new()
@@ -370,16 +373,14 @@ func _on_export_pressed() -> void:
 	dialog.current_file = uasset_path.get_file().get_basename() + ".ogg"
 	dialog.use_native_dialog = true
 	dialog.file_selected.connect(func(path: String) -> void:
-		var fa := FileAccess.open(path, FileAccess.WRITE)
-		if fa:
-			fa.store_buffer(_audio_bytes)
-			fa.close()
+		var write_error := FileUtils.write_bytes_atomic(path, _audio_bytes)
+		if write_error == OK:
 			if is_instance_valid(_status_label):
 				_status_label.text = "Exported to %s" % path.get_file()
 				_status_label.add_theme_color_override("font_color", AppTheme.STATUS_SUCCESS)
 		else:
 			if is_instance_valid(_status_label):
-				_status_label.text = "Failed to write: %s" % path
+				_status_label.text = "Failed to write %s (error %d)" % [path, write_error]
 				_status_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
 		dialog.queue_free()
 	)
@@ -391,11 +392,16 @@ func _on_export_pressed() -> void:
 
 
 func _on_import_pressed() -> void:
-	var snd_service: SoundService = _ctx.get("sound_service")
+	var snd_service := _ctx.sound_service
 	if snd_service == null or snd_service.is_busy():
 		return
+	if _ctx.is_dirty():
+		if is_instance_valid(_status_label):
+			_status_label.text = "Save asset changes before importing audio"
+			_status_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+		return
 
-	var asset: UAssetFile = _ctx["asset"]
+	var asset := _ctx.get_asset()
 	var uasset_path := asset.binary_path if not asset.binary_path.is_empty() else asset.file_path
 	if not uasset_path.ends_with(".uasset"):
 		if is_instance_valid(_status_label):
@@ -431,9 +437,8 @@ func _on_import_finished(success: bool, message: String) -> void:
 		_import_btn.disabled = false
 	# Reload preview after successful import
 	if success:
-		var snd_service: SoundService = _ctx.get("sound_service")
-		if snd_service:
-			_load_audio_async(snd_service)
+		if _ctx.reload_asset.is_valid():
+			_ctx.reload_asset.call()
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

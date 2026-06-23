@@ -2,18 +2,7 @@ class_name ClipboardManager extends RefCounted
 
 ## Static clipboard shared across all open tabs.
 ## copy() and get_label() read/write the clipboard.
-## paste() receives a context dict with all the callbacks it needs to modify the asset.
-##
-## Context dict keys expected by paste():
-##   "asset"            : UAssetFile
-##   "current_data"     : Variant   (currently focused data object)
-##   "detail_stack"     : Array     (navigation stack, direct reference)
-##   "selection"        : Array     (currently selected items)
-##   "set_dirty"        : Callable  ()
-##   "push_undo"        : Callable  (entry: Dictionary)
-##   "rebuild_tree"     : Callable  ()
-##   "show_detail"      : Callable  (data: Variant)
-##   "select_tree_item" : Callable  (data: Variant)
+## paste() receives the typed editor context plus transient selection state.
 
 static var _clipboard: Dictionary = {}
 
@@ -69,16 +58,16 @@ static func get_label() -> String:
 	return ""
 
 
-static func paste(context: Dictionary) -> void:
+static func paste(context: AssetEditorContext, current_data: Variant,
+		selection: Array, array_context: Variant = null) -> void:
 	if _clipboard.is_empty():
 		return
-	var asset: UAssetFile        = context["asset"]
-	var current_data: Variant    = context["current_data"]
-	var detail_stack: Array      = context["detail_stack"]
-	var selection: Array         = context["selection"]
+	var asset := context.get_asset()
+	var detail_stack := context.detail_stack
 
 	match _clipboard["type"]:
 		"export", "export_array":
+			var before := asset.capture_package_tables()
 			var raws: Array = []
 			if _clipboard["type"] == "export":
 				var r: Dictionary = _clipboard["raw"].duplicate(true)
@@ -97,16 +86,19 @@ static func paste(context: Dictionary) -> void:
 				insert_at = asset.exports.find(selection[0])
 
 			var added: Array = []
-			for i in raws.size():
-				var new_expo := UAssetExport.from_dict(raws[i])
-				asset.exports.insert(insert_at + i, new_expo)
-				context["push_undo"].call({"action": "remove_export", "export": new_expo})
-				added.append(new_expo)
-			context["rebuild_tree"].call()
-			context["show_detail"].call(added[0])
-			context["select_tree_item"].call(added[0])
+			for raw in raws:
+				added.append(UAssetExport.from_dict(raw))
+			asset.insert_exports(insert_at, added)
+			var after := asset.capture_package_tables()
+			context.record_applied("Paste exports",
+				func() -> void: asset.restore_package_tables(after),
+				func() -> void: asset.restore_package_tables(before))
+			context.rebuild_tree.call()
+			context.show_detail.call(added[0])
+			context.select_tree_item.call(added[0])
 
 		"import", "import_array":
+			var before := asset.capture_package_tables()
 			var raws: Array = []
 			if _clipboard["type"] == "import":
 				raws.append(_clipboard["raw"].duplicate(true))
@@ -118,14 +110,20 @@ static func paste(context: Dictionary) -> void:
 			if selection.size() > 0 and selection[0] is UAssetImport:
 				insert_at = asset.imports.find(selection[0])
 
-			for i in raws.size():
-				var new_imp := UAssetImport.from_dict(raws[i], -(insert_at + i + 1))
-				asset.imports.insert(insert_at + i, new_imp)
-				context["push_undo"].call({"action": "remove_import", "import": new_imp})
-			context["rebuild_tree"].call()
-			context["show_detail"].call(&"importmap")
+			var added: Array = []
+			for raw in raws:
+				added.append(UAssetImport.from_dict(raw, 0))
+			asset.insert_imports(insert_at, added)
+			var after := asset.capture_package_tables()
+			context.record_applied("Paste imports",
+				func() -> void: asset.restore_package_tables(after),
+				func() -> void: asset.restore_package_tables(before))
+			context.rebuild_tree.call()
+			context.show_detail.call(&"importmap")
 
 		"name", "name_array":
+			var old_names := asset.name_map.duplicate()
+			var new_names := old_names.duplicate()
 			var names: Array = []
 			if _clipboard["type"] == "name":
 				names.append(_clipboard["value"])
@@ -136,11 +134,19 @@ static func paste(context: Dictionary) -> void:
 			if selection.size() > 0 and selection[0] is int:
 				insert_at = selection[0] as int
 
-			for i in names.size():
-				var n: String = str(names[i])
-				if not asset.has_name(n):
-					asset.name_map.insert(insert_at + i, n)
-			context["show_detail"].call(&"namemap")
+			var changed := false
+			var insertion_offset := 0
+			for raw_name in names:
+				var n := str(raw_name)
+				if not new_names.has(n):
+					new_names.insert(insert_at + insertion_offset, n)
+					insertion_offset += 1
+					changed = true
+			if changed:
+				context.execute("Paste names",
+					func() -> void: asset.name_map = new_names.duplicate(),
+					func() -> void: asset.name_map = old_names.duplicate())
+			context.show_detail.call(&"namemap")
 
 		"property":
 			var raw: Dictionary = _clipboard["raw"].duplicate(true)
@@ -150,7 +156,7 @@ static func paste(context: Dictionary) -> void:
 
 			# Priority: explicit array_context (set when an array item is selected) >
 			#           current_data is the array > detail stack > export top-level
-			var array_ctx: Variant = context.get("array_context")
+			var array_ctx: Variant = array_context
 			if array_ctx is UAssetProperty and (array_ctx as UAssetProperty).prop_type == "Array":
 				paste_into = (array_ctx as UAssetProperty).children
 				show_after = array_ctx
@@ -176,17 +182,17 @@ static func paste(context: Dictionary) -> void:
 			if current_data is UAssetProperty and paste_into.has(current_data):
 				insert_at = paste_into.find(current_data)
 
-			paste_into.insert(insert_at, new_prop)
-			context["set_dirty"].call()
-			context["push_undo"].call({"action": "remove_from_array", "array": paste_into, "prop": new_prop, "show": show_after})
-			context["rebuild_tree"].call()
-			context["show_detail"].call(show_after)
+			context.execute("Paste property",
+				func() -> void: paste_into.insert(insert_at, new_prop),
+				func() -> void: paste_into.erase(new_prop))
+			context.rebuild_tree.call()
+			context.show_detail.call(show_after)
 
 		"property_array":
 			var paste_into: Array = []
 			var show_after: Variant = null
 
-			var array_ctx: Variant = context.get("array_context")
+			var array_ctx: Variant = array_context
 			if array_ctx is UAssetProperty and (array_ctx as UAssetProperty).prop_type == "Array":
 				paste_into = (array_ctx as UAssetProperty).children
 				show_after = array_ctx
@@ -212,15 +218,18 @@ static func paste(context: Dictionary) -> void:
 			if current_data is UAssetProperty and paste_into.has(current_data):
 				insert_at = paste_into.find(current_data)
 
-			for i in (_clipboard["items"] as Array).size():
-				var new_prop := UAssetProperty.from_dict(
-					((_clipboard["items"] as Array)[i] as Dictionary).duplicate(true))
-				paste_into.insert(insert_at + i, new_prop)
-				context["push_undo"].call({"action": "remove_from_array",
-					"array": paste_into, "prop": new_prop, "show": show_after})
-			context["set_dirty"].call()
-			context["rebuild_tree"].call()
-			context["show_detail"].call(show_after)
+			var added: Array[UAssetProperty] = []
+			for raw_item in _clipboard["items"]:
+				added.append(UAssetProperty.from_dict((raw_item as Dictionary).duplicate(true)))
+			context.execute("Paste properties",
+				func() -> void:
+					for i in added.size():
+						paste_into.insert(insert_at + i, added[i]),
+				func() -> void:
+					for prop in added:
+						paste_into.erase(prop))
+			context.rebuild_tree.call()
+			context.show_detail.call(show_after)
 
 		"dt_row":
 			var expo: UAssetExport = _clipboard["expo"]
@@ -235,11 +244,11 @@ static func paste(context: Dictionary) -> void:
 				var cur_idx := _datatable_row_index(cur_row, rows_raw)
 				if cur_idx >= 0:
 					insert_at = cur_idx + 1
-			rows_raw.insert(insert_at, new_raw)
-			context["set_dirty"].call()
-			context["push_undo"].call({"action": "datatable_remove_row", "rows_raw": rows_raw, "index": insert_at, "expo": expo})
-			context["rebuild_tree"].call()
-			context["show_detail"].call(expo)
+			context.execute("Paste data table row",
+				func() -> void: rows_raw.insert(insert_at, new_raw),
+				func() -> void: rows_raw.remove_at(insert_at))
+			context.rebuild_tree.call()
+			context.show_detail.call(expo)
 
 
 static func _find_context_export(current_data: Variant, detail_stack: Array) -> UAssetExport:

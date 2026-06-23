@@ -5,7 +5,7 @@ class_name NamemapDetail extends DetailItem
 
 
 func _build_impl() -> void:
-	var asset: UAssetFile = _ctx["asset"]
+	var asset := _ctx.get_asset()
 
 	_add_header("NameMap [%d]" % asset.name_map.size())
 	_add_separator()
@@ -15,8 +15,8 @@ func _build_impl() -> void:
 
 
 func _build_name_row(index: int) -> void:
-	var asset: UAssetFile = _ctx["asset"]
-	var sel: SelectionManager = _ctx["selection"]
+	var asset := _ctx.get_asset()
+	var sel := _ctx.selection
 	var row := _make_row()
 
 	# Index badge — click to select
@@ -37,20 +37,22 @@ func _build_name_row(index: int) -> void:
 	)
 	row.add_child(idx_btn)
 
-	# Forward-declare so the commit callable can access the LineEdit for rejection
-	var line: LineEdit
-	line = _make_commit_line(
-		asset.name_map[index],
-		func(t: String):
-			if t == asset.name_map[index]:
-				return
-			if asset.has_name(t):
-				line.text = asset.name_map[index]
-				return
-			_ctx["set_dirty"].call()
-			asset.name_map[index] = t,
-		"", 0.0, true, false
-	)
+	var line := LineEdit.new()
+	line.text = asset.name_map[index]
+	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var commit := func() -> void:
+		var old_name := asset.name_map[index]
+		var new_name := line.text
+		if new_name == old_name:
+			return
+		if new_name.is_empty() or asset.has_name(new_name):
+			line.text = old_name
+			return
+		_ctx.execute("Rename name map entry",
+			func() -> void: asset.name_map[index] = new_name,
+			func() -> void: asset.name_map[index] = old_name)
+	line.text_submitted.connect(func(_text: String) -> void: commit.call())
+	line.focus_exited.connect(commit)
 	row.add_child(line)
 
 	var panel := sel.make_selectable_row(index, row,

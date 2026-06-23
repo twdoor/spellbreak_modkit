@@ -436,21 +436,36 @@ func paste_clipboard() -> void:
 
 	var copied := 0
 	var failed := 0
+	var successful_moves: Array = []
+	var remaining_clipboard: Array = []
 	for entry: Dictionary in _file_clipboard:
 		# Preserve the full relative path so folder structure is maintained.
 		var rel: String = entry["rel_path"]
 		var dst: String = dst_root.path_join(rel)
-		if FileUtils.copy_file(entry["full_path"] as String, dst) == OK:
+		var src: String = entry["full_path"]
+		if not FileUtils.is_path_within(dst, dst_root):
+			failed += 1
+			remaining_clipboard.append(entry)
+			continue
+		if FileUtils.same_path(src, dst):
 			copied += 1
+		elif FileUtils.copy_file(src, dst) == OK:
+			copied += 1
+			successful_moves.append(entry)
 		else:
 			failed += 1
+			remaining_clipboard.append(entry)
 
-	# For cut: delete sources only after all copies succeeded.
-	if _clipboard_is_cut and copied > 0:
-		for entry: Dictionary in _file_clipboard:
-			_delete_file_raw(entry["mod"] as Dictionary, entry["full_path"] as String)
-		_file_clipboard.clear()
-		_clipboard_is_cut = false
+	# For cut, only delete sources whose copy succeeded.
+	if _clipboard_is_cut:
+		for entry: Dictionary in successful_moves:
+			var delete_error := _delete_file_raw(
+				entry["mod"] as Dictionary, entry["full_path"] as String)
+			if delete_error != OK:
+				failed += 1
+				remaining_clipboard.append(entry)
+		_file_clipboard = remaining_clipboard
+		_clipboard_is_cut = not _file_clipboard.is_empty()
 
 	var msg := "Pasted %d file(s) into %s" % [copied, target_mod["name"]]
 	if failed > 0:
@@ -523,12 +538,14 @@ func create_file() -> void:
 ## Delete a file and prune empty parent dirs up to the mod root.
 ## Returns OK or an error code. Does NOT emit status or refresh — callers do that.
 func _delete_file_raw(mod: Dictionary, full_path: String) -> Error:
+	var mod_path: String = mod["path"]
+	if not FileUtils.is_path_within(full_path, mod_path) or FileUtils.same_path(full_path, mod_path):
+		return ERR_INVALID_PARAMETER
 	var err := DirAccess.remove_absolute(full_path)
 	if err != OK:
 		return err
-	var mod_path: String = mod["path"]
 	var dir := full_path.get_base_dir()
-	while dir.begins_with(mod_path) and dir != mod_path:
+	while FileUtils.is_path_within(dir, mod_path) and not FileUtils.same_path(dir, mod_path):
 		var da := DirAccess.open(dir)
 		if da:
 			da.list_dir_begin()
@@ -607,12 +624,16 @@ func _copy_files_to_mod(mod: Dictionary, source_root: String, file_paths: Packed
 	var copied := 0
 	var failed := 0
 	for src_file in file_paths:
-		if not src_file.begins_with(source_root):
+		if not FileUtils.is_path_within(src_file, source_root):
 			_set_status("File is outside source root — skipped: %s" % src_file.get_file(), true)
 			failed += 1
 			continue
-		var rel := src_file.substr(source_root.length()).lstrip("/")
+		var rel := src_file.replace("\\", "/").substr(
+			source_root.replace("\\", "/").rstrip("/").length()).lstrip("/")
 		var dst := mod_path.path_join(rel)
+		if not FileUtils.is_path_within(dst, mod_path):
+			failed += 1
+			continue
 		if FileUtils.copy_file(src_file, dst) == OK:
 			copied += 1
 		else:
@@ -653,8 +674,9 @@ func _on_new_mod_pressed() -> void:
 
 	dialog.confirmed.connect(func() -> void:
 		var mod_name := edit.text.strip_edges()
-		if mod_name.is_empty():
-			dialog.queue_free()
+		if not FileUtils.is_safe_filename(mod_name):
+			_set_status("Mod name must be a single folder name", true)
+			edit.grab_focus()
 			return
 		var mod_path := _cfg.mods_dir.path_join(mod_name)
 		if DirAccess.dir_exists_absolute(mod_path):
@@ -662,7 +684,11 @@ func _on_new_mod_pressed() -> void:
 			dialog.queue_free()
 			return
 		var cr := _cfg.get_game_profile().content_root
-		var err := DirAccess.make_dir_recursive_absolute(mod_path.path_join(cr + "/Content"))
+		var content_path := mod_path.path_join(cr + "/Content")
+		if not FileUtils.is_path_within(content_path, mod_path):
+			_set_status("Game profile has an invalid content root", true)
+			return
+		var err := DirAccess.make_dir_recursive_absolute(content_path)
 		if err != OK:
 			_set_status("Failed to create mod folder", true)
 			dialog.queue_free()

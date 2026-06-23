@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Godot
+        uses: chickensoft-games/setup-godot@v2.4.1
+        with:
+          version: 4.6.3
+          use-dotnet: false
+          include-templates: false
+
+      - name: Parse and test
+        run: ./scripts/test.sh

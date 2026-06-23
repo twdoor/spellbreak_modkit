@@ -32,7 +32,10 @@ func setup(cfg: ModConfigManager, state: ModStateManager, packer: PackingService
 
 
 func is_watching() -> bool:
-	return _active
+	_active_mtx.lock()
+	var result := _active
+	_active_mtx.unlock()
+	return result
 
 
 func get_pack_count() -> int:
@@ -144,7 +147,10 @@ func _snapshot() -> int:
 
 	var content_root := _cfg.get_game_profile().content_root
 	for mod_name in names:
-		var mod_content := _cfg.mods_dir.path_join(mod_name).path_join(content_root)
+		var mod_root := _cfg.mods_dir.path_join(mod_name)
+		var mod_content := mod_root.path_join(content_root)
+		if not FileUtils.is_path_within(mod_content, mod_root):
+			continue
 		if not DirAccess.dir_exists_absolute(mod_content):
 			continue
 		h = _hash_dir(mod_content, h)  # accumulate returned hash — ints are pass-by-value in GDScript

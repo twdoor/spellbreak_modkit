@@ -44,9 +44,11 @@ func _build_impl() -> void:
 			if v.is_empty():
 				return
 			row.prop_name = v
-			row.raw["Name"] = v
+			row.raw["Name"] = v,
+		"", 0.0, true, true,
+		func(v: String):
 			hdr_label.text = v
-			_ctx["rebuild_tree"].call()
+			_ctx.rebuild_tree.call()
 	))
 	_container.add_child(name_hbox)
 

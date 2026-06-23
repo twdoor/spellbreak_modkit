@@ -113,6 +113,35 @@ static func from_dict(d: Dictionary) -> UAssetProperty:
 	return p
 
 
+func capture_state() -> Dictionary:
+	return to_dict().duplicate(true)
+
+
+func restore_state(state: Dictionary) -> void:
+	var restored := UAssetProperty.from_dict(state.duplicate(true))
+	raw = restored.raw
+	prop_name = restored.prop_name
+	prop_type = restored.prop_type
+	prop_type_full = restored.prop_type_full
+	array_index = restored.array_index
+	is_zero = restored.is_zero
+	value = restored.value
+	struct_type = restored.struct_type
+	array_type = restored.array_type
+	enum_type = restored.enum_type
+	children = restored.children
+	flags = restored.flags
+	history_type = restored.history_type
+	name_space = restored.name_space
+	culture_invariant = restored.culture_invariant
+	source_string = restored.source_string
+
+
+func set_value(new_value: Variant) -> void:
+	value = new_value.duplicate(true) if new_value is Array or new_value is Dictionary else new_value
+	raw["Value"] = value
+
+
 ## Convert back to dictionary for JSON serialization.
 ## Merges edits back into the original raw dict for round-trip fidelity.
 func to_dict() -> Dictionary:

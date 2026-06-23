@@ -98,14 +98,12 @@ func get_cached_audio(uasset_path: String) -> String:
 func _export_thread(uasset_path: String, output_ogg: String) -> void:
 	var result := _do_extract_audio(uasset_path)
 	if result[0]:
-		# Write bytes to output file
-		var fa := FileAccess.open(output_ogg, FileAccess.WRITE)
-		if fa:
-			fa.store_buffer(result[2])
-			fa.close()
+		var write_error := FileUtils.write_bytes_atomic(output_ogg, result[2])
+		if write_error == OK:
 			call_deferred("_on_operation_done", true, "Exported to %s" % output_ogg.get_file())
 		else:
-			call_deferred("_on_operation_done", false, "Failed to write: %s" % output_ogg)
+			call_deferred("_on_operation_done", false,
+				"Failed to write %s (error %d)" % [output_ogg, write_error])
 	else:
 		call_deferred("_on_operation_done", false, result[1])
 
@@ -156,10 +154,7 @@ func _do_extract_audio(uasset_path: String) -> Array:
 			var cache_dir := _get_cache_dir()
 			DirAccess.make_dir_recursive_absolute(cache_dir)
 			var cache_path := cache_dir.path_join(_cache_key(uasset_path) + ".ogg")
-			var fa := FileAccess.open(cache_path, FileAccess.WRITE)
-			if fa:
-				fa.store_buffer(ogg_data)
-				fa.close()
+			FileUtils.write_bytes_atomic(cache_path, ogg_data)
 			return [true, "Extracted %d bytes of audio" % ogg_data.size(), ogg_data]
 
 	return [false, "No OGG audio data found in companion files", PackedByteArray()]
@@ -346,11 +341,9 @@ func _do_inject_ogg(uasset_path: String, ogg_path: String) -> Array:
 	result_data.append_array(suffix)
 
 	# Write back
-	var out_fa := FileAccess.open(target_file, FileAccess.WRITE)
-	if not out_fa:
-		return [false, "Failed to write: %s" % target_file]
-	out_fa.store_buffer(result_data)
-	out_fa.close()
+	var write_error := FileUtils.write_bytes_atomic(target_file, result_data)
+	if write_error != OK:
+		return [false, "Failed to write %s (error %d)" % [target_file, write_error]]
 
 	var msg := "Injected %s into %s" % [ogg_path.get_file(), target_file.get_file()]
 	if new_ogg.size() != old_size:

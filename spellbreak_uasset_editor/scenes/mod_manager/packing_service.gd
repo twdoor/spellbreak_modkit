@@ -13,6 +13,7 @@ signal pack_log(line: String)
 var _cfg: ModConfigManager
 var _thread: Thread = null
 var _packing: bool = false
+var _packing_mutex := Mutex.new()
 
 
 func setup(cfg: ModConfigManager) -> PackingService:
@@ -21,7 +22,10 @@ func setup(cfg: ModConfigManager) -> PackingService:
 
 
 func is_packing() -> bool:
-	return _packing
+	_packing_mutex.lock()
+	var result := _packing
+	_packing_mutex.unlock()
+	return result
 
 
 ## Block until the pack thread has fully exited. Call from _exit_tree().
@@ -33,12 +37,16 @@ func wait_to_finish() -> void:
 ## Pack all enabled mods. enabled_mods: Array of dicts from ModDiscovery.scan().
 ## Runs in a background thread; emits pack_started / pack_log / pack_finished.
 func pack(enabled_mods: Array) -> void:
+	_packing_mutex.lock()
 	if _packing:
+		_packing_mutex.unlock()
 		return
 	if enabled_mods.is_empty():
+		_packing_mutex.unlock()
 		pack_finished.emit(false, "No mods enabled")
 		return
 	_packing = true
+	_packing_mutex.unlock()
 	pack_started.emit()
 	if _thread and _thread.is_alive():
 		_thread.wait_to_finish()
@@ -52,7 +60,9 @@ func _pack_thread(enabled_mods: Array) -> void:
 
 
 func _on_pack_done(success: bool, message: String) -> void:
+	_packing_mutex.lock()
 	_packing = false
+	_packing_mutex.unlock()
 	if _thread:
 		_thread.wait_to_finish()
 	pack_finished.emit(success, message)
@@ -63,10 +73,15 @@ func _do_pack(enabled_mods: Array) -> Array:
 	var paks_dir    := _cfg.get_paks_dir()
 	var u4pak_path  := _cfg.get_u4pak_path()
 
+	if not FileUtils.is_path_within(paks_dir, _cfg.game_dir):
+		return [false, "Paks path escapes the configured game directory"]
 	if not DirAccess.dir_exists_absolute(paks_dir):
 		return [false, "Paks dir missing: %s" % paks_dir]
 	if not FileAccess.file_exists(u4pak_path):
 		return [false, "u4pak.py not found: %s" % u4pak_path]
+	var python := ProcessUtils.find_python()
+	if python.is_empty():
+		return [false, "Python was not found in PATH"]
 
 	# Create temp merge directory
 	var tmp_dir := OS.get_temp_dir().path_join("sb_pack_%d" % Time.get_ticks_msec())
@@ -80,46 +95,73 @@ func _do_pack(enabled_mods: Array) -> Array:
 	for mod in enabled_mods:
 		_emit_log("  → %s" % mod["name"])
 		var mod_content := (mod["path"] as String).path_join(content_root)
+		if not FileUtils.is_path_within(mod_content, mod["path"]):
+			FileUtils.remove_dir_recursive(tmp_dir)
+			return [false, "Content root escapes mod '%s'" % mod["name"]]
 		if not DirAccess.dir_exists_absolute(mod_content):
 			continue
-		_copy_dir_recursive(mod_content, merged.path_join(content_root), mod["path"])
+		var copy_error := _copy_dir_recursive(mod_content, merged.path_join(content_root))
+		if copy_error != OK:
+			FileUtils.remove_dir_recursive(tmp_dir)
+			return [false, "Could not merge mod '%s' (error %d)" % [mod["name"], copy_error]]
 
 	_emit_log("")
 	_emit_log("Packing...")
 
 	var pak_name := profile.pak_output_name
+	if not FileUtils.is_safe_filename(pak_name):
+		FileUtils.remove_dir_recursive(tmp_dir)
+		return [false, "Invalid pak output name in game profile"]
 	var pak_path := paks_dir.path_join(pak_name + ".pak")
-	# Remove old pak
-	if FileAccess.file_exists(pak_path):
-		DirAccess.remove_absolute(pak_path)
+	var staged_pak := paks_dir.path_join(".%s.sb_pack_%d.pak" % [pak_name, Time.get_ticks_usec()])
 
-	# Invoke u4pak.py via a shell wrapper so we can set CWD to merged_dir
-	# (Godot 4's OS.execute doesn't support setting working directory directly)
-	var exit_code := _run_u4pak(u4pak_path, pak_path, merged)
+	# Build beside the installed pak. The old working pak remains untouched until
+	# both staged output files have been produced successfully.
+	var exit_code := _run_u4pak(python, u4pak_path, staged_pak, merged)
 
 	# Clean up temp dir
 	FileUtils.remove_dir_recursive(tmp_dir)
 
 	if exit_code != 0:
+		if FileAccess.file_exists(staged_pak):
+			DirAccess.remove_absolute(staged_pak)
 		return [false, "Pack failed (exit %d)" % exit_code]
+	var staged_fa := FileAccess.open(staged_pak, FileAccess.READ)
+	if not staged_fa or staged_fa.get_length() == 0:
+		if staged_fa:
+			staged_fa.close()
+		if FileAccess.file_exists(staged_pak):
+			DirAccess.remove_absolute(staged_pak)
+		return [false, "Pack completed without producing a valid pak"]
+	staged_fa.close()
 
 	# Copy / create .sig file
 	var sig_path := pak_path.get_basename() + ".sig"
-	if FileAccess.file_exists(sig_path):
-		DirAccess.remove_absolute(sig_path)
+	var staged_sig := paks_dir.path_join(".%s.sb_pack_%d.sig" % [pak_name, Time.get_ticks_usec()])
 	var src_sig := _find_sig(paks_dir)
 	if not src_sig.is_empty():
-		var bytes := FileAccess.get_file_as_bytes(src_sig)
-		var sig_file := FileAccess.open(sig_path, FileAccess.WRITE)
-		if sig_file:
-			sig_file.store_buffer(bytes)
-			sig_file.close()
+		var sig_error := FileUtils.copy_file(src_sig, staged_sig)
+		if sig_error != OK:
+			DirAccess.remove_absolute(staged_pak)
+			return [false, "Could not stage signature file (error %d)" % sig_error]
 		_emit_log("Sig: %s" % src_sig.get_file())
 	else:
-		var sig_file := FileAccess.open(sig_path, FileAccess.WRITE)
-		if sig_file:
-			sig_file.close()
+		var sig_error := FileUtils.write_bytes_atomic(staged_sig, PackedByteArray())
+		if sig_error != OK:
+			DirAccess.remove_absolute(staged_pak)
+			return [false, "Could not stage signature file (error %d)" % sig_error]
 		_emit_log("Sig: empty (no template found)")
+
+	var install_error := FileUtils.install_staged_files([
+		{"source": staged_pak, "target": pak_path},
+		{"source": staged_sig, "target": sig_path},
+	])
+	if install_error != OK:
+		if FileAccess.file_exists(staged_pak):
+			DirAccess.remove_absolute(staged_pak)
+		if FileAccess.file_exists(staged_sig):
+			DirAccess.remove_absolute(staged_sig)
+		return [false, "Could not install packed files (error %d)" % install_error]
 
 	var pak_size := 0
 	var fa := FileAccess.open(pak_path, FileAccess.READ)
@@ -129,39 +171,21 @@ func _do_pack(enabled_mods: Array) -> Array:
 	return [true, "Packed %s.pak + .sig (%s)" % [pak_name, ModDiscovery.fmt_size(pak_size)]]
 
 
-func _run_u4pak(u4pak_path: String, pak_path: String, merged_dir: String) -> int:
-	# Build platform-appropriate command that runs u4pak from merged_dir as CWD
-	var python := _find_python()
+func _run_u4pak(python: String, u4pak_path: String, pak_path: String, merged_dir: String) -> int:
 	var profile := _cfg.get_game_profile()
 	var archive_ver := str(profile.pak_archive_version)
 	var mount_point := profile.pak_mount_point
 	var content_root := profile.content_root + "/"
-	var cmd: String
-	var args: Array
-	if OS.get_name() == "Windows":
-		cmd = "cmd"
-		args = ["/c", "cd /d \"%s\" && \"%s\" \"%s\" pack -z --archive-version=%s --mount-point=%s  \"%s\" %s" \
-			% [merged_dir, python, u4pak_path, archive_ver, mount_point, pak_path, content_root]]
-	else:
-		cmd = "sh"
-		args = ["-c", "cd '%s' && '%s' '%s' pack -z --archive-version=%s --mount-point=%s  '%s' %s" \
-			% [merged_dir, python, u4pak_path, archive_ver, mount_point, pak_path, content_root]]
 	var output: Array = []
-	var code := OS.execute(cmd, args, output, true, false)
+	var code := ProcessUtils.run_python_script(python, u4pak_path, merged_dir, [
+		"pack", "-z", "--archive-version=%s" % archive_ver,
+		"--mount-point=%s" % mount_point, pak_path, content_root,
+	], output)
 	if not output.is_empty():
 		for line in str(output[0]).split("\n"):
 			if not line.strip_edges().is_empty():
 				_emit_log("  " + line.strip_edges())
 	return code
-
-
-func _find_python() -> String:
-	# Try common python binary names
-	for py in ["python3", "python"]:
-		var out: Array = []
-		if OS.execute("which" if OS.get_name() != "Windows" else "where", [py], out, true, false) == 0:
-			return py
-	return "python3"
 
 
 func _find_sig(paks_dir: String) -> String:
@@ -172,7 +196,7 @@ func _find_sig(paks_dir: String) -> String:
 	dir.list_dir_begin()
 	var entry := dir.get_next()
 	while not entry.is_empty():
-		if entry.ends_with(".sig") and not entry.begins_with(pak_name):
+		if entry.ends_with(".sig") and not entry.begins_with(pak_name) and not entry.begins_with("."):
 			dir.list_dir_end()
 			return paks_dir.path_join(entry)
 		entry = dir.get_next()
@@ -180,27 +204,35 @@ func _find_sig(paks_dir: String) -> String:
 	return ""
 
 
-func _copy_dir_recursive(src: String, dst: String, mod_root: String) -> void:
-	DirAccess.make_dir_recursive_absolute(dst)
+func _copy_dir_recursive(src: String, dst: String) -> Error:
+	var mkdir_error := DirAccess.make_dir_recursive_absolute(dst)
+	if mkdir_error != OK:
+		return mkdir_error
 	var dir := DirAccess.open(src)
 	if not dir:
-		return
+		return ERR_CANT_OPEN
 	dir.list_dir_begin()
 	var entry := dir.get_next()
 	while not entry.is_empty():
 		var src_full := src.path_join(entry)
 		var dst_full := dst.path_join(entry)
-		if dir.current_is_dir() and not entry.begins_with("."):
-			_copy_dir_recursive(src_full, dst_full, mod_root)
+		if dir.is_link(entry):
+			dir.list_dir_end()
+			return ERR_INVALID_DATA
+		elif dir.current_is_dir() and not entry.begins_with("."):
+			var copy_error := _copy_dir_recursive(src_full, dst_full)
+			if copy_error != OK:
+				dir.list_dir_end()
+				return copy_error
 		elif not dir.current_is_dir():
 			if not entry.ends_with(".json"):  # exclude JSON sidecars
-				var bytes := FileAccess.get_file_as_bytes(src_full)
-				var fa := FileAccess.open(dst_full, FileAccess.WRITE)
-				if fa:
-					fa.store_buffer(bytes)
-					fa.close()
+				var copy_error := FileUtils.copy_file(src_full, dst_full)
+				if copy_error != OK:
+					dir.list_dir_end()
+					return copy_error
 		entry = dir.get_next()
 	dir.list_dir_end()
+	return OK
 
 
 func _emit_log(line: String) -> void:
@@ -214,7 +246,11 @@ func _deferred_log(line: String) -> void:
 ## Remove the mod pak and .sig from the paks directory.
 func remove_pak() -> Array:
 	var paks_dir := _cfg.get_paks_dir()
+	if not FileUtils.is_path_within(paks_dir, _cfg.game_dir):
+		return [false, "Paks path escapes the configured game directory"]
 	var pak_name := _cfg.get_game_profile().pak_output_name
+	if not FileUtils.is_safe_filename(pak_name):
+		return [false, "Invalid pak output name in game profile"]
 	var removed: Array = []
 	for ext in [".pak", ".sig"]:
 		var f := paks_dir.path_join(pak_name + ext)

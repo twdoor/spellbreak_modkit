@@ -18,7 +18,7 @@ func init_data(expo: UAssetExport) -> StringTableDetail:
 func _build_impl() -> void:
 	var expo := _expo
 
-	if not (_ctx["detail_stack"] as Array).is_empty():
+	if not _ctx.detail_stack.is_empty():
 		_add_back_button()
 
 	var hdr_label := Label.new()
@@ -74,9 +74,11 @@ func _build_entries(expo: UAssetExport, table_raw: Dictionary, entries: Array) -
 		))
 
 		var del_btn := _make_delete_btn(func() -> void:
-			entries.remove_at(ci)
+			var removed_entry := (entries[ci] as Array).duplicate(true)
+			_ctx.execute("Delete string table entry",
+				func() -> void: entries.remove_at(ci),
+				func() -> void: entries.insert(ci, removed_entry.duplicate(true)))
 			table_raw["Value"] = entries
-			_ctx["set_dirty"].call()
 			_rebuild_entries_deferred.call_deferred(expo, table_raw)
 		)
 		del_btn.tooltip_text = "Remove entry [%d]" % ci
@@ -86,13 +88,16 @@ func _build_entries(expo: UAssetExport, table_raw: Dictionary, entries: Array) -
 	_add_separator()
 
 	_container.add_child(_make_add_btn("+ Add Entry", func() -> void:
-		entries.append(["", ""])
+		var entry := ["", ""]
+		var insert_at := entries.size()
+		_ctx.execute("Add string table entry",
+			func() -> void: entries.insert(insert_at, entry),
+			func() -> void: entries.remove_at(insert_at))
 		table_raw["Value"] = entries
-		_ctx["set_dirty"].call()
-		_ctx["show_detail"].call(expo)
+		_ctx.show_detail.call(expo)
 	))
 
 
 ## Full panel rebuild — called deferred after a delete so the pressed signal finishes first.
 func _rebuild_entries_deferred(expo: UAssetExport, _table_raw: Dictionary) -> void:
-	_ctx["show_detail"].call(expo)
+	_ctx.show_detail.call(expo)

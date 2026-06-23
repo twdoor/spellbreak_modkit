@@ -102,7 +102,7 @@ func _build_ui() -> void:
 
 	# ── umodel (3D Preview) ──
 	content.add_child(_section("umodel (3D Preview)"))
-	content.add_child(_hint("Path to the umodel binary. Required for 3D mesh preview. Download from gildor.org/en/projects/umodel"))
+	content.add_child(_hint("Path to the umodel binary. Required for 3D mesh and animation preview. Download from gildor.org/en/projects/umodel"))
 	var umodel_row := HBoxContainer.new()
 	umodel_row.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
 	var umodel_edit := _line_edit(_cfg.umodel_path, "/path/to/umodel")

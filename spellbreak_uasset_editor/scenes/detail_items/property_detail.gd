@@ -48,9 +48,9 @@ func _build_impl() -> void:
 					_add_separator()
 					_add_section_label("TEXT PROPERTIES")
 					_add_text_area("CultureInvariantString", prop.culture_invariant,
-						func(v): _ctx["set_dirty"].call(); prop.culture_invariant = v; prop.raw["CultureInvariantString"] = v)
+						func(v): prop.culture_invariant = v; prop.raw["CultureInvariantString"] = v)
 					_add_text_area("SourceString", prop.source_string,
-						func(v): _ctx["set_dirty"].call(); prop.source_string = v; prop.raw["SourceString"] = v)
+						func(v): prop.source_string = v; prop.raw["SourceString"] = v)
 					_add_field_editor("Namespace", prop.name_space,
 						func(v): prop.name_space = v; prop.raw["Namespace"] = v)
 
@@ -85,17 +85,24 @@ func _add_text_area(label_text: String, current_value: String, on_change: Callab
 	edit.scroll_fit_content_height = true
 	edit.custom_minimum_size.y = 48
 	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	edit.text_changed.connect(func(): on_change.call(edit.text))
+	var committed := {"value": current_value}
+	var commit := func() -> void:
+		var new_value := edit.text
+		if new_value == committed["value"]:
+			return
+		var old_value: String = committed["value"]
+		_ctx.execute("Edit %s" % label_text,
+			func() -> void: on_change.call(new_value),
+			func() -> void: on_change.call(old_value))
+		committed["value"] = new_value
+	edit.focus_exited.connect(commit)
 	_container.add_child(edit)
 
 
 # ── GameplayTagContainer editor ───────────────────────────────────────────────
 
 func _build_tag_container(prop: UAssetProperty) -> void:
-	if not (prop.value is Array):
-		prop.value = []
-
-	var tags: Array = prop.value
+	var tags: Array = prop.value if prop.value is Array else []
 
 	if tags.is_empty():
 		_add_info("(no tags)")
@@ -105,17 +112,23 @@ func _build_tag_container(prop: UAssetProperty) -> void:
 		var row := _make_row()
 		row.add_child(_make_commit_line(str(tags[ci]), func(t): tags[ci] = t, "Tag.Name.Here"))
 		row.add_child(_make_delete_btn(func():
-			tags.remove_at(ci)
-			prop.value = tags
-			prop.raw["Value"] = tags
-			_ctx["show_detail"].call(prop)
+			var old_tags := tags.duplicate(true)
+			var new_tags := tags.duplicate(true)
+			new_tags.remove_at(ci)
+			_ctx.execute("Delete gameplay tag",
+				func() -> void: prop.set_value(new_tags),
+				func() -> void: prop.set_value(old_tags))
+			_ctx.show_detail.call(prop)
 		))
 		_container.add_child(row)
 
 	_add_separator()
 	_container.add_child(_make_add_btn("+ Add Tag", func():
-		tags.append("")
-		prop.value = tags
-		prop.raw["Value"] = tags
-		_ctx["show_detail"].call(prop)
+		var old_tags := tags.duplicate(true)
+		var new_tags := tags.duplicate(true)
+		new_tags.append("")
+		_ctx.execute("Add gameplay tag",
+			func() -> void: prop.set_value(new_tags),
+			func() -> void: prop.set_value(old_tags))
+		_ctx.show_detail.call(prop)
 	))
