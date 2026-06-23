@@ -36,6 +36,36 @@ static func run_python_script(python: String, script: String, working_dir: Strin
 	return OS.execute(python, python_args, output, true, false)
 
 
+static func parse_command_line(command: String) -> PackedStringArray:
+	var args := PackedStringArray()
+	var current := ""
+	var in_quotes := false
+	var has_token := false
+	var i := 0
+	while i < command.length():
+		var ch := command.substr(i, 1)
+		if ch == "\\" and i + 1 < command.length() and command.substr(i + 1, 1) == '"':
+			current += '"'
+			has_token = true
+			i += 2
+			continue
+		if ch == '"':
+			in_quotes = not in_quotes
+			has_token = true
+		elif (ch == " " or ch == "\t") and not in_quotes:
+			if has_token:
+				args.append(current)
+				current = ""
+				has_token = false
+		else:
+			current += ch
+			has_token = true
+		i += 1
+	if has_token:
+		args.append(current)
+	return args
+
+
 static func output_text(output: Array, fallback: String = "no output") -> String:
 	if output.is_empty():
 		return fallback

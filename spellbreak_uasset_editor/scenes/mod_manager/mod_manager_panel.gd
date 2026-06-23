@@ -746,29 +746,51 @@ func _on_launch_pressed() -> void:
 		_set_status("Launch failed" if err != OK else "Launched: %s" % cmd, err != OK)
 		return
 
-	# Parse exe + args, respecting a quoted exe path for paths with spaces.
-	# Accepted forms:
-	#   C:\NoSpaces\game.exe -arg1 -arg2
-	#   "C:\With Spaces\game.exe" -arg1 -arg2
-	var exe: String
-	var args: PackedStringArray = []
-	if cmd.begins_with('"'):
-		var close := cmd.find('"', 1)
-		if close == -1:
-			exe = cmd.trim_prefix('"')          # unterminated quote — use whole string
-		else:
-			exe = cmd.substr(1, close - 1)
-			var rest := cmd.substr(close + 1).strip_edges()
-			if not rest.is_empty():
-				args = rest.split(" ", false)
-	else:
-		var parts := cmd.split(" ", false)
-		exe = parts[0]
-		for i in range(1, parts.size()):
-			args.append(parts[i])
+	var parts := ProcessUtils.parse_command_line(cmd)
+	if parts.is_empty():
+		_set_status("Launch command is empty", true)
+		return
 
-	var error := OS.create_process(exe, args)
+	var exe := parts[0]
+	var args: PackedStringArray = []
+	for i in range(1, parts.size()):
+		args.append(parts[i])
+
+	var error := _launch_process(exe, args)
 	_set_status("Launch failed" if error < 0 else "Launched: %s" % cmd, error < 0)
+
+
+func _launch_process(exe: String, args: PackedStringArray) -> int:
+	if OS.get_name() == "Windows" and FileAccess.file_exists(exe) and exe.get_base_dir() != "":
+		return _launch_windows_file(exe, args)
+	return OS.create_process(exe, args)
+
+
+func _launch_windows_file(exe: String, args: PackedStringArray) -> int:
+	if args.is_empty():
+		return OK if OS.shell_open(exe) == OK else ERR_CANT_OPEN
+
+	var powershell := ProcessUtils.find_executable(["powershell.exe", "pwsh.exe"])
+	if powershell.is_empty():
+		return OS.create_process(exe, args)
+
+	var script := (
+			"$file=$args[0];$workdir=$args[1];"
+			+ "$procArgs=@();"
+			+ "if($args.Count -gt 2){$procArgs=$args[2..($args.Count-1)]};"
+			+ "Start-Process -FilePath $file -WorkingDirectory $workdir -ArgumentList $procArgs"
+	)
+	var ps_args := PackedStringArray([
+		"-NoProfile",
+		"-WindowStyle", "Hidden",
+		"-ExecutionPolicy", "Bypass",
+		"-Command", script,
+		exe,
+		exe.get_base_dir(),
+	])
+	for arg in args:
+		ps_args.append(arg)
+	return OS.create_process(powershell, ps_args)
 
 
 # ── Service signal handlers ────────────────────────────────────────────────────

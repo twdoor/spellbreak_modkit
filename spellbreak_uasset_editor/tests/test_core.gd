@@ -576,6 +576,14 @@ func _test_process_arguments() -> void:
 		"subprocess paths and arguments are passed literally")
 	FileUtils.remove_dir_recursive(root)
 
+	var launch := ProcessUtils.parse_command_line(
+			"\"C:\\Games\\Spellbreak CE\\Spellbreak.exe\" -log \"value with spaces\"")
+	_expect(launch.size() == 3
+			and launch[0] == "C:\\Games\\Spellbreak CE\\Spellbreak.exe"
+			and launch[1] == "-log"
+			and launch[2] == "value with spaces",
+			"launch command parser preserves quoted Windows paths and arguments")
+
 
 func _test_packing_transaction() -> void:
 	if ProcessUtils.find_python().is_empty():
