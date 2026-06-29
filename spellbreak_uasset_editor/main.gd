@@ -26,6 +26,8 @@ var _toast_tween: Tween
 
 var _close_dialog: ConfirmationDialog
 var _tab_pending_close: UassetFileTab
+var _update_dialog: ConfirmationDialog
+var _latest_release_url := ""
 
 var _status_label: Label
 var _cfg: ModConfigManager
@@ -33,6 +35,7 @@ var _texture_service: TextureService
 var _sound_service: SoundService
 var _mesh_service: MeshService
 var _background_jobs: BackgroundJobRunner
+var _update_checker: UpdateChecker
 var _keymap_config: GUIDERemappingConfig
 
 const _TOAST_HIDDEN_Y := -8.0   # resting offset_bottom when hidden (just off-screen bottom)
@@ -54,6 +57,8 @@ func _ready() -> void:
 	_build_close_dialog()
 	_build_status_bar()
 	_setup_mod_tab()
+	_build_update_dialog()
+	_setup_update_checker()
 
 
 func _connect_shortcuts() -> void:
@@ -261,6 +266,43 @@ func _build_close_dialog() -> void:
 	_close_dialog.custom_action.connect(_on_save_and_close)
 	AppTheme.apply_theme(_close_dialog)
 	add_child(_close_dialog)
+
+
+func _build_update_dialog() -> void:
+	_update_dialog = ConfirmationDialog.new()
+	_update_dialog.title = "Update Available"
+	_update_dialog.ok_button_text = "Open Release"
+	_update_dialog.cancel_button_text = "Later"
+	_update_dialog.confirmed.connect(_open_latest_release)
+	AppTheme.apply_theme(_update_dialog)
+	add_child(_update_dialog)
+
+
+func _setup_update_checker() -> void:
+	_update_checker = UpdateChecker.new()
+	_update_checker.update_available.connect(_on_update_available)
+	add_child(_update_checker)
+	call_deferred("_check_for_updates")
+
+
+func _check_for_updates() -> void:
+	if _update_checker:
+		_update_checker.check_now()
+
+
+func _on_update_available(version: String, release_url: String, release_name: String) -> void:
+	_latest_release_url = release_url
+	var title := release_name if not release_name.is_empty() else "Spellbreak Modkit %s" % version
+	_update_dialog.dialog_text = "%s is available.\n\nOpen the GitHub release page?" % title
+	_update_dialog.popup_centered()
+
+
+func _open_latest_release() -> void:
+	if _latest_release_url.is_empty():
+		_latest_release_url = UpdateChecker.GITHUB_LATEST_RELEASE_PAGE % UpdateChecker.DEFAULT_REPOSITORY
+	var error := OS.shell_open(_latest_release_url)
+	if error != OK:
+		_show_toast("Could not open release page (error %d)" % error)
 
 
 func _on_discard_and_close() -> void:

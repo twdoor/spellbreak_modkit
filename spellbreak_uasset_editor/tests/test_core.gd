@@ -31,6 +31,7 @@ func _run() -> void:
 	_test_atomic_file_install()
 	_test_path_safety()
 	_test_process_arguments()
+	_test_update_version_compare()
 	_test_base_source_generation()
 	_test_packing_transaction()
 
@@ -101,6 +102,19 @@ func _test_import_insert_remove() -> void:
 	_expect(first.template_index == -2, "later import references shift toward zero")
 	_expect(first.raw["CreateBeforeCreateDependencies"] == [-2, 1],
 		"import dependency references are remapped")
+
+
+func _test_update_version_compare() -> void:
+	_expect(UpdateChecker.is_newer_version("v0.10.0", "0.9.0"),
+		"update checker treats 0.10.0 as newer than 0.9.0")
+	_expect(UpdateChecker.is_newer_version("release-1.0.0", "0.9.9"),
+		"update checker extracts versions from release tags")
+	_expect(not UpdateChecker.is_newer_version("v0.9.0", "0.9.0"),
+		"update checker ignores matching versions")
+	_expect(not UpdateChecker.is_newer_version("v0.8.9", "0.9.0"),
+		"update checker ignores older releases")
+	_expect(UpdateChecker.normalize_version("v0.10.0") == "0.10.0",
+		"update checker normalizes v-prefixed tags")
 
 
 func _test_swap_and_snapshot_restore() -> void:
