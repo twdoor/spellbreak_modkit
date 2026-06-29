@@ -43,23 +43,29 @@ func _ready() -> void:
 	open_file_popup.file_selected.connect(_on_file_selected)
 	open_file_popup.files_selected.connect(_on_files_selected)
 
-	# All shortcuts go through GUIDE so they stay remappable via the mapping resource.
-	open_action.triggered.connect(func() -> void: open_file_popup.popup_file_dialog())
-	close_action.triggered.connect(_close_current_tab)
-	save_action.triggered.connect(_save_current_tab)
-	switch_tab_action.triggered.connect(_switch_tab)
-	copy.triggered.connect(_copy_selection)
-	paste.triggered.connect(_paste_clipboard)
-	cut.triggered.connect(_cut_selection)
-	undo.triggered.connect(_undo)
-	delete.triggered.connect(_delete_selection)
-	cancel.triggered.connect(_cancel_selection)
-	create.triggered.connect(_create_file)
+	_connect_shortcuts()
 
 	_build_toast()
 	_build_close_dialog()
 	_build_status_bar()
 	_setup_mod_tab()
+
+
+func _connect_shortcuts() -> void:
+	# Command shortcuts are edge-triggered. GUIDEAction.triggered fires every
+	# frame while active; just_triggered fires once per press and keeps keyboard
+	# behavior consistent while preserving GUIDE-based remapping.
+	open_action.just_triggered.connect(_open_file_dialog)
+	close_action.just_triggered.connect(_close_current_tab)
+	save_action.just_triggered.connect(_save_current_tab)
+	switch_tab_action.just_triggered.connect(_switch_tab)
+	copy.just_triggered.connect(_copy_selection)
+	paste.just_triggered.connect(_paste_clipboard)
+	cut.just_triggered.connect(_cut_selection)
+	undo.just_triggered.connect(_undo)
+	delete.just_triggered.connect(_delete_selection)
+	cancel.just_triggered.connect(_cancel_selection)
+	create.just_triggered.connect(_create_file)
 
 
 func _exit_tree() -> void:
@@ -229,6 +235,15 @@ func _switch_tab() -> void:
 		tab_cont.select_next_available()
 	else:
 		tab_cont.select_previous_available()
+
+
+func _open_file_dialog() -> void:
+	var focus := get_viewport().gui_get_focus_owner()
+	if focus is LineEdit or focus is TextEdit or focus is SpinBox:
+		focus.release_focus()
+	if open_file_popup.visible:
+		return
+	open_file_popup.popup_file_dialog()
 
 
 func _on_file_selected(path: String) -> void:

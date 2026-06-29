@@ -20,6 +20,15 @@ var _collapsed_mods: Dictionary = {}  # mod_name -> bool  (default true = collap
 var _collapsed_dirs: Dictionary = {}  # "mod_name::rel_dir" -> bool (true = collapsed)
 var _log_lines:      Array      = []
 const _MAX_LOG := 80
+const _TEXT_FILE_EXTENSIONS := [
+	"txt", "cfg", "conf", "config", "ini", "json", "jsonc",
+	"yaml", "yml", "toml", "xml", "csv", "tsv", "md", "markdown",
+	"log", "properties", "props", "manifest", "bat", "cmd", "ps1",
+	"sh", "py", "gd", "lua", "js", "ts", "css", "html", "htm"
+]
+const _TEXT_FILE_NAMES := [
+	"readme", "license", "changelog", "credits", "config", "settings"
+]
 
 # File clipboard — independent of the uasset ClipboardManager
 var _file_clipboard:    Array = []   # [{mod, rel_path, full_path}, ...]
@@ -28,6 +37,7 @@ var _clipboard_is_cut:  bool  = false
 # Tree button IDs
 const _BTN_ADD := 0
 const _BTN_DEL := 0
+const _BTN_OPEN_EXTERNAL := 1
 
 # ── UI references ──────────────────────────────────────────────────────────────
 var _mod_tree:  Tree
@@ -172,6 +182,152 @@ func _icon(icon_name: String) -> Texture2D:
 	return null
 
 
+func _is_text_file_path(path: String) -> bool:
+	var file_name := path.get_file().to_lower()
+	for ext in [".uasset", ".uexp", ".ubulk", ".umap"]:
+		if file_name.ends_with(ext):
+			return false
+	if file_name.get_extension() in _TEXT_FILE_EXTENSIONS:
+		return true
+	return file_name in _TEXT_FILE_NAMES
+
+
+func _open_external_file(path: String) -> void:
+	var full_path := ProjectSettings.globalize_path(path)
+	if not FileAccess.file_exists(full_path):
+		_set_status("File not found: %s" % full_path.get_file(), true)
+		return
+	var result := ERR_CANT_OPEN
+	if _is_text_file_path(full_path):
+		result = _open_text_file(full_path)
+	if result < 0:
+		result = _open_file_with_system_app(full_path)
+	if result < 0 and OS.shell_open(full_path) != OK:
+		_set_status("Could not open file: %s" % full_path.get_file(), true)
+		return
+	_set_status("Opening %s" % full_path.get_file())
+
+
+func _open_text_file(path: String) -> int:
+	var result := _open_editor_from_environment(path)
+	if result >= 0:
+		return result
+	match OS.get_name():
+		"Windows":
+			return _create_process_if_found(["notepad.exe", "notepad"], [path])
+		"macOS":
+			return _create_process_if_found(["open", "/usr/bin/open"], ["-t", path])
+		_:
+			result = _create_process_if_found([
+				"zeditor", "zed", "code", "codium", "subl",
+				"gedit", "kate", "kwrite", "mousepad", "xed", "pluma", "geany"
+			], [path])
+			if result >= 0:
+				return result
+			return _open_terminal_editor(path)
+
+
+func _open_editor_from_environment(path: String) -> int:
+	for env_name in ["VISUAL", "EDITOR"]:
+		var command := OS.get_environment(env_name).strip_edges()
+		if command.is_empty():
+			continue
+		var result := _open_editor_command(command, path)
+		if result >= 0:
+			return result
+	return ERR_FILE_NOT_FOUND
+
+
+func _open_editor_command(command: String, path: String) -> int:
+	var parts := ProcessUtils.parse_command_line(command)
+	if parts.is_empty():
+		return ERR_INVALID_PARAMETER
+	var executable := ProcessUtils.find_executable([parts[0]])
+	if executable.is_empty():
+		return ERR_FILE_NOT_FOUND
+	var args := PackedStringArray()
+	for i in range(1, parts.size()):
+		args.append(parts[i])
+	args.append(path)
+	if _is_terminal_editor(executable):
+		return _open_terminal_command(executable, args)
+	return OS.create_process(executable, args)
+
+
+func _open_terminal_editor(path: String) -> int:
+	var editor := ProcessUtils.find_executable(["nvim", "vim", "nano", "vi"])
+	if editor.is_empty():
+		return ERR_FILE_NOT_FOUND
+	return _open_terminal_command(editor, PackedStringArray([path]))
+
+
+func _open_terminal_command(command: String, args: PackedStringArray) -> int:
+	var terminal := ProcessUtils.find_executable(["xdg-terminal-exec", "/usr/bin/xdg-terminal-exec"])
+	if not terminal.is_empty():
+		var terminal_args := PackedStringArray([command])
+		terminal_args.append_array(args)
+		return OS.create_process(terminal, terminal_args)
+
+	terminal = ProcessUtils.find_executable(["ghostty", "alacritty", "kitty", "foot"])
+	if terminal.is_empty():
+		return ERR_FILE_NOT_FOUND
+	var terminal_args := PackedStringArray(["-e", command])
+	terminal_args.append_array(args)
+	return OS.create_process(terminal, terminal_args)
+
+
+func _is_terminal_editor(executable: String) -> bool:
+	var editor_name := executable.get_file().get_basename().to_lower()
+	return editor_name in ["nvim", "vim", "nano", "vi", "emacsclient", "emacs"]
+
+
+func _open_file_with_system_app(path: String) -> int:
+	match OS.get_name():
+		"Windows":
+			return _open_windows_file(path)
+		"macOS":
+			return _create_process_if_found(["open", "/usr/bin/open"], [path])
+		_:
+			return _open_unix_file(path)
+
+
+func _open_windows_file(path: String) -> int:
+	var powershell := ProcessUtils.find_executable(["powershell.exe", "pwsh.exe"])
+	if not powershell.is_empty():
+		return OS.create_process(powershell, PackedStringArray([
+			"-NoProfile",
+			"-WindowStyle", "Hidden",
+			"-ExecutionPolicy", "Bypass",
+			"-Command", "Start-Process -FilePath $args[0]",
+			path
+		]))
+	var cmd := ProcessUtils.find_executable(["cmd.exe", "cmd"])
+	if cmd.is_empty():
+		return ERR_FILE_NOT_FOUND
+	return OS.create_process(cmd, PackedStringArray(["/C", "start", "", path]))
+
+
+func _open_unix_file(path: String) -> int:
+	var result := _create_process_if_found(
+		["xdg-open", "/usr/bin/xdg-open", "/bin/xdg-open"],
+		[path]
+	)
+	if result >= 0:
+		return result
+	result = _create_process_if_found(["gio", "/usr/bin/gio"], ["open", path])
+	if result >= 0:
+		return result
+	result = _create_process_if_found(["kde-open5", "kde-open", "gnome-open"], [path])
+	return result
+
+
+func _create_process_if_found(candidates: Array[String], args: Array) -> int:
+	var executable := ProcessUtils.find_executable(candidates)
+	if executable.is_empty():
+		return ERR_FILE_NOT_FOUND
+	return OS.create_process(executable, PackedStringArray(args))
+
+
 # ── Mod list ───────────────────────────────────────────────────────────────────
 
 func _refresh_mods() -> void:
@@ -268,8 +424,11 @@ func _build_mod_files(mod_item: TreeItem, mod: Dictionary) -> void:
 		dir_item.set_text(0, dir + "/")
 		#dir_item.set_custom_font_size(0, 12)
 		dir_item.set_custom_color(0, AppTheme.MOD_DIR)
-		dir_item.set_selectable(0, false)
-		dir_item.set_metadata(0, {"type": "folder", "key": dir_key})
+		dir_item.set_selectable(0, true)
+		dir_item.set_metadata(0, {
+			"type": "folder", "key": dir_key,
+			"mod": mod, "rel_dir": dir
+		})
 		dir_item.collapsed = _collapsed_dirs.get(dir_key, false)
 
 		for rel_path: String in (groups[dir] as Array):
@@ -288,6 +447,14 @@ func _build_mod_files(mod_item: TreeItem, mod: Dictionary) -> void:
 				"rel_path": rel_path, "full_path": full_path
 			})
 
+			if _is_text_file_path(rel_path):
+				var open_icon := _icon("Edit")
+				if not open_icon:
+					open_icon = _icon("File")
+				if open_icon:
+					file_item.add_button(0, open_icon, _BTN_OPEN_EXTERNAL, false,
+						"Open with system default app")
+
 			var del_icon := _icon("Remove")
 			if del_icon:
 				file_item.add_button(0, del_icon, _BTN_DEL, false, "Remove from mod")
@@ -305,10 +472,10 @@ func _on_tree_item_activated() -> void:
 	if meta.get("type") != "file":
 		return
 	var path: String = meta["full_path"]
-	if path.ends_with(".uasset"):
+	if path.to_lower().ends_with(".uasset"):
 		open_asset_requested.emit(path)
 	else:
-		OS.shell_open(path)
+		_open_external_file(path)
 
 
 ## Left-click a mod item → expand/collapse.  Right-click → toggle enabled/disabled.
@@ -329,7 +496,7 @@ func _on_tree_item_mouse_selected(_position: Vector2, mouse_button_index: int) -
 			_rebuild_mod_list.call_deferred()
 
 
-## Button clicks: Add (mod items) or Delete (file items).
+## Button clicks: Add (mod items), open/delete (file items).
 func _on_tree_button_clicked(item: TreeItem, _column: int, id: int, mouse_button_index: int) -> void:
 	if mouse_button_index != MOUSE_BUTTON_LEFT:
 		return
@@ -339,7 +506,9 @@ func _on_tree_button_clicked(item: TreeItem, _column: int, id: int, mouse_button
 			if id == _BTN_ADD:
 				_on_add_files_pressed(meta["mod"] as Dictionary)
 		"file":
-			if id == _BTN_DEL:
+			if id == _BTN_OPEN_EXTERNAL:
+				_open_external_file(meta["full_path"] as String)
+			elif id == _BTN_DEL:
 				# Defer: _rebuild_mod_list calls clear() — blocked inside a Tree signal.
 				var mod_ref: Dictionary = meta["mod"]
 				var path_ref: String    = meta["full_path"]
@@ -403,6 +572,20 @@ func _get_selected_mod() -> Variant:
 			return mod
 		item = _mod_tree.get_next_selected(item)
 	return null
+
+
+## Return a source-relative folder from the first selected folder/file item.
+func _get_selected_source_dir() -> String:
+	var item := _mod_tree.get_next_selected(null)
+	while item:
+		var meta: Dictionary = item.get_metadata(0)
+		match meta.get("type"):
+			"folder":
+				return meta.get("rel_dir", "") as String
+			"file":
+				return (meta.get("rel_path", "") as String).get_base_dir()
+		item = _mod_tree.get_next_selected(item)
+	return ""
 
 
 # ── Public clipboard / action API (called from main.gd) ───────────────────────
@@ -530,7 +713,7 @@ func create_file() -> void:
 	if mod == null:
 		_set_status("Select a mod first", true)
 		return
-	_on_add_files_pressed(mod as Dictionary)
+	_on_add_files_pressed(mod as Dictionary, _get_selected_source_dir())
 
 
 # ── File management ────────────────────────────────────────────────────────────
@@ -569,7 +752,7 @@ func _remove_mod_file(mod: Dictionary, full_path: String) -> void:
 
 # ── Add Files from source ──────────────────────────────────────────────────────
 
-func _on_add_files_pressed(mod: Dictionary) -> void:
+func _on_add_files_pressed(mod: Dictionary, preferred_rel_dir: String = "") -> void:
 	var sources: Array = _cfg.sources.filter(
 		func(s: Dictionary) -> bool: return not (s["path"] as String).is_empty()
 	)
@@ -577,13 +760,13 @@ func _on_add_files_pressed(mod: Dictionary) -> void:
 		_set_status("No sources configured — add sources in Settings", true)
 		return
 	if sources.size() == 1:
-		_open_add_files_dialog(mod, sources[0])
+		_open_add_files_dialog(mod, sources[0], preferred_rel_dir)
 	else:
-		_show_source_picker(mod, sources)
+		_show_source_picker(mod, sources, preferred_rel_dir)
 
 
 ## Drop-down source picker anchored to the current mouse position.
-func _show_source_picker(mod: Dictionary, sources: Array) -> void:
+func _show_source_picker(mod: Dictionary, sources: Array, preferred_rel_dir: String = "") -> void:
 	var popup := PopupMenu.new()
 	popup.name = "SourcePicker"
 	for i in sources.size():
@@ -591,7 +774,7 @@ func _show_source_picker(mod: Dictionary, sources: Array) -> void:
 		var label: String = src["name"] if not (src["name"] as String).is_empty() else src["path"]
 		popup.add_item(label, i)
 	popup.id_pressed.connect(func(id: int) -> void:
-		_open_add_files_dialog(mod, sources[id])
+		_open_add_files_dialog(mod, sources[id], preferred_rel_dir)
 		popup.queue_free()
 	)
 	get_tree().root.add_child(popup)
@@ -600,16 +783,21 @@ func _show_source_picker(mod: Dictionary, sources: Array) -> void:
 
 
 ## Open a multi-file browser rooted at source["path"]; copy selections into mod.
-func _open_add_files_dialog(mod: Dictionary, source: Dictionary) -> void:
+func _open_add_files_dialog(mod: Dictionary, source: Dictionary, preferred_rel_dir: String = "") -> void:
 	var source_path: String = (source["path"] as String).rstrip("/")
 	if not DirAccess.dir_exists_absolute(source_path):
 		_set_status("Source folder not found: %s" % source_path, true)
 		return
+	var initial_dir := source_path
+	if not preferred_rel_dir.is_empty():
+		var candidate := source_path.path_join(preferred_rel_dir)
+		if FileUtils.is_path_within(candidate, source_path) and DirAccess.dir_exists_absolute(candidate):
+			initial_dir = candidate
 	var dialog := FileDialog.new()
 	dialog.file_mode       = FileDialog.FILE_MODE_OPEN_FILES
 	dialog.access          = FileDialog.ACCESS_FILESYSTEM
 	dialog.use_native_dialog = true
-	dialog.current_dir     = source_path
+	dialog.current_dir     = initial_dir
 	dialog.files_selected.connect(func(paths: PackedStringArray) -> void:
 		_copy_files_to_mod(mod, source_path, paths)
 		dialog.queue_free()

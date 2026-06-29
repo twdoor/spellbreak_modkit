@@ -19,6 +19,9 @@ static func find_executable(candidates: Array[String]) -> String:
 			return candidate
 		var output: Array = []
 		if OS.execute(finder, [candidate], output, true, false) == 0:
+			var resolved := output_text(output, "").split("\n")[0].strip_edges()
+			if not resolved.is_empty() and resolved.is_absolute_path() and FileAccess.file_exists(resolved):
+				return resolved
 			return candidate
 	return ""
 
