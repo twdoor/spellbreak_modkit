@@ -8,7 +8,8 @@ extends CanvasLayer
 @export var open_action: GUIDEAction
 @export var close_action: GUIDEAction
 @export var save_action: GUIDEAction
-@export var switch_tab_action: GUIDEAction
+@export var previous_tab_action: GUIDEAction
+@export var next_tab_action: GUIDEAction
 @export var copy: GUIDEAction
 @export var paste: GUIDEAction
 @export var cut: GUIDEAction
@@ -32,13 +33,17 @@ var _texture_service: TextureService
 var _sound_service: SoundService
 var _mesh_service: MeshService
 var _background_jobs: BackgroundJobRunner
+var _keymap_config: GUIDERemappingConfig
 
 const _TOAST_HIDDEN_Y := -8.0   # resting offset_bottom when hidden (just off-screen bottom)
 const _TOAST_SHOWN_Y  := -72.0  # offset_bottom when fully visible
 
 func _ready() -> void:
 	_background_jobs = BackgroundJobRunner.new()
+	_configure_shortcut_actions()
+	_keymap_config = KeymapSettingsTab.load_saved_config()
 	GUIDE.enable_mapping_context(mapping)
+	GUIDE.set_remapping_config(_keymap_config)
 
 	open_file_popup.file_selected.connect(_on_file_selected)
 	open_file_popup.files_selected.connect(_on_files_selected)
@@ -58,7 +63,8 @@ func _connect_shortcuts() -> void:
 	open_action.just_triggered.connect(_open_file_dialog)
 	close_action.just_triggered.connect(_close_current_tab)
 	save_action.just_triggered.connect(_save_current_tab)
-	switch_tab_action.just_triggered.connect(_switch_tab)
+	previous_tab_action.just_triggered.connect(_select_previous_tab)
+	next_tab_action.just_triggered.connect(_select_next_tab)
 	copy.just_triggered.connect(_copy_selection)
 	paste.just_triggered.connect(_paste_clipboard)
 	cut.just_triggered.connect(_cut_selection)
@@ -66,6 +72,33 @@ func _connect_shortcuts() -> void:
 	delete.just_triggered.connect(_delete_selection)
 	cancel.just_triggered.connect(_cancel_selection)
 	create.just_triggered.connect(_create_file)
+
+
+func _configure_shortcut_actions() -> void:
+	mapping.display_name = "Editor"
+	_configure_action(open_action, &"open_file", "Open File", "File")
+	_configure_action(close_action, &"close_tab", "Close Tab", "File")
+	_configure_action(save_action, &"save_file", "Save File", "File")
+	_configure_action(create, &"add_files_from_sources", "Add Files from Sources", "Mod Manager")
+	_configure_action(previous_tab_action, &"previous_tab", "Previous Tab", "Navigation")
+	_configure_action(next_tab_action, &"next_tab", "Next Tab", "Navigation")
+	_configure_action(copy, &"copy_selection", "Copy", "Edit")
+	_configure_action(paste, &"paste_selection", "Paste", "Edit")
+	_configure_action(cut, &"cut_selection", "Cut", "Edit")
+	_configure_action(undo, &"undo", "Undo", "Edit")
+	_configure_action(delete, &"delete_selection", "Delete Selection", "Edit")
+	_configure_action(cancel, &"cancel", "Cancel / Clear Selection", "Edit")
+	_configure_action(shift, &"selection_modifier_shift", "Shift", "Navigation", false)
+
+
+func _configure_action(action: GUIDEAction, action_name: StringName,
+		display_name: String, category: String, remappable: bool = true) -> void:
+	if action == null:
+		return
+	action.name = action_name
+	action.display_name = display_name
+	action.display_category = category
+	action.is_remappable = remappable
 
 
 func _exit_tree() -> void:
@@ -137,6 +170,28 @@ func _setup_mod_tab() -> void:
 		tab_cont.current_tab = 0
 	)
 	settings.status_changed.connect(_on_mod_status_changed)
+
+	var keymap := KeymapSettingsTab.new().setup(mapping, _keymap_config)
+	tab_cont.add_child(keymap)
+	tab_cont.move_child(keymap, 2)
+	tab_cont.set_tab_title(2, "Key Mappings")
+	tab_cont.set_tab_hidden(2, true)
+
+	settings.open_keymap_requested.connect(func() -> void:
+		keymap.refresh(_keymap_config)
+		tab_cont.set_tab_hidden(2, false)
+		tab_cont.current_tab = 2
+	)
+
+	keymap.keymap_changed.connect(func(config: GUIDERemappingConfig) -> void:
+		_keymap_config = config
+		GUIDE.set_remapping_config(_keymap_config)
+	)
+	keymap.close_requested.connect(func() -> void:
+		tab_cont.set_tab_hidden(2, true)
+		tab_cont.current_tab = 1 if not tab_cont.is_tab_hidden(1) else 0
+	)
+	keymap.status_changed.connect(_on_mod_status_changed)
 
 
 func _on_mod_status_changed(text: String, is_error: bool) -> void:
@@ -229,12 +284,12 @@ func _on_save_and_close(action: StringName) -> void:
 	_close_dialog.hide()
 
 
-func _switch_tab() -> void:
-	# switch_tab_action is a 1D axis: positive = next tab, negative = previous.
-	if switch_tab_action.value_axis_1d >= 0.0:
-		tab_cont.select_next_available()
-	else:
-		tab_cont.select_previous_available()
+func _select_previous_tab() -> void:
+	tab_cont.select_previous_available()
+
+
+func _select_next_tab() -> void:
+	tab_cont.select_next_available()
 
 
 func _open_file_dialog() -> void:
@@ -315,6 +370,9 @@ func _close_current_tab() -> void:
 func _save_current_tab() -> void:
 	var tab = tab_cont.get_current_tab_control()
 	if tab and tab is UassetFileTab:
+		if not tab.is_dirty():
+			_show_toast("No changes to save")
+			return
 		var error: Error = tab.save_asset()
 		if error == OK:
 			_show_toast("Saved  " + tab.tab_asset.file_path.get_file())

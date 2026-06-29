@@ -288,4 +288,7 @@ func _on_import_finished(success: bool, message: String) -> void:
 	# Reload preview after successful import
 	if success:
 		if _ctx.reload_asset.is_valid():
-			_ctx.reload_asset.call()
+			var reloaded := bool(_ctx.reload_asset.call())
+			if not reloaded and is_instance_valid(_status_label):
+				_status_label.text = message + " Reload failed; close and reopen before saving."
+				_status_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)

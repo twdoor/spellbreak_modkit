@@ -5,6 +5,7 @@ class_name ModSettingsTab extends VBoxContainer
 ## Emits close_requested when the user clicks Save or Cancel.
 
 signal close_requested
+signal open_keymap_requested
 signal status_changed(text: String, is_error: bool)
 
 var _cfg: ModConfigManager
@@ -14,6 +15,9 @@ var _base_source_btn: Button
 var _base_source_status: Label
 var _base_source_status_text := ""
 var _base_source_status_error := false
+var _initial_snapshot: Dictionary = {}
+var _save_btn: Button
+var _close_or_revert_btn: Button
 
 
 func setup(cfg: ModConfigManager) -> ModSettingsTab:
@@ -27,6 +31,7 @@ func setup(cfg: ModConfigManager) -> ModSettingsTab:
 func _ready() -> void:
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical   = Control.SIZE_EXPAND_FILL
+	_initial_snapshot = _snapshot_config()
 	_build_ui()
 
 
@@ -38,6 +43,7 @@ func _exit_tree() -> void:
 ## Rebuild the entire UI to reflect current cfg values.
 ## Called by main.gd each time the Settings tab is opened.
 func refresh() -> void:
+	_initial_snapshot = _snapshot_config()
 	for child in get_children():
 		child.free()
 	_build_ui()
@@ -78,7 +84,9 @@ func _build_ui() -> void:
 	))
 	content.add_child(_dir_row(
 		func() -> String: return _cfg.game_dir,
-		func(v: String) -> void: _cfg.game_dir = v,
+		func(v: String) -> void:
+			_cfg.game_dir = v
+			_update_footer_state(),
 		"/path/to/game"
 	))
 
@@ -90,7 +98,9 @@ func _build_ui() -> void:
 	))
 	content.add_child(_dir_row(
 		func() -> String: return _cfg.mods_dir,
-		func(v: String) -> void: _cfg.mods_dir = v,
+		func(v: String) -> void:
+			_cfg.mods_dir = v
+			_update_footer_state(),
 		"/path/to/mods"
 	))
 
@@ -98,7 +108,10 @@ func _build_ui() -> void:
 	content.add_child(_section("Launch Command"))
 	content.add_child(_hint("Shell command to start the game. Leave blank to disable the Launch button."))
 	var launch_edit := _line_edit(_cfg.launch_cmd, "steam steam://rungameid/...")
-	launch_edit.text_changed.connect(func(v: String) -> void: _cfg.launch_cmd = v)
+	launch_edit.text_changed.connect(func(v: String) -> void:
+		_cfg.launch_cmd = v
+		_update_footer_state()
+	)
 	content.add_child(launch_edit)
 
 
@@ -108,7 +121,10 @@ func _build_ui() -> void:
 	var umodel_row := HBoxContainer.new()
 	umodel_row.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
 	var umodel_edit := _line_edit(_cfg.umodel_path, "/path/to/umodel")
-	umodel_edit.text_changed.connect(func(v: String) -> void: _cfg.umodel_path = v)
+	umodel_edit.text_changed.connect(func(v: String) -> void:
+		_cfg.umodel_path = v
+		_update_footer_state()
+	)
 	umodel_row.add_child(umodel_edit)
 	var umodel_browse := Button.new()
 	umodel_browse.text = "Browse..."
@@ -120,6 +136,7 @@ func _build_ui() -> void:
 		dialog.file_selected.connect(func(path: String) -> void:
 			umodel_edit.text = path
 			_cfg.umodel_path = path
+			_update_footer_state()
 			dialog.queue_free()
 		)
 		get_tree().root.add_child(dialog)
@@ -165,6 +182,20 @@ func _build_ui() -> void:
 	content.add_child(_section("Config File"))
 	content.add_child(_hint(_cfg.get_config_dir().path_join("config.json")))
 
+	# ── Key mappings ──
+	var keymap_header := HBoxContainer.new()
+	keymap_header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	keymap_header.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
+	var keymap_title := _section("Key Mappings")
+	keymap_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	keymap_header.add_child(keymap_title)
+	var keymap_btn := Button.new()
+	keymap_btn.text = "Edit Keymap"
+	keymap_btn.pressed.connect(func() -> void: open_keymap_requested.emit())
+	keymap_header.add_child(keymap_btn)
+	content.add_child(keymap_header)
+	content.add_child(_hint("Customize editor shortcuts using GUIDE mappings."))
+
 	add_child(HSeparator.new())
 
 	# ── Save / Revert buttons ──
@@ -178,19 +209,20 @@ func _build_ui() -> void:
 	btn_row.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
 
 	var save_btn := Button.new()
+	_save_btn = save_btn
 	save_btn.text = "Save"
 	save_btn.add_theme_color_override("font_color", AppTheme.BTN_SAVE)
 	save_btn.pressed.connect(_on_save)
 	btn_row.add_child(save_btn)
 
-	var revert_btn := Button.new()
-	revert_btn.text = "Revert"
-	revert_btn.tooltip_text = "Discard unsaved changes"
-	revert_btn.pressed.connect(_on_revert)
-	btn_row.add_child(revert_btn)
+	var close_btn := Button.new()
+	_close_or_revert_btn = close_btn
+	close_btn.pressed.connect(_on_close_or_revert)
+	btn_row.add_child(close_btn)
 
 	btn_margin.add_child(btn_row)
 	add_child(btn_margin)
+	_update_footer_state()
 
 
 # ── Sources list ──────────────────────────────────────────────────────────────
@@ -198,6 +230,7 @@ func _build_ui() -> void:
 func _add_source() -> void:
 	_cfg.sources.append({"name": "", "path": ""})
 	_rebuild_sources()
+	_update_footer_state()
 
 
 func _rebuild_sources() -> void:
@@ -218,7 +251,10 @@ func _build_source_row(entry: Dictionary) -> Control:
 	name_edit.placeholder_text = "Name"
 	name_edit.text = str(entry.get("name", ""))
 	name_edit.custom_minimum_size.x = 160
-	name_edit.text_changed.connect(func(v: String) -> void: entry["name"] = v)
+	name_edit.text_changed.connect(func(v: String) -> void:
+		entry["name"] = v
+		_update_footer_state()
+	)
 	row.add_child(name_edit)
 
 	# Path — expands to fill remaining space
@@ -227,7 +263,10 @@ func _build_source_row(entry: Dictionary) -> Control:
 	path_edit.placeholder_text = "/path/to/exported/source  (folder containing %s/)" % cr
 	path_edit.text = str(entry.get("path", ""))
 	path_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	path_edit.text_changed.connect(func(v: String) -> void: entry["path"] = v)
+	path_edit.text_changed.connect(func(v: String) -> void:
+		entry["path"] = v
+		_update_footer_state()
+	)
 	row.add_child(path_edit)
 
 	# Browse for the source root directory
@@ -247,6 +286,7 @@ func _build_source_row(entry: Dictionary) -> Control:
 	remove_btn.pressed.connect(func() -> void:
 		_cfg.sources.erase(entry)
 		_rebuild_sources.call_deferred()
+		_update_footer_state.call_deferred()
 	)
 	row.add_child(remove_btn)
 
@@ -337,9 +377,11 @@ func _add_generated_source(source_name: String, source_path: String) -> void:
 			entry["name"] = source_name
 			entry["path"] = normalized_path
 			_rebuild_sources()
+			_update_footer_state()
 			return
 	_cfg.sources.append({"name": _unique_source_name(source_name), "path": normalized_path})
 	_rebuild_sources()
+	_update_footer_state()
 
 
 func _unique_source_name(base_name: String) -> String:
@@ -381,15 +423,56 @@ func _dir_has_entries(path: String) -> bool:
 	return false
 
 
+func _snapshot_config() -> Dictionary:
+	var source_snapshot: Array = []
+	for entry: Dictionary in _cfg.sources:
+		source_snapshot.append({
+			"name": str(entry.get("name", "")),
+			"path": str(entry.get("path", "")),
+		})
+	return {
+		"game_dir": _cfg.game_dir,
+		"mods_dir": _cfg.mods_dir,
+		"launch_cmd": _cfg.launch_cmd,
+		"u4pak_dir": _cfg.u4pak_dir,
+		"ue4_dds_tools_dir": _cfg.ue4_dds_tools_dir,
+		"umodel_path": _cfg.umodel_path,
+		"sources": source_snapshot,
+	}
+
+
+func _is_dirty() -> bool:
+	return _snapshot_config() != _initial_snapshot
+
+
+func _update_footer_state() -> void:
+	var dirty := _is_dirty()
+	if is_instance_valid(_save_btn):
+		_save_btn.disabled = not dirty
+	if is_instance_valid(_close_or_revert_btn):
+		_close_or_revert_btn.text = "Revert" if dirty else "Close"
+		_close_or_revert_btn.tooltip_text = (
+			"Discard unsaved changes" if dirty else "Close settings"
+		)
+		if dirty:
+			_close_or_revert_btn.add_theme_color_override("font_color", AppTheme.BTN_REMOVE)
+		else:
+			AppTheme.style_muted_btn(_close_or_revert_btn)
+
+
 # ── Actions ───────────────────────────────────────────────────────────────────
 
 func _on_save() -> void:
 	_cfg.save_config()
+	_initial_snapshot = _snapshot_config()
+	_update_footer_state()
 	close_requested.emit()
 
 
-func _on_revert() -> void:
-	_cfg.load_config()
+func _on_close_or_revert() -> void:
+	if _is_dirty():
+		_cfg.load_config()
+		_initial_snapshot = _snapshot_config()
 	close_requested.emit()
 
 
@@ -443,6 +526,7 @@ func _open_dir_dialog(line_edit: LineEdit, on_select: Callable) -> void:
 	dialog.dir_selected.connect(func(path: String) -> void:
 		line_edit.text = path
 		on_select.call(path)
+		_update_footer_state()
 		dialog.queue_free()
 	)
 	get_tree().root.add_child(dialog)

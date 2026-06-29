@@ -132,8 +132,8 @@ func _make_context() -> AssetEditorContext:
 	return context
 
 
-func _on_document_dirty_changed(is_dirty: bool) -> void:
-	_dirty = is_dirty
+func _on_document_dirty_changed(document_dirty: bool) -> void:
+	_dirty = document_dirty
 
 
 func _reload_asset_from_disk() -> bool:
@@ -222,10 +222,16 @@ func _rebuild_tree() -> void:
 func save_asset(path: String = "") -> Error:
 	if not tab_asset:
 		return ERR_DOES_NOT_EXIST
+	if path.is_empty() and not _document.is_dirty():
+		return OK
 	var err := tab_asset.save_file(path)
 	if err == OK:
 		_document.mark_saved()
 	return err
+
+
+func is_dirty() -> bool:
+	return _document != null and _document.is_dirty()
 
 
 # ── Value change (from PropertyRow via DetailItem) ────────────────────────────

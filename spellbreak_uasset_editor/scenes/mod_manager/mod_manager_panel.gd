@@ -197,7 +197,7 @@ func _open_external_file(path: String) -> void:
 	if not FileAccess.file_exists(full_path):
 		_set_status("File not found: %s" % full_path.get_file(), true)
 		return
-	var result := ERR_CANT_OPEN
+	var result: int = ERR_CANT_OPEN
 	if _is_text_file_path(full_path):
 		result = _open_text_file(full_path)
 	if result < 0:
@@ -264,9 +264,9 @@ func _open_terminal_editor(path: String) -> int:
 func _open_terminal_command(command: String, args: PackedStringArray) -> int:
 	var terminal := ProcessUtils.find_executable(["xdg-terminal-exec", "/usr/bin/xdg-terminal-exec"])
 	if not terminal.is_empty():
-		var terminal_args := PackedStringArray([command])
-		terminal_args.append_array(args)
-		return OS.create_process(terminal, terminal_args)
+		var xdg_terminal_args := PackedStringArray([command])
+		xdg_terminal_args.append_array(args)
+		return OS.create_process(terminal, xdg_terminal_args)
 
 	terminal = ProcessUtils.find_executable(["ghostty", "alacritty", "kitty", "foot"])
 	if terminal.is_empty():
@@ -765,34 +765,186 @@ func _on_add_files_pressed(mod: Dictionary, preferred_rel_dir: String = "") -> v
 		_show_source_picker(mod, sources, preferred_rel_dir)
 
 
-## Drop-down source picker anchored to the current mouse position.
+## Modal source picker. Keeps the source choice visible and gives invalid paths room to explain themselves.
 func _show_source_picker(mod: Dictionary, sources: Array, preferred_rel_dir: String = "") -> void:
-	var popup := PopupMenu.new()
-	popup.name = "SourcePicker"
+	var first_valid := -1
 	for i in sources.size():
 		var src: Dictionary = sources[i]
-		var label: String = src["name"] if not (src["name"] as String).is_empty() else src["path"]
-		popup.add_item(label, i)
-	popup.id_pressed.connect(func(id: int) -> void:
-		_open_add_files_dialog(mod, sources[id], preferred_rel_dir)
-		popup.queue_free()
-	)
-	get_tree().root.add_child(popup)
-	var mp := DisplayServer.mouse_get_position()
-	popup.popup(Rect2i(mp.x, mp.y, 0, 0))
+		if DirAccess.dir_exists_absolute(_source_path(src)):
+			first_valid = i
+			break
 
-
-## Open a multi-file browser rooted at source["path"]; copy selections into mod.
-func _open_add_files_dialog(mod: Dictionary, source: Dictionary, preferred_rel_dir: String = "") -> void:
-	var source_path: String = (source["path"] as String).rstrip("/")
-	if not DirAccess.dir_exists_absolute(source_path):
-		_set_status("Source folder not found: %s" % source_path, true)
+	if first_valid < 0:
+		_set_status("No configured source folders were found", true)
 		return
+
+	var popup := PopupPanel.new()
+	popup.name = "AddFilesFromSourcePopup"
+	popup.min_size = Vector2i(560, 360)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", AppTheme.SPACING_ROW * 2)
+	margin.add_theme_constant_override("margin_right", AppTheme.SPACING_ROW * 2)
+	margin.add_theme_constant_override("margin_top", AppTheme.SPACING_ROW + AppTheme.SPACING_TIGHT)
+	margin.add_theme_constant_override("margin_bottom", AppTheme.SPACING_ROW + AppTheme.SPACING_TIGHT)
+
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
+	margin.add_child(content)
+
+	var header := HBoxContainer.new()
+	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
+	var title_label := Label.new()
+	title_label.text = "Add Files from Source"
+	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	AppTheme.style_header(title_label)
+	header.add_child(title_label)
+	var close_btn := Button.new()
+	close_btn.text = "X"
+	close_btn.tooltip_text = "Close"
+	close_btn.custom_minimum_size = Vector2(28, 28)
+	close_btn.size_flags_horizontal = Control.SIZE_SHRINK_END
+	close_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	AppTheme.style_muted_btn(close_btn)
+	close_btn.pressed.connect(func() -> void: popup.queue_free())
+	header.add_child(close_btn)
+	content.add_child(header)
+
+	var target_label := Label.new()
+	target_label.text = "Target mod: %s" % (mod["name"] as String)
+	content.add_child(target_label)
+
+	var destination_label := Label.new()
+	var destination := preferred_rel_dir.rstrip("/")
+	destination_label.text = "Destination: %s" % (destination if not destination.is_empty() else "(mod root)")
+	AppTheme.style_muted(destination_label)
+	content.add_child(destination_label)
+
+	var source_list := ItemList.new()
+	source_list.custom_minimum_size = Vector2(0, 150)
+	source_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	source_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	source_list.allow_reselect = true
+	for i in sources.size():
+		var src: Dictionary = sources[i]
+		var path := _source_path(src)
+		var exists := DirAccess.dir_exists_absolute(path)
+		var label := _source_label(src)
+		if not exists:
+			label += "  (missing)"
+		source_list.add_item(label)
+		source_list.set_item_metadata(i, i)
+		source_list.set_item_tooltip(i, path)
+		if not exists:
+			source_list.set_item_disabled(i, true)
+			source_list.set_item_custom_fg_color(i, AppTheme.STATUS_ERROR)
+	content.add_child(source_list)
+
+	var details_label := Label.new()
+	AppTheme.style_muted(details_label)
+	details_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	content.add_child(details_label)
+
+	var update_details := func(index: int) -> void:
+		var source_index := _source_index_from_list(source_list, index)
+		if source_index < 0:
+			return
+		var src: Dictionary = sources[source_index]
+		var source_path := _source_path(src)
+		var initial_dir := _resolve_source_initial_dir(source_path, preferred_rel_dir)
+		details_label.text = "Source: %s\nStarts in: %s" % [source_path, initial_dir]
+
+	var open_source_at_list_index := func(list_index: int) -> void:
+		var source_index := _source_index_from_list(source_list, list_index)
+		if source_index < 0 or source_index >= sources.size():
+			return
+		var source: Dictionary = sources[source_index]
+		popup.queue_free()
+		_open_add_files_dialog(mod, source, preferred_rel_dir)
+
+	var open_selected := func() -> void:
+		var selected := source_list.get_selected_items()
+		if selected.is_empty():
+			return
+		open_source_at_list_index.call(selected[0])
+
+	source_list.item_selected.connect(func(index: int) -> void:
+		update_details.call(index)
+	)
+	source_list.item_activated.connect(func(index: int) -> void:
+		update_details.call(index)
+		open_source_at_list_index.call(index)
+	)
+
+	var footer := HBoxContainer.new()
+	footer.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
+	var footer_spacer := Control.new()
+	footer_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(footer_spacer)
+
+	var cancel_btn := Button.new()
+	cancel_btn.text = "Cancel"
+	AppTheme.style_muted_btn(cancel_btn)
+	cancel_btn.pressed.connect(func() -> void: popup.queue_free())
+	footer.add_child(cancel_btn)
+
+	var browse_btn := Button.new()
+	browse_btn.text = "Browse"
+	AppTheme.style_add_btn(browse_btn)
+	browse_btn.pressed.connect(open_selected)
+	footer.add_child(browse_btn)
+	content.add_child(footer)
+
+	popup.popup_hide.connect(func() -> void:
+		if is_instance_valid(popup) and not popup.is_queued_for_deletion():
+			popup.queue_free()
+	)
+	popup.add_child(margin)
+	AppTheme.apply_theme(popup)
+	add_child(popup)
+	source_list.select(first_valid)
+	update_details.call(first_valid)
+	popup.popup_centered(Vector2i(600, 380))
+	source_list.grab_focus.call_deferred()
+
+
+func _source_label(source: Dictionary) -> String:
+	var source_name := str(source.get("name", "")).strip_edges()
+	if not source_name.is_empty():
+		return source_name
+	var path := _source_path(source)
+	return path.get_file() if not path.get_file().is_empty() else path
+
+
+func _source_index_from_list(source_list: ItemList, list_index: int) -> int:
+	if list_index < 0 or list_index >= source_list.item_count:
+		return -1
+	if source_list.is_item_disabled(list_index):
+		return -1
+	return int(source_list.get_item_metadata(list_index))
+
+
+func _source_path(source: Dictionary) -> String:
+	return str(source.get("path", "")).rstrip("/")
+
+
+func _resolve_source_initial_dir(source_path: String, preferred_rel_dir: String) -> String:
 	var initial_dir := source_path
 	if not preferred_rel_dir.is_empty():
 		var candidate := source_path.path_join(preferred_rel_dir)
 		if FileUtils.is_path_within(candidate, source_path) and DirAccess.dir_exists_absolute(candidate):
 			initial_dir = candidate
+	return initial_dir
+
+
+## Open a multi-file browser rooted at source["path"]; copy selections into mod.
+func _open_add_files_dialog(mod: Dictionary, source: Dictionary, preferred_rel_dir: String = "") -> void:
+	var source_path := _source_path(source)
+	if not DirAccess.dir_exists_absolute(source_path):
+		_set_status("Source folder not found: %s" % source_path, true)
+		return
+	var initial_dir := _resolve_source_initial_dir(source_path, preferred_rel_dir)
 	var dialog := FileDialog.new()
 	dialog.file_mode       = FileDialog.FILE_MODE_OPEN_FILES
 	dialog.access          = FileDialog.ACCESS_FILESYSTEM

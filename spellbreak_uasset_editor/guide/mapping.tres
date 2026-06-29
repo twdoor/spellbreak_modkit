@@ -5,262 +5,265 @@
 [ext_resource type="Resource" uid="uid://cw5ln0cgjgjdo" path="res://guide/open.tres" id="2_wd3uy"]
 [ext_resource type="Script" uid="uid://mtx1unc2aqn7" path="res://addons/guide/guide_input_mapping.gd" id="3_2myyr"]
 [ext_resource type="Script" uid="uid://cw71o87tvdx3q" path="res://addons/guide/inputs/guide_input_key.gd" id="4_aot8h"]
-[ext_resource type="Script" uid="uid://bl8rjl4oaldje" path="res://addons/guide/modifiers/guide_modifier.gd" id="5_3jsow"]
 [ext_resource type="Script" uid="uid://x74mnwgr08a7" path="res://addons/guide/triggers/guide_trigger.gd" id="6_faoq1"]
 [ext_resource type="Script" uid="uid://b52rqq28tuqpg" path="res://addons/guide/triggers/guide_trigger_pressed.gd" id="7_jxrq2"]
-[ext_resource type="Script" uid="uid://brsxcrai2te83" path="res://addons/guide/triggers/guide_trigger_chorded_action.gd" id="9_6nyll"]
 [ext_resource type="Resource" uid="uid://dmbn0j6l1h2gw" path="res://guide/ctrl.tres" id="10_kbfrj"]
 [ext_resource type="Resource" uid="uid://dy3uooruiy2f0" path="res://guide/close.tres" id="10_wd3uy"]
 [ext_resource type="Resource" uid="uid://dricjsoopc74d" path="res://guide/save.tres" id="11_2myyr"]
 [ext_resource type="Resource" uid="uid://xhks6b4hjy4f" path="res://guide/switch_tab.tres" id="12_3jsow"]
-[ext_resource type="Script" uid="uid://ckggy40lm0vjc" path="res://addons/guide/modifiers/guide_modifier_negate.gd" id="13_faoq1"]
+[ext_resource type="Resource" uid="uid://b27gmx58pdmwv" path="res://guide/next_tab.tres" id="13_right"]
 [ext_resource type="Resource" uid="uid://bcgja7kjbx7r7" path="res://guide/copy.tres" id="14_tgv2v"]
 [ext_resource type="Resource" uid="uid://ccrx1i2iv5vmf" path="res://guide/paste.tres" id="15_v6hpi"]
 [ext_resource type="Resource" uid="uid://cbtlbx3ejx06t" path="res://guide/cut.tres" id="16_kbfrj"]
 [ext_resource type="Resource" uid="uid://cafxwvdqdma2g" path="res://guide/undo.tres" id="17_ke1gi"]
 [ext_resource type="Resource" uid="uid://c3lxg6d23k8yl" path="res://guide/delete.tres" id="18_14fr1"]
 [ext_resource type="Resource" uid="uid://dwapj4lckokjm" path="res://guide/shift.tres" id="19_ke1gi"]
-[ext_resource type="Script" uid="uid://b4cdrn4paoj3i" path="res://addons/guide/triggers/guide_trigger_down.gd" id="20_14fr1"]
 [ext_resource type="Resource" uid="uid://6kog7u0g47oc" path="res://guide/cancel.tres" id="21_tkr45"]
 [ext_resource type="Resource" uid="uid://d04k6gcnu57o1" path="res://guide/create.tres" id="22_qxjv4"]
 
-[sub_resource type="Resource" id="Resource_golnu"]
-script = ExtResource("4_aot8h")
-key = 4194326
-
-[sub_resource type="Resource" id="Resource_8m405"]
-script = ExtResource("3_2myyr")
-input = SubResource("Resource_golnu")
-
-[sub_resource type="Resource" id="Resource_dolar"]
-script = ExtResource("1_w5b23")
-action = ExtResource("10_kbfrj")
-input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_8m405")])
-metadata/_guide_input_mappings_collapsed = true
-
-[sub_resource type="Resource" id="Resource_ke1gi"]
+[sub_resource type="Resource" id="Resource_14fr1"]
 script = ExtResource("4_aot8h")
 key = 32
+control = true
 
-[sub_resource type="Resource" id="Resource_6nyll"]
+[sub_resource type="Resource" id="Resource_kbfrj"]
 script = ExtResource("7_jxrq2")
-
-[sub_resource type="Resource" id="Resource_wd3uy"]
-script = ExtResource("9_6nyll")
-action = ExtResource("10_kbfrj")
 
 [sub_resource type="Resource" id="Resource_qxjv4"]
 script = ExtResource("3_2myyr")
-input = SubResource("Resource_ke1gi")
-triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_6nyll"), SubResource("Resource_wd3uy")])
+input = SubResource("Resource_14fr1")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_kbfrj")])
+
+[sub_resource type="Resource" id="Resource_open_secondary"]
+script = ExtResource("3_2myyr")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_kbfrj")])
 
 [sub_resource type="Resource" id="Resource_7ymj0"]
 script = ExtResource("1_w5b23")
 action = ExtResource("2_wd3uy")
-input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_qxjv4")])
-metadata/_guide_input_mappings_collapsed = true
-
-[sub_resource type="Resource" id="Resource_2myyr"]
-script = ExtResource("4_aot8h")
-key = 81
-
-[sub_resource type="Resource" id="Resource_aot8h"]
-script = ExtResource("7_jxrq2")
-
-[sub_resource type="Resource" id="Resource_3jsow"]
-script = ExtResource("9_6nyll")
-action = ExtResource("10_kbfrj")
-
-[sub_resource type="Resource" id="Resource_faoq1"]
-script = ExtResource("3_2myyr")
-input = SubResource("Resource_2myyr")
-triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_aot8h"), SubResource("Resource_3jsow")])
-
-[sub_resource type="Resource" id="Resource_tgv2v"]
-script = ExtResource("1_w5b23")
-action = ExtResource("10_wd3uy")
-input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_faoq1")])
-metadata/_guide_input_mappings_collapsed = true
-
-[sub_resource type="Resource" id="Resource_v6hpi"]
-script = ExtResource("4_aot8h")
-key = 83
-
-[sub_resource type="Resource" id="Resource_ruvbe"]
-script = ExtResource("7_jxrq2")
-
-[sub_resource type="Resource" id="Resource_kbfrj"]
-script = ExtResource("9_6nyll")
-action = ExtResource("10_kbfrj")
-
-[sub_resource type="Resource" id="Resource_14fr1"]
-script = ExtResource("3_2myyr")
-input = SubResource("Resource_v6hpi")
-triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_ruvbe"), SubResource("Resource_kbfrj")])
-
-[sub_resource type="Resource" id="Resource_tkr45"]
-script = ExtResource("1_w5b23")
-action = ExtResource("11_2myyr")
-input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_14fr1")])
+input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_qxjv4"), SubResource("Resource_open_secondary")])
 metadata/_guide_input_mappings_collapsed = true
 
 [sub_resource type="Resource" id="Resource_qesvo"]
 script = ExtResource("4_aot8h")
-key = 65
+key = 81
+control = true
 
-[sub_resource type="Resource" id="Resource_ln3tx"]
-script = ExtResource("13_faoq1")
-
-[sub_resource type="Resource" id="Resource_6dlcc"]
+[sub_resource type="Resource" id="Resource_ke1gi"]
 script = ExtResource("7_jxrq2")
 
+[sub_resource type="Resource" id="Resource_6dlcc"]
+script = ExtResource("3_2myyr")
+input = SubResource("Resource_qesvo")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_ke1gi")])
+
+[sub_resource type="Resource" id="Resource_close_secondary"]
+script = ExtResource("3_2myyr")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_ke1gi")])
+
+[sub_resource type="Resource" id="Resource_tgv2v"]
+script = ExtResource("1_w5b23")
+action = ExtResource("10_wd3uy")
+input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_6dlcc"), SubResource("Resource_close_secondary")])
+metadata/_guide_input_mappings_collapsed = true
+
 [sub_resource type="Resource" id="Resource_m57ss"]
-script = ExtResource("9_6nyll")
-action = ExtResource("10_kbfrj")
+script = ExtResource("4_aot8h")
+key = 83
+control = true
+
+[sub_resource type="Resource" id="Resource_golnu"]
+script = ExtResource("7_jxrq2")
+
+[sub_resource type="Resource" id="Resource_3608i"]
+script = ExtResource("3_2myyr")
+input = SubResource("Resource_m57ss")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_golnu")])
+
+[sub_resource type="Resource" id="Resource_save_secondary"]
+script = ExtResource("3_2myyr")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_golnu")])
+
+[sub_resource type="Resource" id="Resource_tkr45"]
+script = ExtResource("1_w5b23")
+action = ExtResource("11_2myyr")
+input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_3608i"), SubResource("Resource_save_secondary")])
+metadata/_guide_input_mappings_collapsed = true
+
+[sub_resource type="Resource" id="Resource_yel8o"]
+script = ExtResource("4_aot8h")
+key = 65
+control = true
+
+[sub_resource type="Resource" id="Resource_dolar"]
+script = ExtResource("7_jxrq2")
 
 [sub_resource type="Resource" id="Resource_vjbbp"]
 script = ExtResource("3_2myyr")
-input = SubResource("Resource_qesvo")
-modifiers = Array[ExtResource("5_3jsow")]([SubResource("Resource_ln3tx")])
-triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_6dlcc"), SubResource("Resource_m57ss")])
+input = SubResource("Resource_yel8o")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_dolar")])
 
-[sub_resource type="Resource" id="Resource_3608i"]
+[sub_resource type="Resource" id="Resource_ln3tx"]
 script = ExtResource("4_aot8h")
-key = 70
+key = 4194319
+control = true
 
-[sub_resource type="Resource" id="Resource_yel8o"]
-script = ExtResource("7_jxrq2")
+[sub_resource type="Resource" id="Resource_kgk4r"]
+script = ExtResource("3_2myyr")
+input = SubResource("Resource_ln3tx")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_dolar")])
 
 [sub_resource type="Resource" id="Resource_4htu7"]
-script = ExtResource("9_6nyll")
-action = ExtResource("10_kbfrj")
+script = ExtResource("4_aot8h")
+key = 70
+control = true
+
+[sub_resource type="Resource" id="Resource_gtdfa"]
+script = ExtResource("7_jxrq2")
 
 [sub_resource type="Resource" id="Resource_4rxye"]
 script = ExtResource("3_2myyr")
-input = SubResource("Resource_3608i")
-triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_yel8o"), SubResource("Resource_4htu7")])
+input = SubResource("Resource_4htu7")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_gtdfa")])
+
+[sub_resource type="Resource" id="Resource_x2xk8"]
+script = ExtResource("4_aot8h")
+key = 4194321
+control = true
+
+[sub_resource type="Resource" id="Resource_w584q"]
+script = ExtResource("3_2myyr")
+input = SubResource("Resource_x2xk8")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_gtdfa")])
 
 [sub_resource type="Resource" id="Resource_fsedb"]
 script = ExtResource("1_w5b23")
 action = ExtResource("12_3jsow")
-input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_vjbbp"), SubResource("Resource_4rxye")])
+input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_vjbbp"), SubResource("Resource_kgk4r")])
+metadata/_guide_input_mappings_collapsed = true
+
+[sub_resource type="Resource" id="Resource_right_tabs"]
+script = ExtResource("1_w5b23")
+action = ExtResource("13_right")
+input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_4rxye"), SubResource("Resource_w584q")])
 metadata/_guide_input_mappings_collapsed = true
 
 [sub_resource type="Resource" id="Resource_yis18"]
 script = ExtResource("4_aot8h")
 key = 67
+control = true
 
-[sub_resource type="Resource" id="Resource_dkboe"]
+[sub_resource type="Resource" id="Resource_5fiky"]
 script = ExtResource("7_jxrq2")
-
-[sub_resource type="Resource" id="Resource_2ogcg"]
-script = ExtResource("9_6nyll")
-action = ExtResource("10_kbfrj")
 
 [sub_resource type="Resource" id="Resource_6fjyh"]
 script = ExtResource("3_2myyr")
 input = SubResource("Resource_yis18")
-triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_dkboe"), SubResource("Resource_2ogcg")])
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_5fiky")])
+
+[sub_resource type="Resource" id="Resource_copy_secondary"]
+script = ExtResource("3_2myyr")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_5fiky")])
 
 [sub_resource type="Resource" id="Resource_8tshc"]
 script = ExtResource("1_w5b23")
 action = ExtResource("14_tgv2v")
-input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_6fjyh")])
+input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_6fjyh"), SubResource("Resource_copy_secondary")])
 metadata/_guide_input_mappings_collapsed = true
 
-[sub_resource type="Resource" id="Resource_jqpy7"]
+[sub_resource type="Resource" id="Resource_dkboe"]
 script = ExtResource("4_aot8h")
 key = 86
-
-[sub_resource type="Resource" id="Resource_ktjxw"]
-script = ExtResource("7_jxrq2")
-
-[sub_resource type="Resource" id="Resource_orsga"]
-script = ExtResource("9_6nyll")
-action = ExtResource("10_kbfrj")
-
-[sub_resource type="Resource" id="Resource_opx4f"]
-script = ExtResource("3_2myyr")
-input = SubResource("Resource_jqpy7")
-triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_ktjxw"), SubResource("Resource_orsga")])
-
-[sub_resource type="Resource" id="Resource_ruhvj"]
-script = ExtResource("1_w5b23")
-action = ExtResource("15_v6hpi")
-input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_opx4f")])
-metadata/_guide_input_mappings_collapsed = true
-
-[sub_resource type="Resource" id="Resource_5fiky"]
-script = ExtResource("4_aot8h")
-key = 88
+control = true
 
 [sub_resource type="Resource" id="Resource_of6hn"]
 script = ExtResource("7_jxrq2")
 
+[sub_resource type="Resource" id="Resource_opx4f"]
+script = ExtResource("3_2myyr")
+input = SubResource("Resource_dkboe")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_of6hn")])
+
+[sub_resource type="Resource" id="Resource_paste_secondary"]
+script = ExtResource("3_2myyr")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_of6hn")])
+
+[sub_resource type="Resource" id="Resource_ruhvj"]
+script = ExtResource("1_w5b23")
+action = ExtResource("15_v6hpi")
+input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_opx4f"), SubResource("Resource_paste_secondary")])
+metadata/_guide_input_mappings_collapsed = true
+
+[sub_resource type="Resource" id="Resource_2ogcg"]
+script = ExtResource("4_aot8h")
+key = 88
+control = true
+
 [sub_resource type="Resource" id="Resource_0sgxl"]
-script = ExtResource("9_6nyll")
-action = ExtResource("10_kbfrj")
+script = ExtResource("7_jxrq2")
 
 [sub_resource type="Resource" id="Resource_m3qs8"]
 script = ExtResource("3_2myyr")
-input = SubResource("Resource_5fiky")
-triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_of6hn"), SubResource("Resource_0sgxl")])
+input = SubResource("Resource_2ogcg")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_0sgxl")])
+
+[sub_resource type="Resource" id="Resource_cut_secondary"]
+script = ExtResource("3_2myyr")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_0sgxl")])
 
 [sub_resource type="Resource" id="Resource_0xowt"]
 script = ExtResource("1_w5b23")
 action = ExtResource("16_kbfrj")
-input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_m3qs8")])
+input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_m3qs8"), SubResource("Resource_cut_secondary")])
 metadata/_guide_input_mappings_collapsed = true
 
-[sub_resource type="Resource" id="Resource_50m8m"]
+[sub_resource type="Resource" id="Resource_jqpy7"]
 script = ExtResource("4_aot8h")
 key = 90
+control = true
 
-[sub_resource type="Resource" id="Resource_8uj6r"]
+[sub_resource type="Resource" id="Resource_50m8m"]
 script = ExtResource("7_jxrq2")
-
-[sub_resource type="Resource" id="Resource_gwu6s"]
-script = ExtResource("9_6nyll")
-action = ExtResource("10_kbfrj")
 
 [sub_resource type="Resource" id="Resource_oe1q2"]
 script = ExtResource("3_2myyr")
-input = SubResource("Resource_50m8m")
-triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_8uj6r"), SubResource("Resource_gwu6s")])
+input = SubResource("Resource_jqpy7")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_50m8m")])
+
+[sub_resource type="Resource" id="Resource_undo_secondary"]
+script = ExtResource("3_2myyr")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_50m8m")])
 
 [sub_resource type="Resource" id="Resource_nc1di"]
 script = ExtResource("1_w5b23")
 action = ExtResource("17_ke1gi")
-input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_oe1q2")])
+input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_oe1q2"), SubResource("Resource_undo_secondary")])
 metadata/_guide_input_mappings_collapsed = true
 
-[sub_resource type="Resource" id="Resource_5ut7d"]
+[sub_resource type="Resource" id="Resource_ktjxw"]
 script = ExtResource("4_aot8h")
 key = 68
+control = true
 
-[sub_resource type="Resource" id="Resource_7030g"]
+[sub_resource type="Resource" id="Resource_8uj6r"]
 script = ExtResource("7_jxrq2")
-
-[sub_resource type="Resource" id="Resource_kgk4r"]
-script = ExtResource("9_6nyll")
-action = ExtResource("10_kbfrj")
 
 [sub_resource type="Resource" id="Resource_anml7"]
 script = ExtResource("3_2myyr")
-input = SubResource("Resource_5ut7d")
-triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_7030g"), SubResource("Resource_kgk4r")])
+input = SubResource("Resource_ktjxw")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_8uj6r")])
 
 [sub_resource type="Resource" id="Resource_e1ju5"]
 script = ExtResource("4_aot8h")
 key = 4194312
 
-[sub_resource type="Resource" id="Resource_gtdfa"]
+[sub_resource type="Resource" id="Resource_gwu6s"]
 script = ExtResource("7_jxrq2")
 
 [sub_resource type="Resource" id="Resource_3i8vv"]
 script = ExtResource("3_2myyr")
 input = SubResource("Resource_e1ju5")
-triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_gtdfa")])
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_gwu6s")])
 
 [sub_resource type="Resource" id="Resource_xax4c"]
 script = ExtResource("1_w5b23")
@@ -268,65 +271,81 @@ action = ExtResource("18_14fr1")
 input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_anml7"), SubResource("Resource_3i8vv")])
 metadata/_guide_input_mappings_collapsed = true
 
-[sub_resource type="Resource" id="Resource_x2xk8"]
-script = ExtResource("4_aot8h")
-key = 4194325
-
-[sub_resource type="Resource" id="Resource_w584q"]
-script = ExtResource("20_14fr1")
-
-[sub_resource type="Resource" id="Resource_kjplx"]
-script = ExtResource("3_2myyr")
-input = SubResource("Resource_x2xk8")
-triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_w584q")])
-
-[sub_resource type="Resource" id="Resource_4tttw"]
-script = ExtResource("1_w5b23")
-action = ExtResource("19_ke1gi")
-input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_kjplx")])
-metadata/_guide_input_mappings_collapsed = true
-
 [sub_resource type="Resource" id="Resource_atjcl"]
 script = ExtResource("4_aot8h")
 key = 4194305
 
-[sub_resource type="Resource" id="Resource_77ee5"]
+[sub_resource type="Resource" id="Resource_5ut7d"]
 script = ExtResource("7_jxrq2")
 
 [sub_resource type="Resource" id="Resource_2p0ml"]
 script = ExtResource("3_2myyr")
 input = SubResource("Resource_atjcl")
-triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_77ee5")])
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_5ut7d")])
+
+[sub_resource type="Resource" id="Resource_cancel_secondary"]
+script = ExtResource("3_2myyr")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_5ut7d")])
 
 [sub_resource type="Resource" id="Resource_aahkx"]
 script = ExtResource("1_w5b23")
 action = ExtResource("21_tkr45")
-input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_2p0ml")])
+input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_2p0ml"), SubResource("Resource_cancel_secondary")])
 metadata/_guide_input_mappings_collapsed = true
 
-[sub_resource type="Resource" id="Resource_3a3tj"]
+[sub_resource type="Resource" id="Resource_orsga"]
 script = ExtResource("4_aot8h")
 key = 69
+control = true
 
-[sub_resource type="Resource" id="Resource_oincq"]
+[sub_resource type="Resource" id="Resource_7030g"]
 script = ExtResource("7_jxrq2")
-
-[sub_resource type="Resource" id="Resource_t80dy"]
-script = ExtResource("9_6nyll")
-action = ExtResource("10_kbfrj")
 
 [sub_resource type="Resource" id="Resource_66yqc"]
 script = ExtResource("3_2myyr")
-input = SubResource("Resource_3a3tj")
-triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_oincq"), SubResource("Resource_t80dy")])
+input = SubResource("Resource_orsga")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_7030g")])
+
+[sub_resource type="Resource" id="Resource_create_secondary"]
+script = ExtResource("3_2myyr")
+triggers = Array[ExtResource("6_faoq1")]([SubResource("Resource_7030g")])
 
 [sub_resource type="Resource" id="Resource_y6psi"]
 script = ExtResource("1_w5b23")
 action = ExtResource("22_qxjv4")
-input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_66yqc")])
+input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_66yqc"), SubResource("Resource_create_secondary")])
+metadata/_guide_input_mappings_collapsed = true
+
+[sub_resource type="Resource" id="Resource_kjplx"]
+script = ExtResource("4_aot8h")
+key = 4194325
+
+[sub_resource type="Resource" id="Resource_4tttw"]
+script = ExtResource("3_2myyr")
+input = SubResource("Resource_kjplx")
+
+[sub_resource type="Resource" id="Resource_77ee5"]
+script = ExtResource("1_w5b23")
+action = ExtResource("19_ke1gi")
+input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_4tttw")])
+metadata/_guide_input_mappings_collapsed = true
+
+[sub_resource type="Resource" id="Resource_3a3tj"]
+script = ExtResource("4_aot8h")
+key = 4194326
+
+[sub_resource type="Resource" id="Resource_oincq"]
+script = ExtResource("3_2myyr")
+input = SubResource("Resource_3a3tj")
+
+[sub_resource type="Resource" id="Resource_t80dy"]
+script = ExtResource("1_w5b23")
+action = ExtResource("10_kbfrj")
+input_mappings = Array[ExtResource("3_2myyr")]([SubResource("Resource_oincq")])
+metadata/_guide_input_mappings_collapsed = true
 
 [resource]
 script = ExtResource("2_nvxg8")
-mappings = Array[ExtResource("1_w5b23")]([SubResource("Resource_dolar"), SubResource("Resource_7ymj0"), SubResource("Resource_tgv2v"), SubResource("Resource_tkr45"), SubResource("Resource_fsedb"), SubResource("Resource_8tshc"), SubResource("Resource_ruhvj"), SubResource("Resource_0xowt"), SubResource("Resource_nc1di"), SubResource("Resource_xax4c"), SubResource("Resource_4tttw"), SubResource("Resource_aahkx"), SubResource("Resource_y6psi")])
+mappings = Array[ExtResource("1_w5b23")]([SubResource("Resource_7ymj0"), SubResource("Resource_tgv2v"), SubResource("Resource_tkr45"), SubResource("Resource_fsedb"), SubResource("Resource_right_tabs"), SubResource("Resource_8tshc"), SubResource("Resource_ruhvj"), SubResource("Resource_0xowt"), SubResource("Resource_nc1di"), SubResource("Resource_xax4c"), SubResource("Resource_aahkx"), SubResource("Resource_y6psi"), SubResource("Resource_77ee5"), SubResource("Resource_t80dy")])
 metadata/_custom_type_script = "uid://dsa1dnifd6w32"
 metadata/_guide_action_mappings_collapsed = false

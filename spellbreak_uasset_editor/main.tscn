@@ -6,6 +6,7 @@
 [ext_resource type="Resource" uid="uid://dy3uooruiy2f0" path="res://guide/close.tres" id="4_1bvp3"]
 [ext_resource type="Resource" uid="uid://dricjsoopc74d" path="res://guide/save.tres" id="5_lquwl"]
 [ext_resource type="Resource" uid="uid://xhks6b4hjy4f" path="res://guide/switch_tab.tres" id="6_7mycd"]
+[ext_resource type="Resource" uid="uid://b27gmx58pdmwv" path="res://guide/next_tab.tres" id="6_qt1fs"]
 [ext_resource type="Resource" uid="uid://bcgja7kjbx7r7" path="res://guide/copy.tres" id="7_5vw27"]
 [ext_resource type="Resource" uid="uid://ccrx1i2iv5vmf" path="res://guide/paste.tres" id="8_kek77"]
 [ext_resource type="Resource" uid="uid://cbtlbx3ejx06t" path="res://guide/cut.tres" id="9_efxa6"]
@@ -22,7 +23,8 @@ mapping = ExtResource("2_h2yge")
 open_action = ExtResource("2_0xm2m")
 close_action = ExtResource("4_1bvp3")
 save_action = ExtResource("5_lquwl")
-switch_tab_action = ExtResource("6_7mycd")
+previous_tab_action = ExtResource("6_7mycd")
+next_tab_action = ExtResource("6_qt1fs")
 copy = ExtResource("7_5vw27")
 paste = ExtResource("8_kek77")
 cut = ExtResource("9_efxa6")

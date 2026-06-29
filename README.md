@@ -14,14 +14,14 @@ Repository-level scripts and CI run the regression suite.
 
 Everything is bundled inside the single binary:
 - [UAssetAPI](https://github.com/atenfyr/UAssetAPI) converter (pre-compiled .NET DLLs)
-- [u4pak](https://github.com/panzi/u4pak) for packing mods into `.pak` files
+- [u4pak](https://github.com/panzi/u4pak) for packing mods into `.pak` files and extracting base-game sources
 - [UE4-DDS-Tools](https://github.com/matyalatte/UE4-DDS-Tools) + [libtexconv](https://github.com/matyalatte/Texconv-Custom-DLL) for texture extraction/injection
 
 ---
 
 ## Requirements
 
-- **Python 3.10+** — required at runtime for mod packing and texture operations
+- **Python 3.10+** — required at runtime for mod packing, base-pak source generation, and texture operations
   > **Windows:** when installing Python, check **"Add Python to PATH"** on the first installer screen — it is unchecked by default.
 - **.NET Runtime** — required for UAssetAPI (asset parsing)
 - **ImageMagick** — required for texture export/import (DDS/TGA to PNG conversion)
@@ -56,11 +56,11 @@ Open `spellbreak_uasset_editor/` in Godot 4.6+, then **Project > Export > Linux/
 
 Launch the app, click **Settings**, and fill in:
 
-- **Spellbreak directory** — the folder containing Spellbreak's `g3/` content root
-- **Mods directory** — where your mod folders live
+- **Game directory** — the folder used to locate the game executable and pak files. For Spellbreak, this install folder should contain `g3/Content/Paks/`.
+- **Mods directory** — the parent folder that contains your mod folders. Each direct child is treated as one mod and should mirror the game structure, for example `Mods/MyMod/g3/Content/...`.
 - **Launch command** — optional, used by the Launch button
 - **umodel path** — optional, path to the umodel binary for 3D mesh and animation preview
-- **Sources** — exported asset directories for reference (base game export, older versions, etc.)
+- **Sources** — extracted asset directories for reference. Use **Generate from Pak** to select a game `.pak`, choose an output folder, unpack it, and add the extracted folder as a source.
 
 Settings are saved to `config.json` next to the executable.
 
@@ -77,7 +77,8 @@ The Mod Manager tab is pinned and always visible. It shows all mod folders found
 | **Left-click a mod** | Expand / collapse it |
 | **Right-click a mod** | Toggle enabled / disabled |
 | **Double-click a `.uasset`** | Open it in the asset editor |
-| **Double-click any other file** | Open with system default app |
+| **Double-click any other file** | Open with the configured editor or system default app |
+| **Open button on text/config files** | Open `.txt`, `.cfg`, `.json`, `.ini`, `.md`, and similar files externally |
 
 **Multi-select and clipboard:**
 
@@ -100,6 +101,25 @@ Select files with `Click`, `Ctrl+Click` (toggle), or `Shift+Click` (range).
 | **Pack** | Pack all enabled mods into a Spellbreak patch pak |
 | **Watch** | Toggle auto-pack on file save |
 | **Launch** | Launch the game |
+
+### Sources
+
+Sources are read-only reference folders used when importing files into a mod. They are expected to mirror the game's internal paths, for example:
+
+```
+SourceFolder/
+└── g3/
+    └── Content/
+        └── ...
+```
+
+In **Settings > Sources**, **Generate from Pak** can build a source directly from a game package:
+
+1. Select the base game `.pak`.
+2. Select an output folder for extracted files.
+3. The modkit unpacks the pak and adds the output folder to the configured sources.
+
+When importing from sources in the Mod Manager, selecting a folder or file inside a mod opens the matching path inside the chosen source if it exists. If it does not exist, the file dialog falls back to the source root.
 
 ### Asset editor tabs
 
@@ -253,6 +273,7 @@ spellbreak-modkit/
     │   └── mod_manager/
     │       ├── mod_manager_panel.gd
     │       ├── mod_settings_tab.gd  Settings UI
+    │       ├── base_source_service.gd
     │       ├── config_manager.gd
     │       ├── mod_state_manager.gd
     │       ├── mod_discovery.gd
@@ -285,5 +306,3 @@ replacement, subprocess argument handling, and pak creation/failure recovery.
 - [Texconv-Custom-DLL](https://github.com/matyalatte/Texconv-Custom-DLL) by matyalatte — Cross-platform texture format converter (bundled as libtexconv)
 - [umodel / UE Viewer](https://www.gildor.org/en/projects/umodel) by Gildor — UE4 mesh viewer/exporter (optional, user-installed)
 - [G.U.I.D.E](https://github.com/godotneers/G.U.I.D.E) by Jan Thomä — Input mapping framework (bundled)
-- [Script IDE](https://github.com/Maran23/script-ide) by Marius Hanl — Godot editor plugin (bundled)
-- [NHB Functions On The Fly](https://github.com/NickHatBoecker/nhb_functions_on_the_fly) by NickHatBoecker — Godot editor plugin (bundled)
