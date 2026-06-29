@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.0 - 2026-06-29
+
+- Added a Settings keymap manager backed by GUIDE mappings, including editable primary and secondary shortcuts.
+- Reworked shortcut handling so editor keybinds respond reliably, renamed tab navigation to Previous Tab and Next Tab, and hid Shift as a standalone bind.
+- Added source generation from game `.pak` files, including an improved u4pak reader for Spellbreak padded version 8 pak footers.
+- Improved Mod Manager source imports with a better source picker, selected-folder matching, fixed Select/Browse behavior, and external opening for text/config files.
+- Fixed texture injection persistence so injected textures are not overwritten by later clean saves.
+- Refreshed settings descriptions, Save/Revert/Close behavior, and the keymap entry point.
+- Removed unused addons and generic game-profile flows, keeping the tool focused on the Spellbreak profile.
+- Fixed GDScript reload warnings and expanded regression coverage for shortcuts, source extraction, settings, packing, and file opening.
+
 ## 0.8.0 - 2026-06-23
 
 - Reworked the editor internals around typed asset documents, reversible edit commands, shared detail-panel helpers, and background jobs.
