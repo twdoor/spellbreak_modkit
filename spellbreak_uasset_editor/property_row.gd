@@ -340,7 +340,7 @@ static func _on_change(row: PropertyRow, new_value: Variant) -> void:
 
 ## Creates a LineEdit with a filter-as-you-type tag autocomplete popup.
 ## on_change is called with the selected/submitted tag string.
-## tag_list: the array of known tags to search against (from the active game profile).
+## tag_list: the array of known Spellbreak tags to search against.
 static func _make_tag_autocomplete(current: String, on_change: Callable, tag_list: Array = []) -> Control:
 	var line := LineEdit.new()
 	line.text = current
@@ -452,7 +452,7 @@ static func _rebuild_tag_list(vbox: VBoxContainer, prop: UAssetProperty, row: Pr
 # ── Numeric constant helpers ──────────────────────────────────────────────────
 
 ## Attaches constant autocomplete and expression evaluation to a SpinBox.
-## constants: Dictionary of name → numeric value from the active game profile.
+## constants: Dictionary of Spellbreak constant name → numeric value.
 ## is_int: if true, the final result is cast to int.
 static func _attach_constant_helper(spin: SpinBox, constants: Dictionary, is_int: bool) -> void:
 	var line_edit := spin.get_line_edit()

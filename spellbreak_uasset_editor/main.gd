@@ -244,7 +244,7 @@ func _on_file_selected(path: String) -> void:
 		push_error("Failed to load: " + path)
 		return
 
-	# Attach the active game profile so property editors can access enums/tags
+	# Attach the Spellbreak profile so property editors can access enums/tags.
 	if _cfg:
 		asset.game_profile = _cfg.get_game_profile()
 

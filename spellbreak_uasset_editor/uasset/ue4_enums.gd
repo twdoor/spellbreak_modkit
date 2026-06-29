@@ -1,10 +1,10 @@
 ## Thin wrapper kept for backward compatibility.
-## All enum data now lives in game_profiles/ and is loaded by GameProfile.
+## All enum data now lives in game_profiles/spellbreak/ and is loaded by GameProfile.
 ## This file provides a static fallback using the Spellbreak profile when no
-## game profile is available (e.g. assets loaded outside the mod manager).
+## profile is available (e.g. assets loaded outside the mod manager).
 class_name UE4Enums
 
-## Lazy-loaded fallback profile (Spellbreak, includes both generic + game enums).
+## Lazy-loaded fallback profile (Spellbreak base enums + game enums).
 static var _fallback: GameProfile = null
 
 static func _get_fallback() -> GameProfile:

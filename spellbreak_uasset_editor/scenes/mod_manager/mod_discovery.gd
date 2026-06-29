@@ -9,7 +9,7 @@ const ASSET_EXTENSIONS := [".uasset", ".uexp", ".ubulk", ".umap"]
 
 ## Returns an Array of Dictionaries:
 ##   { "name": String, "path": String, "file_count": int, "size_bytes": int }
-## content_root: the top-level folder inside each mod (e.g. "g3" for Spellbreak, "Content" for generic).
+## content_root: the top-level folder inside each mod. Spellbreak uses "g3".
 static func scan(mods_dir: String, content_root: String = "g3") -> Array:
 	var results: Array = []
 	if mods_dir.is_empty() or not DirAccess.dir_exists_absolute(mods_dir):

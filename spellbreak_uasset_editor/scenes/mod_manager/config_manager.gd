@@ -26,9 +26,6 @@ var sources: Array = []
 var ue4_dds_tools_dir: String = ""
 ## Absolute path to the umodel binary.  Required for 3D mesh preview.
 var umodel_path: String = ""
-## Active game profile ID (directory name under game_profiles/, or "ue_X.Y" for generic).
-var game_profile_id: String = "spellbreak"
-
 var _game_profile: GameProfile = null
 
 signal config_changed
@@ -98,7 +95,6 @@ func load_config() -> void:
 	u4pak_dir  = str(parsed.get("u4pak_dir",  ""))
 	ue4_dds_tools_dir = str(parsed.get("ue4_dds_tools_dir", ""))
 	umodel_path = str(parsed.get("umodel_path", ""))
-	game_profile_id = str(parsed.get("game_profile", "spellbreak"))
 	_game_profile = null  # invalidate cache
 	sources    = []
 	for entry in parsed.get("sources", []):
@@ -108,7 +104,6 @@ func load_config() -> void:
 
 func save_config() -> void:
 	var data: Dictionary = {
-		"game_profile": game_profile_id,
 		"game_dir": game_dir,
 		"mods_dir": mods_dir,
 		"launch_cmd": launch_cmd,
@@ -132,20 +127,13 @@ func get_umodel_path() -> String:
 	return umodel_path
 
 
-## Returns the cached GameProfile for the active game_profile_id.
-## Lazy-loads on first access; invalidated when game_profile_id changes.
+## Returns the cached Spellbreak profile.
 func get_game_profile() -> GameProfile:
 	if _game_profile == null:
 		# Ensure game_profiles are extracted from .pck for exported builds
-		_find_bundled_tool("game_profiles", "_generic/profile.json")
-		_game_profile = GameProfile.load_profile(game_profile_id)
+		_find_bundled_tool("game_profiles", "spellbreak/profile.json")
+		_game_profile = GameProfile.load_profile("spellbreak")
 	return _game_profile
-
-
-## Change the active profile and invalidate the cache.
-func set_game_profile_id(pid: String) -> void:
-	game_profile_id = pid
-	_game_profile = null
 
 
 func get_paks_dir() -> String:
@@ -189,9 +177,8 @@ const _DDS_TOOLS_FILES := [
 	"directx/libtexconv.so", "directx/texconv.dll",
 ]
 const _GAME_PROFILE_FILES := [
-	"_generic/profile.json", "_generic/enums.json",
-	"spellbreak/profile.json", "spellbreak/enums.json", "spellbreak/tags.json",
-	"spellbreak/constants.json",
+	"spellbreak/profile.json", "spellbreak/base_enums.json", "spellbreak/enums.json",
+	"spellbreak/tags.json", "spellbreak/constants.json",
 ]
 
 

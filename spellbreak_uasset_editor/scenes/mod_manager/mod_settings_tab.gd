@@ -9,14 +9,11 @@ signal status_changed(text: String, is_error: bool)
 
 var _cfg: ModConfigManager
 var _sources_container: VBoxContainer
-var _profile_dropdown: OptionButton
 var _base_source_service: BaseSourceService
 var _base_source_btn: Button
 var _base_source_status: Label
 var _base_source_status_text := ""
 var _base_source_status_error := false
-## All profile entries from GameProfile.list_profiles(), cached for dropdown index mapping.
-var _profile_entries: Array = []
 
 
 func setup(cfg: ModConfigManager) -> ModSettingsTab:
@@ -73,26 +70,11 @@ func _build_ui() -> void:
 	var profile := _cfg.get_game_profile()
 	var cr := profile.content_root
 
-	# ── Game / Version ── (first setting — everything below depends on it)
-	content.add_child(_section("Game / Version"))
-	content.add_child(_hint("Select the game or UE version you are modding. This sets version strings, content root, and available enums/tags."))
-	var profile_row := HBoxContainer.new()
-	profile_row.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
-	_profile_dropdown = _build_profile_dropdown()
-	_profile_dropdown.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	profile_row.add_child(_profile_dropdown)
-	var add_game_btn := Button.new()
-	add_game_btn.text = "+ Add Game"
-	add_game_btn.tooltip_text = "Create a custom game profile"
-	add_game_btn.pressed.connect(_on_add_game_pressed)
-	profile_row.add_child(add_game_btn)
-	content.add_child(profile_row)
-
 	# ── Game directory ──
-	content.add_child(_section("Game Directory"))
+	content.add_child(_section("Spellbreak Directory"))
 	content.add_child(_hint(
-		("Select the game install folder used to locate the game executable and pak files. " +
-		"For this profile, the folder should contain %s/ so the game paks resolve under %s/Content/Paks/.") % [cr, cr]
+		("Select the Spellbreak install folder used to locate the executable and pak files. " +
+		"The folder should contain %s/ so paks resolve under %s/Content/Paks/.") % [cr, cr]
 	))
 	content.add_child(_dir_row(
 		func() -> String: return _cfg.game_dir,
@@ -209,105 +191,6 @@ func _build_ui() -> void:
 
 	btn_margin.add_child(btn_row)
 	add_child(btn_margin)
-
-
-# ── Game profile dropdown ─────────────────────────────────────────────────────
-
-func _build_profile_dropdown() -> OptionButton:
-	_profile_entries = GameProfile.list_profiles()
-
-	var opt := OptionButton.new()
-	var selected_idx := 0
-	var idx := 0
-	var added_ue_sep := false
-	var added_custom_sep := false
-
-	# Group 1: built-in game profiles (non-UE-version entries like Spellbreak)
-	for entry in _profile_entries:
-		if entry["builtin"] and not entry["is_ue_version"]:
-			opt.add_item(entry["display_name"], idx)
-			if entry["id"] == _cfg.game_profile_id:
-				selected_idx = idx
-			idx += 1
-
-	# Separator before UE versions
-	for entry in _profile_entries:
-		if entry["is_ue_version"]:
-			if not added_ue_sep:
-				opt.add_separator("UE Versions")
-				idx += 1
-				added_ue_sep = true
-			opt.add_item(entry["display_name"], idx)
-			if entry["id"] == _cfg.game_profile_id:
-				selected_idx = idx
-			idx += 1
-
-	# Group 3: user-created profiles
-	for entry in _profile_entries:
-		if not entry["builtin"] and not entry["is_ue_version"]:
-			if not added_custom_sep:
-				opt.add_separator("Custom Games")
-				idx += 1
-				added_custom_sep = true
-			opt.add_item(entry["display_name"], idx)
-			if entry["id"] == _cfg.game_profile_id:
-				selected_idx = idx
-			idx += 1
-
-	opt.selected = selected_idx
-	opt.item_selected.connect(_on_profile_selected)
-	return opt
-
-
-## Map dropdown visual index → profile entry index in _profile_entries.
-## Separators occupy indices but aren't in _profile_entries, so we skip them.
-func _get_profile_id_for_dropdown_idx(dropdown_idx: int) -> String:
-	# Walk the dropdown items, counting only non-separator items
-	#var real_idx := 0
-	# Build a flat list matching the order we added items (built-in games, UE versions, custom)
-	var ordered_ids: Array[String] = []
-	for entry in _profile_entries:
-		if entry["builtin"] and not entry["is_ue_version"]:
-			ordered_ids.append(entry["id"])
-	for entry in _profile_entries:
-		if entry["is_ue_version"]:
-			ordered_ids.append(entry["id"])
-	for entry in _profile_entries:
-		if not entry["builtin"] and not entry["is_ue_version"]:
-			ordered_ids.append(entry["id"])
-
-	# Walk the dropdown to find which ordered_ids entry this maps to
-	var id_cursor := 0
-	for i in _profile_dropdown.item_count:
-		if _profile_dropdown.is_item_separator(i):
-			continue
-		if i == dropdown_idx:
-			if id_cursor < ordered_ids.size():
-				return ordered_ids[id_cursor]
-			break
-		id_cursor += 1
-
-	return _cfg.game_profile_id  # fallback
-
-
-func _on_profile_selected(dropdown_idx: int) -> void:
-	var pid := _get_profile_id_for_dropdown_idx(dropdown_idx)
-	_cfg.set_game_profile_id(pid)
-	# Defer so the dropdown's signal finishes before we free it inside refresh()
-	refresh.call_deferred()
-
-
-func _on_add_game_pressed() -> void:
-	var dialog := AddGameDialog.new()
-	dialog.game_created.connect(func(profile_id: String) -> void:
-		_cfg.set_game_profile_id(profile_id)
-		_cfg.save_config()
-		refresh()
-		dialog.queue_free()
-	)
-	dialog.canceled.connect(dialog.queue_free)
-	add_child(dialog)
-	dialog.popup_centered()
 
 
 # ── Sources list ──────────────────────────────────────────────────────────────

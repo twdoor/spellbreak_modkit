@@ -390,7 +390,6 @@ func _test_animation_candidate_discovery() -> void:
 	var config := ModConfigManager.new()
 	config.mods_dir = root.path_join("Mods")
 	config.sources = [{"name": "Base", "path": source_root}]
-	config.set_game_profile_id("spellbreak")
 	var service := MeshService.new().setup(config)
 	var candidates := service.find_animation_assets_for_mesh(mesh_path, 20)
 	_expect(idle_path in candidates and attack_path in candidates,
@@ -468,7 +467,6 @@ func _test_texture_companion_recovery() -> void:
 	var config := ModConfigManager.new()
 	config.mods_dir = root.path_join("Mods")
 	config.sources = [{"name": "Base", "path": source_dir}]
-	config.set_game_profile_id("spellbreak")
 	var service := TextureService.new().setup(config)
 	var recovered := service._restore_missing_texture_companions(uasset_path)
 	_expect(bool(recovered.get("ok", false)),
@@ -612,7 +610,6 @@ func _test_base_source_generation() -> void:
 
 	var config := ModConfigManager.new()
 	config.u4pak_dir = tool_dir
-	config.set_game_profile_id("spellbreak")
 	var service := BaseSourceService.new().setup(config)
 	var result := service._do_generate(pak_path, output_dir)
 	_expect(result[0], "base source generation succeeds with u4pak unpack")
@@ -665,16 +662,15 @@ func _test_packing_transaction() -> void:
 		return
 	var root := OS.get_temp_dir().path_join("sb_test_pack_%d" % Time.get_ticks_usec())
 	var game_dir := root.path_join("game")
-	var paks_dir := game_dir.path_join("Content/Paks")
+	var paks_dir := game_dir.path_join("g3/Content/Paks")
 	var mod_dir := root.path_join("mods/TestMod")
 	DirAccess.make_dir_recursive_absolute(paks_dir)
-	FileUtils.write_bytes_atomic(mod_dir.path_join("Content/example.bin"), "payload".to_utf8_buffer())
+	FileUtils.write_bytes_atomic(mod_dir.path_join("g3/Content/example.bin"), "payload".to_utf8_buffer())
 
 	var config := ModConfigManager.new()
 	config.game_dir = game_dir
 	config.mods_dir = root.path_join("mods")
 	config.u4pak_dir = ProjectSettings.globalize_path("res://u4pak")
-	config.set_game_profile_id("ue_4.27")
 	var packer := PackingService.new().setup(config)
 	var result := packer._do_pack([{"name": "TestMod", "path": mod_dir}])
 	var pak_path := paks_dir.path_join("zzz_mods_P.pak")

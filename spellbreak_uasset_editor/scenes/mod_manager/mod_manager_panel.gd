@@ -686,7 +686,7 @@ func _on_new_mod_pressed() -> void:
 		var cr := _cfg.get_game_profile().content_root
 		var content_path := mod_path.path_join(cr + "/Content")
 		if not FileUtils.is_path_within(content_path, mod_path):
-			_set_status("Game profile has an invalid content root", true)
+			_set_status("Spellbreak profile has an invalid content root", true)
 			return
 		var err := DirAccess.make_dir_recursive_absolute(content_path)
 		if err != OK:

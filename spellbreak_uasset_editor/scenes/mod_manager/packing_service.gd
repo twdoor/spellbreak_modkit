@@ -111,7 +111,7 @@ func _do_pack(enabled_mods: Array) -> Array:
 	var pak_name := profile.pak_output_name
 	if not FileUtils.is_safe_filename(pak_name):
 		FileUtils.remove_dir_recursive(tmp_dir)
-		return [false, "Invalid pak output name in game profile"]
+		return [false, "Invalid pak output name in Spellbreak profile"]
 	var pak_path := paks_dir.path_join(pak_name + ".pak")
 	var staged_pak := paks_dir.path_join(".%s.sb_pack_%d.pak" % [pak_name, Time.get_ticks_usec()])
 
@@ -250,7 +250,7 @@ func remove_pak() -> Array:
 		return [false, "Paks path escapes the configured game directory"]
 	var pak_name := _cfg.get_game_profile().pak_output_name
 	if not FileUtils.is_safe_filename(pak_name):
-		return [false, "Invalid pak output name in game profile"]
+		return [false, "Invalid pak output name in Spellbreak profile"]
 	var removed: Array = []
 	for ext in [".pak", ".sig"]:
 		var f := paks_dir.path_join(pak_name + ext)
