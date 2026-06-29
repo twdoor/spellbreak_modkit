@@ -534,8 +534,9 @@ func _add_dep_array_row(field: String, expo: UAssetExport) -> void:
 	hbox.add_child(label)
 
 	var tip_parts: PackedStringArray = []
-	for idx in indices:
-		tip_parts.append("%d → %s" % [idx, _resolve_dep_index(idx)])
+	for value in indices:
+		var dep_idx := int(value)
+		tip_parts.append("%d → %s" % [dep_idx, _resolve_dep_index(dep_idx)])
 
 	var line := LineEdit.new()
 	line.text = ", ".join(PackedStringArray(indices.map(func(i): return str(i))))
@@ -548,16 +549,18 @@ func _add_dep_array_row(field: String, expo: UAssetExport) -> void:
 			var s := part.strip_edges()
 			if s.is_empty(): continue
 			if s.is_valid_int(): new_indices.append(s.to_int())
-		if new_indices == indices:
+		var current_raw = expo.raw.get(field)
+		var current_indices: Array = current_raw if current_raw is Array else []
+		if new_indices == current_indices:
 			return
-		var old_indices := indices.duplicate()
+		var old_indices := current_indices.duplicate()
 		_ctx.execute("Edit %s" % field,
 			func() -> void: expo.raw[field] = new_indices.duplicate(),
 			func() -> void: expo.raw[field] = old_indices.duplicate())
-		indices = new_indices
 		var new_tip: PackedStringArray = []
-		for idx in new_indices:
-			new_tip.append("%d → %s" % [idx, _resolve_dep_index(idx)])
+		for value in new_indices:
+			var dep_idx := int(value)
+			new_tip.append("%d → %s" % [dep_idx, _resolve_dep_index(dep_idx)])
 		line.tooltip_text = "\n".join(new_tip) if new_tip.size() > 0 else "(none)"
 	)
 	hbox.add_child(line)

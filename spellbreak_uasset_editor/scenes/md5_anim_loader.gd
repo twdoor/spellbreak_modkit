@@ -322,7 +322,8 @@ static func _flattened_rotation_mode(joints: Array, frames: Array, skeleton: Ske
 	if sample_count <= 0:
 		return FLATTENED_ROTATION_LOCAL
 	angles.sort()
-	var median_angle := angles[int(angles.size() / 2)]
+	var median_index := floori(float(angles.size()) / 2.0)
+	var median_angle := angles[median_index]
 	var identity_ratio := float(identity_count) / float(sample_count)
 	if identity_ratio >= DELTA_IDENTITY_RATIO and median_angle <= DELTA_IDENTITY_ANGLE_DEGREES:
 		return FLATTENED_ROTATION_DELTA

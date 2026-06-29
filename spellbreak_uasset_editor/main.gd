@@ -130,6 +130,7 @@ func _setup_mod_tab() -> void:
 		tab_cont.set_tab_hidden(1, true)
 		tab_cont.current_tab = 0
 	)
+	settings.status_changed.connect(_on_mod_status_changed)
 
 
 func _on_mod_status_changed(text: String, is_error: bool) -> void:

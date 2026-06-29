@@ -392,7 +392,7 @@ func delete_selection() -> void:
 		var row: UAssetProperty  = _current_data["dt_row"]
 		var expo: UAssetExport   = _current_data["expo"]
 		var rows_raw: Array = expo.get_datatable_rows()
-		var idx := DataTableRowDetail.row_index(row, rows_raw)
+		var idx: int = DataTableRowDetail.row_index(row, rows_raw)
 		if idx < 0: return
 		var removed_raw := row.raw.duplicate(true)
 		_document.execute(AssetEditCommand.new(

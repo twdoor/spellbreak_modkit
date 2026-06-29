@@ -31,6 +31,7 @@ func _run() -> void:
 	_test_atomic_file_install()
 	_test_path_safety()
 	_test_process_arguments()
+	_test_base_source_generation()
 	_test_packing_transaction()
 
 
@@ -583,6 +584,80 @@ func _test_process_arguments() -> void:
 			and launch[1] == "-log"
 			and launch[2] == "value with spaces",
 			"launch command parser preserves quoted Windows paths and arguments")
+
+
+func _test_base_source_generation() -> void:
+	if ProcessUtils.find_python().is_empty():
+		return
+	var root := OS.get_temp_dir().path_join("sb_test_base_source_%d" % Time.get_ticks_usec())
+	var tool_dir := root.path_join("u4pak")
+	var output_dir := root.path_join("source")
+	var pak_path := root.path_join("Game.pak")
+	DirAccess.make_dir_recursive_absolute(tool_dir)
+	FileUtils.write_bytes_atomic(pak_path, "fake pak".to_utf8_buffer())
+	FileUtils.write_bytes_atomic(tool_dir.path_join("u4pak.py"), (
+			"import os, sys\n"
+			+ "args = sys.argv[1:]\n"
+			+ "if args[0] == 'list':\n"
+			+ "    print('g3/Content/TestAsset.uasset')\n"
+			+ "    raise SystemExit(0)\n"
+			+ "if args[0] == 'unpack' and args[1] == '-C':\n"
+			+ "    out = args[2]\n"
+			+ "    target = os.path.join(out, 'g3', 'Content', 'TestAsset.uasset')\n"
+			+ "    os.makedirs(os.path.dirname(target), exist_ok=True)\n"
+			+ "    open(target, 'wb').write(b'data')\n"
+			+ "    raise SystemExit(0)\n"
+			+ "raise SystemExit(9)\n"
+	).to_utf8_buffer())
+
+	var config := ModConfigManager.new()
+	config.u4pak_dir = tool_dir
+	config.set_game_profile_id("spellbreak")
+	var service := BaseSourceService.new().setup(config)
+	var result := service._do_generate(pak_path, output_dir)
+	_expect(result[0], "base source generation succeeds with u4pak unpack")
+	_expect(DirAccess.dir_exists_absolute(output_dir.path_join("g3/Content")),
+		"base source generation creates the configured content root")
+	_expect(result[2] == "Base Game (Game)", "base source generation returns a useful source name")
+	_expect(result[3] == output_dir, "base source generation returns the output folder as source path")
+
+	var fallback_dir := root.path_join("fallback_source")
+	FileUtils.write_bytes_atomic(tool_dir.path_join("u4pak.py"), (
+			"import os, sys\n"
+			+ "args = sys.argv[1:]\n"
+			+ "if args[0] == 'list':\n"
+			+ "    if '--ignore-magic' in args and '--force-version=3' in args:\n"
+			+ "        print('g3/Content/FallbackAsset.uasset')\n"
+			+ "        raise SystemExit(0)\n"
+			+ "    print('illegal file magic: 0x00000000')\n"
+			+ "    raise SystemExit(1)\n"
+			+ "if args[0] == 'unpack':\n"
+			+ "    if '--ignore-magic' not in args or '--force-version=3' not in args:\n"
+			+ "        raise SystemExit(8)\n"
+			+ "    out = args[args.index('-C') + 1]\n"
+			+ "    target = os.path.join(out, 'g3', 'Content', 'FallbackAsset.uasset')\n"
+			+ "    os.makedirs(os.path.dirname(target), exist_ok=True)\n"
+			+ "    open(target, 'wb').write(b'data')\n"
+			+ "    raise SystemExit(0)\n"
+			+ "raise SystemExit(9)\n"
+	).to_utf8_buffer())
+	var fallback_result := service._do_generate(pak_path, fallback_dir)
+	_expect(fallback_result[0],
+		"base source generation retries pak parsing with profile archive flags")
+	_expect(FileAccess.file_exists(fallback_dir.path_join("g3/Content/FallbackAsset.uasset")),
+		"base source generation reuses fallback flags for unpack")
+
+	FileUtils.write_bytes_atomic(tool_dir.path_join("u4pak.py"), (
+			"import sys\n"
+			+ "if sys.argv[1] == 'list':\n"
+			+ "    print('../Outside.uasset')\n"
+			+ "    raise SystemExit(0)\n"
+			+ "raise SystemExit(0)\n"
+	).to_utf8_buffer())
+	var unsafe_result := service._do_generate(pak_path, root.path_join("unsafe_source"))
+	_expect(not unsafe_result[0], "base source generation rejects unsafe pak paths")
+
+	FileUtils.remove_dir_recursive(root)
 
 
 func _test_packing_transaction() -> void:

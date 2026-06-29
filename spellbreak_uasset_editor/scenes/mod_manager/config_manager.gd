@@ -169,11 +169,13 @@ func get_dds_tools_dir() -> String:
 
 # ── Bundled tool resolution ───────────────────────────────────────────────────
 # Both u4pak/ and ue4_dds_tools/ are packed inside the Godot .pck at export time.
-# At runtime the search order mirrors UAssetFile._get_converter_dll():
+# At runtime the search order mirrors UAssetFile._get_converter_dll(), but
+# bundled tools are refreshed from res:// before using user-data copies. This
+# prevents stale extracted scripts from surviving app updates forever.
 #   1. Next to the executable  (user manually placed)
-#   2. User data dir           (previously extracted from .pck)
-#   3. Project source tree     (Godot editor / dev)
-#   4. Extract from res://     (exported build, first run)
+#   2. Current bundled res:// copy, extracted/refreshed to user data
+#   3. User data dir           (previously extracted fallback)
+#   4. Project source tree     (Godot editor / dev fallback)
 
 ## All files that need to be extracted for each bundled tool.
 const _U4PAK_FILES := ["u4pak.py"]
@@ -203,22 +205,8 @@ func _find_bundled_tool(tool_dir: String, marker_file: String) -> String:
 	if FileAccess.file_exists(p):
 		return p
 
-	# 2. Already extracted to user data
-	p = user_dir.path_join(tool_dir).path_join(marker_file)
-	if FileAccess.file_exists(p):
-		return p
-
-	# 3. Project source tree (editor / dev)
-	if project_dir.is_absolute_path():
-		p = project_dir.path_join(tool_dir).path_join(marker_file)
-		if FileAccess.file_exists(p):
-			return p
-		# Also check parent dir (modkit root has spellbreak_uasset_editor/ as child)
-		p = project_dir.get_base_dir().path_join(tool_dir).path_join(marker_file)
-		if FileAccess.file_exists(p):
-			return p
-
-	# 4. Packed inside .pck — extract to user data
+	# 2. Current bundled copy. Refresh user-data files so stale extracted tools
+	# from an older app build do not shadow fixed bundled scripts.
 	if FileAccess.file_exists("res://%s/%s" % [tool_dir, marker_file]):
 		var files: Array
 		match tool_dir:
@@ -228,6 +216,21 @@ func _find_bundled_tool(tool_dir: String, marker_file: String) -> String:
 			_:                 files = [marker_file]
 		_extract_tool_to_user_dir(tool_dir, files)
 		p = user_dir.path_join(tool_dir).path_join(marker_file)
+		if FileAccess.file_exists(p):
+			return p
+
+	# 3. Already extracted to user data
+	p = user_dir.path_join(tool_dir).path_join(marker_file)
+	if FileAccess.file_exists(p):
+		return p
+
+	# 4. Project source tree (editor / dev)
+	if project_dir.is_absolute_path():
+		p = project_dir.path_join(tool_dir).path_join(marker_file)
+		if FileAccess.file_exists(p):
+			return p
+		# Also check parent dir (modkit root has spellbreak_uasset_editor/ as child)
+		p = project_dir.get_base_dir().path_join(tool_dir).path_join(marker_file)
 		if FileAccess.file_exists(p):
 			return p
 
@@ -246,5 +249,7 @@ static func _extract_tool_to_user_dir(tool_dir: String, files: Array) -> void:
 			continue
 		var data := FileAccess.get_file_as_bytes(src)
 		if data.size() == 0:
+			continue
+		if FileAccess.file_exists(dst) and FileAccess.get_file_as_bytes(dst) == data:
 			continue
 		FileUtils.write_bytes_atomic(dst, data)

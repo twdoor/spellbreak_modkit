@@ -606,6 +606,19 @@ class RecordV7(RecordV3):
 	def base_offset(self):
 		return self.offset
 
+class RecordV8(RecordV3):
+	@property
+	def base_offset(self):
+		return self.offset
+
+	@property
+	def header_size(self) -> int:
+		size = 50
+		if self.compression_method != COMPR_NONE:
+			assert self.compression_blocks is not None
+			size += 4 + len(self.compression_blocks) * 16
+		return size
+
 def read_path(stream: io.BufferedReader, encoding: str = 'utf-8') -> str:
 	path_len, = st_unpack('<i',stream.read(4))
 	if path_len < 0:
@@ -663,6 +676,24 @@ def read_record_v7(stream: io.BufferedReader, filename: str) -> RecordV3:
 	encrypted, compression_block_size = st_unpack('<BI',stream.read(5))
 
 	return RecordV7(filename, offset, compressed_size, uncompressed_size, compression_method,
+					sha1, blocks, encrypted != 0, compression_block_size) # type: ignore
+
+def read_record_v8(stream: io.BufferedReader, filename: str) -> RecordV3:
+	offset, compressed_size, uncompressed_size, compression_method = \
+		st_unpack('<QQQB',stream.read(25))
+	sha1 = stream.read(20)
+
+	blocks: Optional[List[Tuple[int, int]]]
+	if compression_method != COMPR_NONE:
+		block_count, = st_unpack('<I',stream.read(4))
+		blocks_bin = st_unpack('<%dQ' % (block_count * 2), stream.read(16 * block_count))
+		blocks = [(blocks_bin[i], blocks_bin[i+1]) for i in range(0, block_count * 2, 2)]
+	else:
+		blocks = None
+
+	encrypted, compression_block_size = st_unpack('<BI',stream.read(5))
+
+	return RecordV8(filename, offset, compressed_size, uncompressed_size, compression_method,
 					sha1, blocks, encrypted != 0, compression_block_size) # type: ignore
 
 def write_data(
@@ -873,6 +904,57 @@ def write_record_v3(
 	else:
 		return st_pack('<QQQI20sBI',record_offset,compressed_size,size,compression_method,sha1,int(encrypted),compression_block_size)
 
+FOOTER_MAGIC = 0x5A6F12E1
+FOOTER_SIZE = 44
+FOOTER_SEARCH_SIZE = 1024 * 1024
+SUPPORTED_UNPACK_VERSIONS = {1, 2, 3, 4, 7, 8}
+
+def _footer_is_usable(magic: int, version: int, index_offset: int, index_size: int,
+					  footer_offset: int, ignore_magic: bool) -> bool:
+	if not ignore_magic and magic != FOOTER_MAGIC:
+		return False
+	if version not in SUPPORTED_UNPACK_VERSIONS:
+		return False
+	if index_size <= 0 or index_offset < 0:
+		return False
+	return index_offset + index_size <= footer_offset
+
+def _find_footer(stream: io.BufferedReader, ignore_magic: bool) -> Tuple[int, int, int, int, int, bytes]:
+	stream.seek(0, 2)
+	file_size = stream.tell()
+	if file_size < FOOTER_SIZE:
+		raise ValueError('archive is too small')
+
+	stream.seek(-FOOTER_SIZE, 2)
+	footer_offset = stream.tell()
+	footer = stream.read(FOOTER_SIZE)
+	magic, version, index_offset, index_size, index_sha1 = st_unpack('<IIQQ20s', footer)
+	if _footer_is_usable(magic, version, index_offset, index_size, footer_offset, ignore_magic):
+		return footer_offset, magic, version, index_offset, index_size, index_sha1
+
+	window_size = min(file_size, FOOTER_SEARCH_SIZE)
+	stream.seek(file_size - window_size, 0)
+	window = stream.read(window_size)
+	magic_bytes = st_pack('<I', FOOTER_MAGIC)
+	idx = window.rfind(magic_bytes)
+	while idx >= 0:
+		candidate_offset = file_size - window_size + idx
+		if idx + FOOTER_SIZE <= len(window):
+			candidate = window[idx:idx + FOOTER_SIZE]
+		else:
+			stream.seek(candidate_offset, 0)
+			candidate = stream.read(FOOTER_SIZE)
+		c_magic, c_version, c_index_offset, c_index_size, c_index_sha1 = \
+			st_unpack('<IIQQ20s', candidate)
+		if _footer_is_usable(c_magic, c_version, c_index_offset, c_index_size,
+							 candidate_offset, False):
+			return candidate_offset, c_magic, c_version, c_index_offset, c_index_size, c_index_sha1
+		idx = window.rfind(magic_bytes, 0, idx)
+
+	if magic != FOOTER_MAGIC and not ignore_magic:
+		raise ValueError('illegal file magic: 0x%08x' % magic)
+	return footer_offset, magic, version, index_offset, index_size, index_sha1
+
 def read_index(
 		stream: io.BufferedReader,
 		check_integrity: bool = False,
@@ -880,13 +962,8 @@ def read_index(
 		encoding: str = 'utf-8',
 		force_version: Optional[int] = None,
 		ignore_null_checksums: bool = False) -> Pak:
-	stream.seek(-44, 2)
-	footer_offset = stream.tell()
-	footer = stream.read(44)
-	magic, version, index_offset, index_size, index_sha1 = st_unpack('<IIQQ20s',footer)
-
-	if not ignore_magic and magic != 0x5A6F12E1:
-		raise ValueError('illegal file magic: 0x%08x' % magic)
+	footer_offset, magic, version, index_offset, index_size, index_sha1 = \
+		_find_footer(stream, ignore_magic)
 
 	if force_version is not None:
 		version = force_version
@@ -906,6 +983,9 @@ def read_index(
 
 	elif version == 7:
 		read_record = read_record_v7
+
+	elif version == 8:
+		read_record = read_record_v8
 
 	else:
 		raise ValueError('unsupported version: %d' % version)

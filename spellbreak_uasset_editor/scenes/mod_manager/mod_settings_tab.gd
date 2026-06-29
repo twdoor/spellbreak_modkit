@@ -5,16 +5,25 @@ class_name ModSettingsTab extends VBoxContainer
 ## Emits close_requested when the user clicks Save or Cancel.
 
 signal close_requested
+signal status_changed(text: String, is_error: bool)
 
 var _cfg: ModConfigManager
 var _sources_container: VBoxContainer
 var _profile_dropdown: OptionButton
+var _base_source_service: BaseSourceService
+var _base_source_btn: Button
+var _base_source_status: Label
+var _base_source_status_text := ""
+var _base_source_status_error := false
 ## All profile entries from GameProfile.list_profiles(), cached for dropdown index mapping.
 var _profile_entries: Array = []
 
 
 func setup(cfg: ModConfigManager) -> ModSettingsTab:
 	_cfg = cfg
+	_base_source_service = BaseSourceService.new().setup(_cfg)
+	_base_source_service.generate_started.connect(_on_base_source_generate_started)
+	_base_source_service.generate_finished.connect(_on_base_source_generate_finished)
 	return self
 
 
@@ -22,6 +31,11 @@ func _ready() -> void:
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical   = Control.SIZE_EXPAND_FILL
 	_build_ui()
+
+
+func _exit_tree() -> void:
+	if _base_source_service:
+		_base_source_service.wait_to_finish()
 
 
 ## Rebuild the entire UI to reflect current cfg values.
@@ -76,7 +90,10 @@ func _build_ui() -> void:
 
 	# ── Game directory ──
 	content.add_child(_section("Game Directory"))
-	content.add_child(_hint("The game installation folder — the one that contains %s/." % cr))
+	content.add_child(_hint(
+		("Select the game install folder used to locate the game executable and pak files. " +
+		"For this profile, the folder should contain %s/ so the game paks resolve under %s/Content/Paks/.") % [cr, cr]
+	))
 	content.add_child(_dir_row(
 		func() -> String: return _cfg.game_dir,
 		func(v: String) -> void: _cfg.game_dir = v,
@@ -85,7 +102,10 @@ func _build_ui() -> void:
 
 	# ── Mods directory ──
 	content.add_child(_section("Mods Directory"))
-	content.add_child(_hint("Each subfolder is one mod. Each mod must contain a %s/ folder with your edited assets." % cr))
+	content.add_child(_hint(
+		("Choose the folder that contains your mod folders. Structure: Mods/MyMod/%s/Content/... " +
+		"Each direct child folder is treated as one mod and can be enabled, packed, or watched separately.") % cr
+	))
 	content.add_child(_dir_row(
 		func() -> String: return _cfg.mods_dir,
 		func(v: String) -> void: _cfg.mods_dir = v,
@@ -142,7 +162,22 @@ func _build_ui() -> void:
 	var add_btn := Button.new()
 	add_btn.text = "+ Add Source"
 	add_btn.pressed.connect(_add_source)
-	content.add_child(add_btn)
+	var generate_btn := Button.new()
+	generate_btn.text = "Generate from Pak"
+	generate_btn.tooltip_text = "Generate a source by unpacking a game .pak"
+	generate_btn.disabled = _base_source_service.is_generating()
+	generate_btn.pressed.connect(_on_generate_base_source_pressed)
+	_base_source_btn = generate_btn
+	var source_actions := HBoxContainer.new()
+	source_actions.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
+	source_actions.add_child(add_btn)
+	source_actions.add_child(generate_btn)
+	content.add_child(source_actions)
+
+	_base_source_status = _hint(_base_source_status_text)
+	_base_source_status.visible = not _base_source_status_text.is_empty()
+	AppTheme.style_status(_base_source_status, _base_source_status_error)
+	content.add_child(_base_source_status)
 
 	# ── Config file path (read-only info) ──
 	content.add_child(_section("Config File"))
@@ -333,6 +368,134 @@ func _build_source_row(entry: Dictionary) -> Control:
 	row.add_child(remove_btn)
 
 	return row
+
+
+# ── Base source generation ───────────────────────────────────────────────────
+
+func _on_generate_base_source_pressed() -> void:
+	if _base_source_service.is_generating():
+		return
+	_open_base_pak_dialog()
+
+
+func _open_base_pak_dialog() -> void:
+	var dialog := FileDialog.new()
+	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	dialog.access = FileDialog.ACCESS_FILESYSTEM
+	dialog.filters = PackedStringArray(["*.pak ; Unreal Pak", "* ; All Files"])
+	dialog.use_native_dialog = true
+	var paks_dir := _cfg.get_paks_dir()
+	if DirAccess.dir_exists_absolute(paks_dir):
+		dialog.current_dir = paks_dir
+	dialog.file_selected.connect(func(path: String) -> void:
+		dialog.queue_free()
+		_open_base_source_output_dialog(path)
+	)
+	get_tree().root.add_child(dialog)
+	dialog.popup_centered(Vector2i(900, 650))
+
+
+func _open_base_source_output_dialog(pak_path: String) -> void:
+	var dialog := FileDialog.new()
+	dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
+	dialog.access = FileDialog.ACCESS_FILESYSTEM
+	dialog.use_native_dialog = true
+	dialog.dir_selected.connect(func(path: String) -> void:
+		dialog.queue_free()
+		_confirm_or_generate_base_source(pak_path, path)
+	)
+	get_tree().root.add_child(dialog)
+	dialog.popup_centered(Vector2i(900, 650))
+
+
+func _confirm_or_generate_base_source(pak_path: String, output_dir: String) -> void:
+	if _dir_has_entries(output_dir):
+		var dialog := ConfirmationDialog.new()
+		dialog.title = "Generate from Pak"
+		dialog.dialog_text = "The selected folder is not empty. Existing matching files may be overwritten."
+		dialog.ok_button_text = "Extract"
+		AppTheme.apply_theme(dialog)
+		add_child(dialog)
+		dialog.confirmed.connect(func() -> void:
+			dialog.queue_free()
+			_start_base_source_generation(pak_path, output_dir)
+		)
+		dialog.canceled.connect(dialog.queue_free)
+		dialog.popup_centered()
+		return
+	_start_base_source_generation(pak_path, output_dir)
+
+
+func _start_base_source_generation(pak_path: String, output_dir: String) -> void:
+	_set_base_source_status("Extracting %s..." % pak_path.get_file(), false)
+	_base_source_service.generate(pak_path, output_dir)
+
+
+func _on_base_source_generate_started() -> void:
+	if is_instance_valid(_base_source_btn):
+		_base_source_btn.disabled = true
+
+
+func _on_base_source_generate_finished(success: bool, message: String,
+		source_name: String, source_path: String) -> void:
+	if is_instance_valid(_base_source_btn):
+		_base_source_btn.disabled = false
+	if success:
+		_add_generated_source(source_name, source_path)
+		_set_base_source_status("%s. Source added; save settings to keep it." % message, false)
+	else:
+		_set_base_source_status(message, true)
+
+
+func _add_generated_source(source_name: String, source_path: String) -> void:
+	var normalized_path := source_path.rstrip("/")
+	for entry: Dictionary in _cfg.sources:
+		if FileUtils.same_path(str(entry.get("path", "")), normalized_path):
+			entry["name"] = source_name
+			entry["path"] = normalized_path
+			_rebuild_sources()
+			return
+	_cfg.sources.append({"name": _unique_source_name(source_name), "path": normalized_path})
+	_rebuild_sources()
+
+
+func _unique_source_name(base_name: String) -> String:
+	var used := {}
+	for entry: Dictionary in _cfg.sources:
+		var source_name_candidate := str(entry.get("name", "")).strip_edges()
+		if not source_name_candidate.is_empty():
+			used[source_name_candidate] = true
+	if not used.has(base_name):
+		return base_name
+	var idx := 2
+	while used.has("%s %d" % [base_name, idx]):
+		idx += 1
+	return "%s %d" % [base_name, idx]
+
+
+func _set_base_source_status(text: String, is_error: bool) -> void:
+	_base_source_status_text = text
+	_base_source_status_error = is_error
+	if is_instance_valid(_base_source_status):
+		_base_source_status.text = text
+		_base_source_status.visible = not text.is_empty()
+		AppTheme.style_status(_base_source_status, is_error)
+	status_changed.emit(text, is_error)
+
+
+func _dir_has_entries(path: String) -> bool:
+	var dir := DirAccess.open(path)
+	if not dir:
+		return false
+	dir.list_dir_begin()
+	var entry := dir.get_next()
+	while not entry.is_empty():
+		if not entry.begins_with("."):
+			dir.list_dir_end()
+			return true
+		entry = dir.get_next()
+	dir.list_dir_end()
+	return false
 
 
 # ── Actions ───────────────────────────────────────────────────────────────────
