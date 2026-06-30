@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="SpellbreakUAssetEditor"
-config/version="0.9.0"
+config/version="0.10.0"
 run/main_scene="uid://c4ng3sdgj0g3o"
 config/features=PackedStringArray("4.6")
 boot_splash/bg_color=Color(0, 0.047058824, 0, 1)

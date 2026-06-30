@@ -239,7 +239,9 @@ func _add_selectable_property_row(prop: UAssetProperty, siblings: Callable = Cal
 
 ## Recursively render all leaf values from a struct inline.
 func _build_flat_leaves(prop: UAssetProperty) -> void:
-	if prop.prop_type == "Struct" and not prop.children.is_empty():
+	if PropertyRow.is_color_struct(prop):
+		_add_selectable_property_row(prop)
+	elif prop.prop_type == "Struct" and not prop.children.is_empty():
 		for child in prop.children:
 			_build_flat_leaves(child)
 	elif prop.prop_type == "Array" and not prop.children.is_empty():
@@ -255,7 +257,9 @@ func _build_children_sorted(children: Array[UAssetProperty]) -> void:
 	var nav_items: Array[UAssetProperty] = []
 
 	for child in children:
-		if child.prop_type == "Struct" and _is_simple_struct(child):
+		if PropertyRow.is_color_struct(child):
+			simple_rows.append(child)
+		elif child.prop_type == "Struct" and _is_simple_struct(child):
 			inline_structs.append(child)
 		elif child.prop_type in ["Struct", "Array", "GameplayTagContainer"] and not child.children.is_empty():
 			nav_items.append(child)
@@ -289,7 +293,12 @@ func _build_array_detail(prop: UAssetProperty) -> void:
 		# ── Build visible content ────────────────────────────────────────────
 		var content: Control
 
-		if _is_simple_struct(child):
+		if PropertyRow.is_color_struct(child):
+			var row := PropertyRow.create(child, _ctx.get_asset())
+			row.value_changed.connect(_on_row_value_changed)
+			content = row
+
+		elif _is_simple_struct(child):
 			var vbox := VBoxContainer.new()
 			vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			vbox.add_theme_constant_override("separation", AppTheme.SPACING_TAGS)

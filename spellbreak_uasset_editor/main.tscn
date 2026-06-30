@@ -15,6 +15,7 @@
 [ext_resource type="Resource" uid="uid://dwapj4lckokjm" path="res://guide/shift.tres" id="12_dg77c"]
 [ext_resource type="Resource" uid="uid://6kog7u0g47oc" path="res://guide/cancel.tres" id="13_ycdy4"]
 [ext_resource type="Resource" uid="uid://d04k6gcnu57o1" path="res://guide/create.tres" id="14_w48qg"]
+[ext_resource type="Resource" uid="uid://dv0nmj8rkomp4" path="res://guide/compare.tres" id="15_compare"]
 [ext_resource type="Theme" uid="uid://d3ygy1hpwcbqw" path="res://main_theme.tres" id="theme_main"]
 
 [node name="Main" type="CanvasLayer" unique_id=1562985923]
@@ -33,6 +34,7 @@ delete = ExtResource("11_dg77c")
 shift = ExtResource("12_dg77c")
 cancel = ExtResource("13_ycdy4")
 create = ExtResource("14_w48qg")
+compare_action = ExtResource("15_compare")
 
 [node name="Panel" type="PanelContainer" parent="." unique_id=1396061657]
 anchors_preset = 15

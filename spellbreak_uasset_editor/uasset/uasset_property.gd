@@ -55,8 +55,16 @@ static func from_dict(d: Dictionary) -> UAssetProperty:
 	
 	# Type-specific parsing
 	match p.prop_type:
-		"Int", "Float", "Bool", "Name", "Str", "Byte":
+		"Int", "Float", "Bool", "Name", "Str":
 			p.value = d.get("Value")
+
+		"Byte":
+			if d.has("EnumValue") and (not d.has("Value") or d.get("Value") == null):
+				p.value = str(d.get("EnumValue", ""))
+			elif d.has("Value"):
+				p.value = d.get("Value")
+			else:
+				p.value = null
 		
 		"Text":
 			p.value = d.get("Value")
@@ -139,7 +147,11 @@ func restore_state(state: Dictionary) -> void:
 
 func set_value(new_value: Variant) -> void:
 	value = new_value.duplicate(true) if new_value is Array or new_value is Dictionary else new_value
-	raw["Value"] = value
+	if prop_type == "Byte" and raw.has("EnumValue") and (not raw.has("Value") or value is String):
+		raw["EnumValue"] = str(value) if value != null else ""
+		raw.erase("Value")
+	else:
+		raw["Value"] = value
 
 
 ## Convert back to dictionary for JSON serialization.
@@ -157,7 +169,11 @@ func to_dict() -> Dictionary:
 		"Name", "Str", "Text", "Enum":
 			d["Value"] = str(value) if value != null else ""
 		"Byte":
-			d["Value"] = value
+			if d.has("EnumValue") and (not raw.has("Value") or value is String):
+				d["EnumValue"] = str(value) if value != null else str(d.get("EnumValue", ""))
+				d.erase("Value")
+			else:
+				d["Value"] = int(value) if value != null else 0
 		"Struct":
 			var arr: Array = []
 			for child in children:

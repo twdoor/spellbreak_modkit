@@ -9,6 +9,7 @@ class_name ModFileWatcher extends RefCounted
 ##   watcher.stop()    # signals thread to stop (call wait_to_finish() after)
 
 const POLL_INTERVAL := 1.0  # seconds
+const STOP_CHECK_INTERVAL_MS := 50
 const WATCHED_EXTENSIONS := [".uasset", ".uexp", ".ubulk", ".umap"]
 
 signal watch_status_changed(active: bool)
@@ -32,6 +33,10 @@ func setup(cfg: ModConfigManager, state: ModStateManager, packer: PackingService
 
 
 func is_watching() -> bool:
+	return _is_active()
+
+
+func _is_active() -> bool:
 	_active_mtx.lock()
 	var result := _active
 	_active_mtx.unlock()
@@ -47,12 +52,18 @@ func start() -> void:
 	if _active:
 		_active_mtx.unlock()
 		return
+	_active_mtx.unlock()
+
+	_join_thread()
+
+	_active_mtx.lock()
+	if _active:
+		_active_mtx.unlock()
+		return
 	_active = true
 	_pack_count = 0
 	_active_mtx.unlock()
 
-	if _thread and _thread.is_alive():
-		_thread.wait_to_finish()
 	_thread = Thread.new()
 	_thread.start(_watch_loop)
 	watch_status_changed.emit(true)
@@ -60,15 +71,22 @@ func start() -> void:
 
 func stop() -> void:
 	_active_mtx.lock()
+	var changed := _active
 	_active = false
 	_active_mtx.unlock()
 	# Thread will exit on its own next poll cycle
-	watch_status_changed.emit(false)
+	if changed:
+		watch_status_changed.emit(false)
 
 
 func wait_to_finish() -> void:
+	_join_thread()
+
+
+func _join_thread() -> void:
 	if _thread and _thread.is_started():
 		_thread.wait_to_finish()
+	_thread = null
 
 
 # ── Watch loop (runs in background thread) ────────────────────────────────────
@@ -77,18 +95,10 @@ func _watch_loop() -> void:
 	var last_hash := _snapshot()
 
 	while true:
-		_active_mtx.lock()
-		var still_active := _active
-		_active_mtx.unlock()
-		if not still_active:
+		if not _is_active():
 			break
 
-		OS.delay_msec(int(POLL_INTERVAL * 1000))
-
-		_active_mtx.lock()
-		still_active = _active
-		_active_mtx.unlock()
-		if not still_active:
+		if not _sleep_until_next_poll():
 			break
 
 		var cur_hash := _snapshot()
@@ -115,6 +125,17 @@ func _watch_loop() -> void:
 		while _packer.is_packing():
 			OS.delay_msec(200)
 		_packer.call_deferred("pack", enabled_mods)
+
+
+func _sleep_until_next_poll() -> bool:
+	var remaining := int(POLL_INTERVAL * 1000)
+	while remaining > 0:
+		if not _is_active():
+			return false
+		var chunk = mini(remaining, STOP_CHECK_INTERVAL_MS)
+		OS.delay_msec(chunk)
+		remaining -= chunk
+	return _is_active()
 
 
 func _emit_pack_triggered(n: int) -> void:

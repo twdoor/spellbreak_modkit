@@ -113,6 +113,9 @@ static var _theme: Theme = preload("res://main_theme.tres")
 ## for any programmatically created dialog.
 static func apply_theme(win: Window) -> void:
 	win.theme = _theme
+	win.transparent = false
+	win.transparent_bg = false
+	win.extend_to_title = false
 
 ## Apply "header" styling to a Label.
 static func style_header(label: Label) -> void:

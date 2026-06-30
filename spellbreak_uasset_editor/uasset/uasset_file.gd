@@ -137,7 +137,7 @@ static func _extract_converter_to_user_dir(user_dir: String) -> void:
 ## Load a UAssetAPI JSON or binary .uasset file and parse it into objects.
 ## If path ends with .uasset, the converter is called to read it in-memory — no .json file is written.
 static func load_file(path: String) -> UAssetFile:
-	if path.ends_with(".uasset"):
+	if path.get_extension().to_lower() == "uasset":
 		return _load_binary(path)
 
 	if not FileAccess.file_exists(path):
@@ -413,6 +413,10 @@ static func _fix_float_to_int(data: Variant) -> Variant:
 		if data == floorf(data) and absf(data) < 2147483647.0:
 			return int(data)
 	return data
+
+
+func to_dict() -> Dictionary:
+	return _to_dict()
 
 
 func _to_dict() -> Dictionary:

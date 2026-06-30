@@ -18,6 +18,7 @@ extends CanvasLayer
 @export var shift: GUIDEAction
 @export var cancel: GUIDEAction
 @export var create: GUIDEAction
+@export var compare_action: GUIDEAction
 
 var _toast_label: Label
 var _toast_panel: PanelContainer
@@ -26,6 +27,13 @@ var _toast_tween: Tween
 
 var _close_dialog: ConfirmationDialog
 var _tab_pending_close: UassetFileTab
+var _tab_close_icon: Texture2D
+var _tab_title_scroll_timer: Timer
+var _hovered_tab_idx := -1
+var _hover_title_offset := 0
+var _hover_title_hold_ticks := 0
+var _compare_file_popup: FileDialog
+var _compare_base_tab: UassetFileTab
 var _update_dialog: ConfirmationDialog
 var _latest_release_url := ""
 
@@ -40,6 +48,13 @@ var _keymap_config: GUIDERemappingConfig
 
 const _TOAST_HIDDEN_Y := -8.0   # resting offset_bottom when hidden (just off-screen bottom)
 const _TOAST_SHOWN_Y  := -72.0  # offset_bottom when fully visible
+const _TAB_CLOSE_GAP := "   "
+const _TAB_MAX_WIDTH := 190
+const _TAB_TITLE_VISIBLE_CHARS := 24
+const _TAB_TITLE_SCROLL_INTERVAL := 0.18
+const _TAB_TITLE_SCROLL_HOLD_TICKS := 4
+const _TAB_TITLE_SCROLL_GAP := "   "
+const _STARTUP_OPEN_EXTENSIONS := ["uasset", "json"]
 
 func _ready() -> void:
 	_background_jobs = BackgroundJobRunner.new()
@@ -52,13 +67,46 @@ func _ready() -> void:
 	open_file_popup.files_selected.connect(_on_files_selected)
 
 	_connect_shortcuts()
+	_configure_tab_close_controls()
 
 	_build_toast()
 	_build_close_dialog()
+	_build_compare_dialog()
 	_build_status_bar()
 	_setup_mod_tab()
 	_build_update_dialog()
 	_setup_update_checker()
+	_open_startup_files.call_deferred()
+
+
+func _configure_tab_close_controls() -> void:
+	var tab_bar := tab_cont.get_tab_bar()
+	_tab_close_icon = tab_bar.get_theme_icon("close", "TabBar") if tab_bar else _make_tab_close_icon()
+	tab_cont.tab_button_pressed.connect(_on_tab_button_pressed)
+	if tab_bar:
+		tab_bar.set("max_tab_width", _TAB_MAX_WIDTH)
+		tab_bar.set("scrolling_enabled", true)
+		tab_bar.tab_rmb_clicked.connect(_on_tab_rmb_clicked)
+		if tab_bar.has_signal("tab_hovered"):
+			tab_bar.connect("tab_hovered", _on_tab_hovered)
+		tab_bar.mouse_exited.connect(_on_tab_bar_mouse_exited)
+
+	_tab_title_scroll_timer = Timer.new()
+	_tab_title_scroll_timer.wait_time = _TAB_TITLE_SCROLL_INTERVAL
+	_tab_title_scroll_timer.timeout.connect(_advance_hovered_tab_title)
+	add_child(_tab_title_scroll_timer)
+
+
+func _make_tab_close_icon() -> Texture2D:
+	var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var color := Color(0.78, 0.82, 0.86, 0.95)
+	for i in range(5, 11):
+		img.set_pixel(i, i, color)
+		img.set_pixel(i + 1, i, color)
+		img.set_pixel(i, 15 - i, color)
+		img.set_pixel(i + 1, 15 - i, color)
+	return ImageTexture.create_from_image(img)
 
 
 func _connect_shortcuts() -> void:
@@ -77,6 +125,7 @@ func _connect_shortcuts() -> void:
 	delete.just_triggered.connect(_delete_selection)
 	cancel.just_triggered.connect(_cancel_selection)
 	create.just_triggered.connect(_create_file)
+	compare_action.just_triggered.connect(_compare_current_tab)
 
 
 func _configure_shortcut_actions() -> void:
@@ -93,6 +142,7 @@ func _configure_shortcut_actions() -> void:
 	_configure_action(undo, &"undo", "Undo", "Edit")
 	_configure_action(delete, &"delete_selection", "Delete Selection", "Edit")
 	_configure_action(cancel, &"cancel", "Cancel / Clear Selection", "Edit")
+	_configure_action(compare_action, &"compare_file", "Compare File", "File")
 	_configure_action(shift, &"selection_modifier_shift", "Shift", "Navigation", false)
 
 
@@ -153,7 +203,8 @@ func _setup_mod_tab() -> void:
 
 	# When any UassetFileTab is removed, refresh titles so lone survivors revert to short names.
 	tab_cont.child_exiting_tree.connect(func(child: Node) -> void:
-		if child is UassetFileTab:
+		if child is UassetFileTab or child is AssetDiffTab:
+			_clear_hovered_tab_title()
 			_refresh_tab_titles.call_deferred()
 	)
 
@@ -268,6 +319,21 @@ func _build_close_dialog() -> void:
 	add_child(_close_dialog)
 
 
+func _build_compare_dialog() -> void:
+	_compare_file_popup = FileDialog.new()
+	_compare_file_popup.title = "Compare With"
+	_compare_file_popup.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	_compare_file_popup.access = FileDialog.ACCESS_FILESYSTEM
+	_compare_file_popup.filters = PackedStringArray([
+		"*.uasset ; Unreal Asset (binary)",
+		"*.json ; UAssetAPI JSON",
+	])
+	_compare_file_popup.use_native_dialog = true
+	_compare_file_popup.file_selected.connect(_on_compare_file_selected)
+	AppTheme.apply_theme(_compare_file_popup)
+	add_child(_compare_file_popup)
+
+
 func _build_update_dialog() -> void:
 	_update_dialog = ConfirmationDialog.new()
 	_update_dialog.title = "Update Available"
@@ -354,6 +420,7 @@ func _on_file_selected(path: String) -> void:
 	var asset := UAssetFile.load_file(path)
 	if asset == null:
 		push_error("Failed to load: " + path)
+		_show_toast("Failed to load  " + path.get_file())
 		return
 
 	# Attach the Spellbreak profile so property editors can access enums/tags.
@@ -362,6 +429,7 @@ func _on_file_selected(path: String) -> void:
 
 	var new_tab := UassetFileTab.setup(asset, _texture_service, _sound_service,
 		_mesh_service, _background_jobs)
+	new_tab.tab_title_changed.connect(_on_asset_tab_title_changed)
 	tab_cont.add_child(new_tab)
 	# Refresh all tab titles: duplicates get "ParentFolder/Name", unique ones stay short.
 	_refresh_tab_titles()
@@ -371,6 +439,24 @@ func _on_file_selected(path: String) -> void:
 func _on_files_selected(paths: PackedStringArray) -> void:
 	for path in paths:
 		_on_file_selected(path)
+
+
+func _open_startup_files() -> void:
+	for path in _get_startup_file_paths():
+		_on_file_selected(path)
+
+
+func _get_startup_file_paths() -> PackedStringArray:
+	var paths := PackedStringArray()
+	for raw_arg in OS.get_cmdline_args():
+		var path := str(raw_arg).strip_edges()
+		if path.is_empty() or path.begins_with("--"):
+			continue
+		if path.begins_with("file://"):
+			path = path.trim_prefix("file://").uri_decode()
+		if _STARTUP_OPEN_EXTENSIONS.has(path.get_extension().to_lower()):
+			paths.append(path)
+	return paths
 
 
 ## Scans all open UassetFileTabs and updates their displayed title:
@@ -392,21 +478,185 @@ func _refresh_tab_titles() -> void:
 		if tab is UassetFileTab:
 			var ft := tab as UassetFileTab
 			ft._display_base = ft.get_disambig_name() if counts[ft._base_name] > 1 else ft._base_name
-			ft._update_tab_title()
+			_set_managed_tab_title(i, ft.get_tab_title(), true)
+		elif tab is AssetDiffTab:
+			var diff_tab := tab as AssetDiffTab
+			_set_managed_tab_title(i, diff_tab.get_tab_title(), true)
+		else:
+			tab_cont.set_tab_button_icon(i, null)
+
+
+func _on_asset_tab_title_changed(tab: UassetFileTab) -> void:
+	if not is_instance_valid(tab) or not tab.is_inside_tree():
+		return
+	var tab_idx := tab_cont.get_tab_idx_from_control(tab)
+	if tab_idx >= 0:
+		_set_managed_tab_title(tab_idx, tab.get_tab_title(), true)
+
+
+func _set_managed_tab_title(tab_idx: int, full_title: String, closeable: bool) -> void:
+	if tab_idx < 0 or tab_idx >= tab_cont.get_tab_count():
+		return
+	var tab := tab_cont.get_tab_control(tab_idx)
+	if tab == null:
+		return
+	tab.set_meta("tab_full_title", full_title)
+	tab.set_meta("tab_closeable", closeable)
+	tab_cont.set_tab_title(tab_idx, _render_tab_title(tab_idx, full_title)
+		+ (_TAB_CLOSE_GAP if closeable else ""))
+	tab_cont.set_tab_button_icon(tab_idx, _tab_close_icon if closeable else null)
+	tab_cont.set_tab_tooltip(tab_idx, full_title)
+
+
+func _refresh_managed_tab_title(tab_idx: int) -> void:
+	if tab_idx < 0 or tab_idx >= tab_cont.get_tab_count():
+		return
+	var tab := tab_cont.get_tab_control(tab_idx)
+	if tab == null or not tab.has_meta("tab_full_title"):
+		return
+	_set_managed_tab_title(tab_idx, str(tab.get_meta("tab_full_title")),
+		bool(tab.get_meta("tab_closeable", false)))
+
+
+func _render_tab_title(tab_idx: int, full_title: String) -> String:
+	if tab_idx == _hovered_tab_idx and _is_tab_title_long(full_title):
+		return _scroll_tab_title(full_title)
+	return _truncate_tab_title(full_title)
+
+
+func _truncate_tab_title(full_title: String) -> String:
+	var parts := _split_dirty_suffix(full_title)
+	var base := str(parts["base"])
+	var suffix := str(parts["suffix"])
+	var visible_chars := maxi(8, _TAB_TITLE_VISIBLE_CHARS - suffix.length())
+	if base.length() <= visible_chars:
+		return base + suffix
+	return base.left(maxi(4, visible_chars - 3)) + "..." + suffix
+
+
+func _scroll_tab_title(full_title: String) -> String:
+	var parts := _split_dirty_suffix(full_title)
+	var base := str(parts["base"])
+	var suffix := str(parts["suffix"])
+	var visible_chars := maxi(8, _TAB_TITLE_VISIBLE_CHARS - suffix.length())
+	if base.length() <= visible_chars:
+		return base + suffix
+	var source := base + _TAB_TITLE_SCROLL_GAP + base
+	var cycle_length := base.length() + _TAB_TITLE_SCROLL_GAP.length()
+	var start := _hover_title_offset % cycle_length
+	return source.substr(start, visible_chars) + suffix
+
+
+func _split_dirty_suffix(title: String) -> Dictionary:
+	if title.ends_with(" *"):
+		return {
+			"base": title.left(title.length() - 2),
+			"suffix": " *",
+		}
+	return {
+		"base": title,
+		"suffix": "",
+	}
+
+
+func _is_tab_title_long(full_title: String) -> bool:
+	var parts := _split_dirty_suffix(full_title)
+	var base := str(parts["base"])
+	var suffix := str(parts["suffix"])
+	return base.length() > maxi(8, _TAB_TITLE_VISIBLE_CHARS - suffix.length())
+
+
+func _on_tab_hovered(tab_idx: int) -> void:
+	if tab_idx < 0 or tab_idx >= tab_cont.get_tab_count():
+		_clear_hovered_tab_title()
+		return
+	var tab := tab_cont.get_tab_control(tab_idx)
+	if tab == null or not tab.has_meta("tab_full_title"):
+		_clear_hovered_tab_title()
+		return
+
+	var previous_idx := _hovered_tab_idx
+	_hovered_tab_idx = tab_idx
+	_hover_title_offset = 0
+	_hover_title_hold_ticks = 0
+	if previous_idx != tab_idx:
+		_refresh_managed_tab_title(previous_idx)
+	_refresh_managed_tab_title(tab_idx)
+
+	if _is_tab_title_long(str(tab.get_meta("tab_full_title"))):
+		_tab_title_scroll_timer.start()
+	else:
+		_tab_title_scroll_timer.stop()
+
+
+func _on_tab_bar_mouse_exited() -> void:
+	_clear_hovered_tab_title()
+
+
+func _clear_hovered_tab_title() -> void:
+	var previous_idx := _hovered_tab_idx
+	_hovered_tab_idx = -1
+	_hover_title_offset = 0
+	_hover_title_hold_ticks = 0
+	if _tab_title_scroll_timer:
+		_tab_title_scroll_timer.stop()
+	_refresh_managed_tab_title(previous_idx)
+
+
+func _advance_hovered_tab_title() -> void:
+	if _hovered_tab_idx < 0 or _hovered_tab_idx >= tab_cont.get_tab_count():
+		_clear_hovered_tab_title()
+		return
+	var tab := tab_cont.get_tab_control(_hovered_tab_idx)
+	if tab == null or not tab.has_meta("tab_full_title"):
+		_clear_hovered_tab_title()
+		return
+	var full_title := str(tab.get_meta("tab_full_title"))
+	if not _is_tab_title_long(full_title):
+		_clear_hovered_tab_title()
+		return
+
+	if _hover_title_hold_ticks < _TAB_TITLE_SCROLL_HOLD_TICKS:
+		_hover_title_hold_ticks += 1
+	else:
+		_hover_title_offset += 1
+	_refresh_managed_tab_title(_hovered_tab_idx)
 
 
 func _close_current_tab() -> void:
 	var tab = tab_cont.get_current_tab_control()
-	# ModManagerPanel (tab 0) is pinned — only UassetFileTabs can be closed
-	if not tab is UassetFileTab:
+	if tab is UassetFileTab:
+		_request_close_tab(tab)
+	elif tab is AssetDiffTab:
+		tab.queue_free()
+
+
+func _on_tab_button_pressed(tab_idx: int) -> void:
+	_close_tab_at_index(tab_idx)
+
+
+func _on_tab_rmb_clicked(tab_idx: int) -> void:
+	_close_tab_at_index(tab_idx)
+
+
+func _close_tab_at_index(tab_idx: int) -> void:
+	if tab_idx < 0 or tab_idx >= tab_cont.get_tab_count():
 		return
+	var tab := tab_cont.get_tab_control(tab_idx)
+	tab_cont.current_tab = tab_idx
+	if tab is UassetFileTab:
+		_request_close_tab(tab)
+	elif tab is AssetDiffTab:
+		tab.queue_free()
+
+
+func _request_close_tab(tab: UassetFileTab) -> void:
 	if tab._dirty:
 		_tab_pending_close = tab
 		_close_dialog.dialog_text = '"%s" has unsaved changes.' % tab.tab_asset.file_path.get_file()
 		_close_dialog.popup_centered()
 		return
 	tab.queue_free()
-	
 
 
 func _save_current_tab() -> void:
@@ -470,6 +720,41 @@ func _create_file() -> void:
 	var tab := tab_cont.get_current_tab_control()
 	if tab is ModManagerPanel:
 		(tab as ModManagerPanel).create_file()
+
+
+func _compare_current_tab() -> void:
+	if _text_control_focused():
+		return
+	var tab := tab_cont.get_current_tab_control()
+	if not tab is UassetFileTab:
+		_show_toast("Open an asset before comparing")
+		return
+	_compare_base_tab = tab
+	var path := _compare_base_tab.tab_asset.binary_path
+	if path.is_empty():
+		path = _compare_base_tab.tab_asset.file_path
+	if not path.is_empty():
+		_compare_file_popup.current_dir = path.get_base_dir()
+	if not _compare_file_popup.visible:
+		_compare_file_popup.popup_file_dialog()
+
+
+func _on_compare_file_selected(path: String) -> void:
+	if not is_instance_valid(_compare_base_tab) or _compare_base_tab.tab_asset == null:
+		_show_toast("Open an asset before comparing")
+		return
+	var other_asset := UAssetFile.load_file(path)
+	if other_asset == null:
+		_show_toast("Failed to load comparison file")
+		return
+	if _cfg:
+		other_asset.game_profile = _cfg.get_game_profile()
+
+	var diff_tab := AssetDiffTab.setup(_compare_base_tab.tab_asset, other_asset)
+	tab_cont.add_child(diff_tab)
+	_refresh_tab_titles()
+	tab_cont.current_tab = tab_cont.get_tab_idx_from_control(diff_tab)
+	_show_toast("%d difference(s)" % diff_tab.diffs.size())
 
 
 func _undo() -> void:

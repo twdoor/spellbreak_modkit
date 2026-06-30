@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.10.0 - 2026-06-30
+
+- Added a Compare File workflow with a default Ctrl+K shortcut, secondary keybind support.
+- Added fixed-width editor tabs with hover scrolling for long names, improved tab close icons. gw
+- Made `FLinearColor` / color struct values editable with an inline color picker and fixed saving dictionary-backed color values.
+- Improved texture export/import reliability on Linux, including better DDS tool handling, companion recovery, and clearer failure messages for unsupported conversions.
+- Reworked mesh export around Blender-friendly `.glb` output, embedded reconstructed material textures into exported GLBs, and refreshed mesh preview lighting with a default sky/environment setup.
+- Added middle-click mod export to a user-chosen `.pak` path with matching `.sig` output, plus New Mod creation from existing `.pak` files.
+- Hardened the Watch workflow against rapid toggle spam and improved file watcher shutdown behavior.
+- Added a GitHub release update checker and a helper script for maintaining the stable local Linux `builds/latest` launcher.
+- Fixed popup/dialog theme opacity issues and expanded regression coverage for compare, color editing, GLB texture export, packing, file watching, startup opening, and update checks.
+
 ## 0.9.0 - 2026-06-29
 
 - Added a Settings keymap manager backed by GUIDE mappings, including editable primary and secondary shortcuts.

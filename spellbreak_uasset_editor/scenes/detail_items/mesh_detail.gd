@@ -15,6 +15,7 @@ var _camera: Camera3D
 var _mesh_root: Node3D
 var _loading_label: Label
 var _export_btn: Button
+var _refresh_btn: Button
 var _status_label: Label
 var _extract_job_id := -1
 var _animation_job_id := -1
@@ -106,7 +107,7 @@ func _build_impl() -> void:
 
 		_viewport = SubViewport.new()
 		_viewport.own_world_3d = true
-		_viewport.transparent_bg = true
+		_viewport.transparent_bg = false
 		_viewport.size = Vector2i(512, 384)
 		_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 
@@ -117,27 +118,7 @@ func _build_impl() -> void:
 		_camera.current = true
 		scene_root.add_child(_camera)
 
-		# Lighting — two directional lights for balanced shading
-		var light := DirectionalLight3D.new()
-		light.rotation = Vector3(deg_to_rad(-45), deg_to_rad(45), 0)
-		light.light_energy = 0.8
-		scene_root.add_child(light)
-
-		var fill_light := DirectionalLight3D.new()
-		fill_light.rotation = Vector3(deg_to_rad(-30), deg_to_rad(-120), 0)
-		fill_light.light_energy = 0.3
-		scene_root.add_child(fill_light)
-
-		# Environment (ambient light so the mesh isn't pitch-dark on unlit sides)
-		var env := Environment.new()
-		env.background_mode = Environment.BG_COLOR
-		env.background_color = Color(0.15, 0.15, 0.18)
-		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		env.ambient_light_color = Color(0.3, 0.3, 0.35)
-		env.ambient_light_energy = 0.5
-		var world_env := WorldEnvironment.new()
-		world_env.environment = env
-		scene_root.add_child(world_env)
+		_add_preview_environment(scene_root)
 
 		# Mesh placeholder — loaded content goes here
 		_mesh_root = Node3D.new()
@@ -178,15 +159,23 @@ func _build_impl() -> void:
 	btn_row.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
 
 	_export_btn = Button.new()
-	_export_btn.text = "Export as glTF..."
+	_export_btn.text = "Export as GLB..."
 	_export_btn.pressed.connect(_on_export_pressed)
 	btn_row.add_child(_export_btn)
+
+	_refresh_btn = Button.new()
+	_refresh_btn.text = "Refresh Preview"
+	_refresh_btn.tooltip_text = "Re-export the mesh preview and reload material textures."
+	_refresh_btn.pressed.connect(_on_refresh_preview_pressed)
+	btn_row.add_child(_refresh_btn)
 
 	_container.add_child(btn_row)
 
 	if mesh_service == null or not mesh_service.is_configured():
 		_export_btn.disabled = true
 		_export_btn.tooltip_text = "umodel not configured"
+		_refresh_btn.disabled = true
+		_refresh_btn.tooltip_text = "umodel not configured"
 
 	# Status label
 	_status_label = Label.new()
@@ -244,8 +233,7 @@ func _build_impl() -> void:
 
 
 func _load_mesh_async(mesh_service: MeshService) -> void:
-	var asset := _ctx.get_asset()
-	var uasset_path := asset.binary_path if not asset.binary_path.is_empty() else asset.file_path
+	var uasset_path := _get_mesh_uasset_path()
 	if not uasset_path.ends_with(".uasset"):
 		_loading_label.text = "Mesh preview requires a .uasset file (not JSON)"
 		return
@@ -262,6 +250,10 @@ func _load_mesh_async(mesh_service: MeshService) -> void:
 	_extract_job_id = _ctx.background_jobs.run(
 		func() -> Array: return mesh_service.get_preview_mesh(uasset_path),
 		_on_mesh_job_finished)
+	if _extract_job_id < 0:
+		_loading_label.text = "Could not start mesh extraction job"
+		if is_instance_valid(_refresh_btn):
+			_refresh_btn.disabled = false
 
 
 func _on_mesh_job_finished(result: Array) -> void:
@@ -279,6 +271,8 @@ func _on_mesh_extracted(gltf_path: String, error: String) -> void:
 				msg += ": " + error
 			_loading_label.text = msg
 			_loading_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+		if is_instance_valid(_refresh_btn):
+			_refresh_btn.disabled = false
 
 
 func dispose() -> void:
@@ -359,7 +353,55 @@ func _on_mesh_file_ready(gltf_path: String) -> void:
 		if material_count > 0:
 			_loading_label.text += " | %d textured material(s)" % material_count
 		_loading_label.add_theme_color_override("font_color", AppTheme.STATUS_SUCCESS)
+	if is_instance_valid(_refresh_btn):
+		_refresh_btn.disabled = false
 	_set_animation_controls_ready(_preview_skeleton != null)
+
+
+func _get_mesh_uasset_path() -> String:
+	var asset := _ctx.get_asset()
+	return asset.binary_path if not asset.binary_path.is_empty() else asset.file_path
+
+
+func _add_preview_environment(scene_root: Node3D) -> void:
+	var sky_color := Color(0.385, 0.454, 0.55)
+	var ground_color := Color(0.2, 0.169, 0.133)
+	var horizon_color := sky_color.lerp(ground_color, 0.5)
+	var horizon_luminance := horizon_color.get_luminance() * 3.333
+	horizon_color = horizon_color.lerp(
+		Color(horizon_luminance, horizon_luminance, horizon_luminance), 0.5)
+
+	var sky_material := ProceduralSkyMaterial.new()
+	sky_material.energy_multiplier = 1.0
+	sky_material.sky_top_color = sky_color
+	sky_material.sky_horizon_color = horizon_color
+	sky_material.ground_bottom_color = ground_color
+	sky_material.ground_horizon_color = horizon_color
+
+	var sky := Sky.new()
+	sky.sky_material = sky_material
+
+	var env := Environment.new()
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
+	env.ssao_enabled = false
+	env.sdfgi_enabled = false
+	env.glow_enabled = (
+		RenderingServer.get_current_rendering_method() not in ["gl_compatibility", "dummy"])
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+
+	var world_env := WorldEnvironment.new()
+	world_env.environment = env
+	scene_root.add_child(world_env)
+
+	var sun := DirectionalLight3D.new()
+	sun.rotation = Vector3(deg_to_rad(-60.0), deg_to_rad(150.0), 0.0)
+	sun.light_color = Color.WHITE
+	sun.light_energy = 1.0
+	sun.shadow_enabled = true
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	sun.directional_shadow_max_distance = 100.0
+	scene_root.add_child(sun)
 
 
 # ── Animation preview ────────────────────────────────────────────────────────
@@ -930,6 +972,31 @@ func _get_all_mesh_instances(node: Node) -> Array[MeshInstance3D]:
 	return result
 
 
+# ── Refresh action ───────────────────────────────────────────────────────────
+
+
+func _on_refresh_preview_pressed() -> void:
+	var mesh_service := _ctx.mesh_service
+	if mesh_service == null or not mesh_service.is_configured():
+		return
+	var uasset_path := _get_mesh_uasset_path()
+	if not uasset_path.ends_with(".uasset"):
+		if is_instance_valid(_loading_label):
+			_loading_label.text = "Mesh preview requires a .uasset file (not JSON)"
+		return
+	if _extract_job_id >= 0 and _ctx.background_jobs:
+		_ctx.background_jobs.cancel(_extract_job_id)
+		_extract_job_id = -1
+	mesh_service.clear_cached_mesh(uasset_path)
+	if is_instance_valid(_refresh_btn):
+		_refresh_btn.disabled = true
+	if is_instance_valid(_loading_label):
+		_loading_label.text = "Refreshing mesh preview..."
+		AppTheme.style_muted(_loading_label)
+		_loading_label.add_theme_font_size_override("font_size", AppTheme.FONT_STATUS)
+	_load_mesh_async(mesh_service)
+
+
 # ── Export action ────────────────────────────────────────────────────────────
 
 
@@ -938,8 +1005,7 @@ func _on_export_pressed() -> void:
 	if mesh_service == null or mesh_service.is_busy():
 		return
 
-	var asset := _ctx.get_asset()
-	var uasset_path := asset.binary_path if not asset.binary_path.is_empty() else asset.file_path
+	var uasset_path := _get_mesh_uasset_path()
 
 	var dialog := FileDialog.new()
 	dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
@@ -949,7 +1015,7 @@ func _on_export_pressed() -> void:
 		_status_label.text = "Exporting..."
 		_export_btn.disabled = true
 		mesh_service.operation_finished.connect(_on_export_finished, CONNECT_ONE_SHOT)
-		mesh_service.export_gltf(uasset_path, path)
+		mesh_service.export_glb(uasset_path, path)
 		dialog.queue_free()
 	)
 	_container.get_tree().root.add_child(dialog)

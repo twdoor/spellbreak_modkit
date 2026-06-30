@@ -21,13 +21,20 @@ func _run() -> void:
 	_test_swap_and_snapshot_restore()
 	_test_asset_document_history()
 	_test_property_state_restore()
+	_test_byte_enum_property_round_trip()
+	_test_asset_diff_engine()
+	_test_asset_diff_tab_layout()
+	_test_linear_color_property_editor()
 	_test_mesh_preview_materials()
+	_test_glb_export()
 	_test_md5_animation_loader()
 	_test_animation_candidate_discovery()
+	_test_mesh_preview_environment()
 	_test_mesh_animation_controls_build()
 	_test_texture_injection_preserves_companions()
 	_test_texture_companion_recovery()
 	_test_background_job_shutdown()
+	_test_file_watcher_rapid_toggle()
 	_test_atomic_file_install()
 	_test_path_safety()
 	_test_process_arguments()
@@ -189,6 +196,133 @@ func _test_property_state_restore() -> void:
 		"property snapshots can be reapplied for redo")
 
 
+func _test_byte_enum_property_round_trip() -> void:
+	var enum_prop := UAssetProperty.from_dict({
+		"$type": "UAssetAPI.PropertyTypes.Objects.BytePropertyData, UAssetAPI",
+		"ByteType": "FName",
+		"EnumType": "EMaterialParameterAssociation",
+		"EnumValue": "GlobalParameter",
+		"Name": "Association",
+		"ArrayIndex": 0,
+		"IsZero": false,
+	})
+	_expect(enum_prop.value == "GlobalParameter",
+		"byte enum property reads EnumValue instead of null")
+	var enum_dict := enum_prop.to_dict()
+	_expect(enum_dict.get("EnumValue") == "GlobalParameter" and not enum_dict.has("Value"),
+		"byte enum property serializes without a null Value field")
+
+	enum_prop.set_value("LayerParameter")
+	enum_dict = enum_prop.to_dict()
+	_expect(enum_dict.get("EnumValue") == "LayerParameter" and not enum_dict.has("Value"),
+		"byte enum property edits write back to EnumValue")
+
+	var polluted_prop := UAssetProperty.from_dict({
+		"$type": "UAssetAPI.PropertyTypes.Objects.BytePropertyData, UAssetAPI",
+		"ByteType": "FName",
+		"EnumType": "EMaterialParameterAssociation",
+		"EnumValue": "GlobalParameter",
+		"Name": "Association",
+		"Value": null,
+	})
+	_expect(polluted_prop.value == "GlobalParameter" and not polluted_prop.to_dict().has("Value"),
+		"byte enum property recovers from a stale null Value field")
+
+	var numeric_prop := UAssetProperty.from_dict({
+		"$type": "UAssetAPI.PropertyTypes.Objects.BytePropertyData, UAssetAPI",
+		"Name": "Channel",
+		"Value": 2,
+	})
+	numeric_prop.set_value(5)
+	_expect(numeric_prop.to_dict().get("Value") == 5,
+		"numeric byte property still serializes Value")
+
+
+func _test_asset_diff_engine() -> void:
+	var left := {
+		"NameMap": PackedStringArray(["One"]),
+		"Exports": [{
+			"ObjectName": "Export1",
+			"Data": [{
+				"Name": "Value",
+				"Value": 1,
+			}],
+		}],
+		"OnlyLeft": true,
+	}
+	var right := {
+		"NameMap": PackedStringArray(["One", "Two"]),
+		"Exports": [{
+			"ObjectName": "Export1",
+			"Data": [{
+				"Name": "Value",
+				"Value": 2,
+			}],
+		}],
+		"OnlyRight": true,
+	}
+	var diffs := AssetDiff.compare_values(left, right)
+	var by_path: Dictionary = {}
+	for diff in diffs:
+		by_path[str(diff["path"])] = diff
+
+	_expect(by_path.has("Exports[0].Data[0].Value"),
+		"asset diff detects changed nested values")
+	_expect(by_path.has("NameMap[1]")
+			and by_path["NameMap[1]"]["status"] == AssetDiff.STATUS_ADDED,
+		"asset diff detects added packed-string-array items")
+	_expect(by_path.has("OnlyLeft")
+			and by_path["OnlyLeft"]["status"] == AssetDiff.STATUS_REMOVED
+			and by_path.has("OnlyRight")
+			and by_path["OnlyRight"]["status"] == AssetDiff.STATUS_ADDED,
+		"asset diff detects removed and added dictionary keys")
+
+
+func _test_asset_diff_tab_layout() -> void:
+	var left := _make_asset()
+	var right := _make_asset()
+	right.name_map.append("Four")
+	var tab := AssetDiffTab.setup(left, right)
+	_expect(tab.tab_title == "Diff", "asset diff tab uses a short readable title")
+	_expect(tab.get_child_count() >= 3 and tab.diffs.size() > 0,
+		"asset diff tab builds a readable change list")
+	tab.free()
+
+
+func _test_linear_color_property_editor() -> void:
+	var prop := UAssetProperty.from_dict({
+		"$type": "UAssetAPI.PropertyTypes.Objects.LinearColorPropertyData, UAssetAPI",
+		"Name": "ParameterValue",
+		"Value": {
+			"$type": "UAssetAPI.UnrealTypes.FLinearColor, UAssetAPI",
+			"R": 1.0,
+			"G": 0.25,
+			"B": 0.5,
+			"A": 1.0,
+		},
+	})
+	_expect(PropertyRow.is_color_struct(prop),
+		"linear color property data is detected as editable color")
+
+	var row := PropertyRow.create(prop)
+	var editor := row.editor_control as HBoxContainer
+	_expect(editor != null and editor.get_child(0) is ColorPickerButton,
+		"linear color property uses a color picker editor")
+
+	var changes: Array[Dictionary] = []
+	row.value_changed.connect(func(_prop: UAssetProperty, _old_value: Variant, _new_value: Variant) -> void:
+		changes.append({"old": _old_value, "new": _new_value})
+	)
+	var picker := editor.get_child(0) as ColorPickerButton
+	picker.color_changed.emit(Color(0.1, 0.2, 0.3, 0.4))
+	var value := prop.value as Dictionary
+	var raw_value := prop.raw["Value"] as Dictionary
+	_expect(changes.size() == 1, "linear color picker emits a property change")
+	_expect(_approx_float(float(value["G"]), 0.2)
+			and _approx_float(float(raw_value["B"]), 0.3),
+		"linear color picker writes back to raw FLinearColor values")
+
+
 func _test_mesh_preview_materials() -> void:
 	var root := OS.get_temp_dir().path_join("sb_test_mesh_material_%d" % Time.get_ticks_usec())
 	DirAccess.make_dir_recursive_absolute(root)
@@ -219,6 +353,60 @@ func _test_mesh_preview_materials() -> void:
 	_expect(material.cull_mode == BaseMaterial3D.CULL_DISABLED,
 		"mesh preview preserves two-sided material metadata")
 	mesh_instance.free()
+	FileUtils.remove_dir_recursive(root)
+
+
+func _test_glb_export() -> void:
+	var root := OS.get_temp_dir().path_join("sb_test_glb_export_%d" % Time.get_ticks_usec())
+	var out_dir := root.path_join("out")
+	DirAccess.make_dir_recursive_absolute(root)
+	FileUtils.write_bytes_atomic(root.path_join("Body.mat"),
+		"Diffuse=BodyColor\n".to_utf8_buffer())
+	var color_image := Image.create(2, 2, false, Image.FORMAT_RGBA8)
+	color_image.fill(Color(0.8, 0.2, 0.1, 1.0))
+	color_image.save_png(root.path_join("BodyColor.png"))
+
+	var scene := Node3D.new()
+	var source_material := StandardMaterial3D.new()
+	source_material.resource_name = "Body"
+	var mesh_instance := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.material = source_material
+	mesh_instance.mesh = mesh
+	scene.add_child(mesh_instance)
+
+	var doc := GLTFDocument.new()
+	var state := GLTFState.new()
+	var error := doc.append_from_scene(scene, state)
+	var source_path := root.path_join("SourceMesh.gltf")
+	if error == OK:
+		error = doc.write_to_filesystem(state, source_path)
+	_expect(error == OK and FileAccess.file_exists(source_path),
+		"test fixture writes a source glTF")
+
+	var service := MeshService.new()
+	var result := service._write_glb_from_gltf(source_path, out_dir)
+	var glb_path := str(result[2])
+	var bytes := FileAccess.get_file_as_bytes(glb_path) if FileAccess.file_exists(glb_path) else PackedByteArray()
+	_expect(bool(result[0]) and glb_path.ends_with(".glb") and bytes.size() >= 4
+			and bytes.slice(0, 4).get_string_from_ascii() == "glTF",
+		"mesh export writes a Blender-compatible GLB")
+	_expect(str(result[1]).contains("textured material"),
+		"mesh GLB export reports embedded textured materials")
+
+	var read_doc := GLTFDocument.new()
+	var read_state := GLTFState.new()
+	var read_error := read_doc.append_from_file(glb_path, read_state)
+	var read_scene := read_doc.generate_scene(read_state) if read_error == OK else null
+	var read_mesh := _find_first_mesh_instance(read_scene) if read_scene != null else null
+	var read_material := read_mesh.get_active_material(0) as StandardMaterial3D \
+		if read_mesh != null else null
+	_expect(read_material != null and read_material.albedo_texture != null,
+		"mesh GLB export embeds reconstructed material textures")
+
+	scene.free()
+	if read_scene != null:
+		read_scene.free()
 	FileUtils.remove_dir_recursive(root)
 
 
@@ -526,6 +714,50 @@ func _test_mesh_animation_controls_build() -> void:
 	container.free()
 
 
+func _test_mesh_preview_environment() -> void:
+	var detail := MeshDetail.new()
+	var root := Node3D.new()
+	detail._add_preview_environment(root)
+
+	var world_env: WorldEnvironment = null
+	var key_light: DirectionalLight3D = null
+	var light_count := 0
+	for child in root.get_children():
+		if child is WorldEnvironment:
+			world_env = child
+		elif child is DirectionalLight3D:
+			light_count += 1
+			if key_light == null:
+				key_light = child
+
+	var sky_material: ProceduralSkyMaterial = null
+	if world_env != null and world_env.environment.sky is Sky:
+		sky_material = (world_env.environment.sky as Sky).sky_material as ProceduralSkyMaterial
+
+	_expect(world_env != null
+			and world_env.environment.background_mode == Environment.BG_SKY
+			and sky_material != null,
+		"mesh preview environment uses Godot's preview sky background")
+	_expect(world_env != null
+			and world_env.environment.tonemap_mode == Environment.TONE_MAPPER_FILMIC
+			and not world_env.environment.ssao_enabled
+			and not world_env.environment.sdfgi_enabled,
+		"mesh preview environment matches Godot's default preview effects")
+	_expect(sky_material != null
+			and _approx_color(sky_material.sky_top_color, Color(0.385, 0.454, 0.55))
+			and _approx_color(sky_material.ground_bottom_color, Color(0.2, 0.169, 0.133)),
+		"mesh preview environment uses Godot's default preview sky colors")
+	_expect(light_count == 1
+			and key_light != null
+			and key_light.shadow_enabled
+			and key_light.directional_shadow_mode == DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+			and _approx_float(key_light.directional_shadow_max_distance, 100.0)
+			and _approx_float(key_light.rotation.x, deg_to_rad(-60.0))
+			and _approx_float(key_light.rotation.y, deg_to_rad(150.0)),
+		"mesh preview environment uses Godot's default preview sun")
+	root.free()
+
+
 func _test_background_job_shutdown() -> void:
 	var root := OS.get_temp_dir().path_join("sb_test_job_%d" % Time.get_ticks_usec())
 	DirAccess.make_dir_recursive_absolute(root)
@@ -539,6 +771,36 @@ func _test_background_job_shutdown() -> void:
 	runner.wait_to_finish()
 	_expect(FileAccess.get_file_as_string(marker) == "done",
 		"background runner joins active work during shutdown")
+	FileUtils.remove_dir_recursive(root)
+
+
+func _test_file_watcher_rapid_toggle() -> void:
+	var root := OS.get_temp_dir().path_join("sb_test_watch_%d" % Time.get_ticks_usec())
+	var mods_dir := root.path_join("Mods")
+	var game_dir := root.path_join("Game")
+	DirAccess.make_dir_recursive_absolute(mods_dir.path_join("TestMod/g3/Content"))
+	DirAccess.make_dir_recursive_absolute(game_dir.path_join("g3/Content/Paks"))
+
+	var config := ModConfigManager.new()
+	config.mods_dir = mods_dir
+	config.game_dir = game_dir
+	var state := ModStateManager.new().setup(root.path_join(".mod_state.json"))
+	state.set_enabled("TestMod", true)
+	var packer := PackingService.new().setup(config)
+	var watcher := ModFileWatcher.new().setup(config, state, packer)
+
+	var started := Time.get_ticks_msec()
+	watcher.start()
+	watcher.stop()
+	watcher.start()
+	watcher.stop()
+	watcher.wait_to_finish()
+	var elapsed := Time.get_ticks_msec() - started
+
+	_expect(not watcher.is_watching(),
+		"file watcher stops after rapid start/stop/start/stop")
+	_expect(elapsed < 1000,
+		"file watcher rapid toggle does not block for the full poll interval")
 	FileUtils.remove_dir_recursive(root)
 
 
@@ -689,6 +951,16 @@ func _test_packing_transaction() -> void:
 	var result := packer._do_pack([{"name": "TestMod", "path": mod_dir}])
 	var pak_path := paks_dir.path_join("zzz_mods_P.pak")
 	_expect(result[0] and FileAccess.file_exists(pak_path), "u4pak integration produces a pak")
+	FileUtils.write_bytes_atomic(paks_dir.path_join("Game.sig"), "sig-template".to_utf8_buffer())
+
+	var export_path := root.path_join("exports/TestMod.pak")
+	var export_result := packer._do_pack_to_path([{"name": "TestMod", "path": mod_dir}], export_path)
+	_expect(export_result[0]
+			and FileAccess.file_exists(export_path)
+			and FileAccess.file_exists(export_path.get_basename() + ".sig"),
+		"middle-click mod export writes chosen pak and sibling sig")
+	_expect(FileAccess.get_file_as_string(export_path.get_basename() + ".sig") == "sig-template",
+		"middle-click mod export copies the game signature template")
 
 	if FileAccess.file_exists(pak_path):
 		var previous := FileAccess.get_file_as_bytes(pak_path)
@@ -763,9 +1035,32 @@ func _object_value(expo: UAssetExport) -> int:
 	return int(expo.properties[0].value)
 
 
+func _find_first_mesh_instance(node: Node) -> MeshInstance3D:
+	if node == null:
+		return null
+	if node is MeshInstance3D:
+		return node
+	for child in node.get_children():
+		var found := _find_first_mesh_instance(child)
+		if found != null:
+			return found
+	return null
+
+
 func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		_failures.append(message)
+
+
+func _approx_float(actual: float, expected: float, epsilon: float = 0.0001) -> bool:
+	return abs(actual - expected) <= epsilon
+
+
+func _approx_color(actual: Color, expected: Color, epsilon: float = 0.0001) -> bool:
+	return _approx_float(actual.r, expected.r, epsilon) \
+			and _approx_float(actual.g, expected.g, epsilon) \
+			and _approx_float(actual.b, expected.b, epsilon) \
+			and _approx_float(actual.a, expected.a, epsilon)
 
 
 func _approx_vec3(actual: Vector3, expected: Vector3, epsilon: float = 0.0001) -> bool:

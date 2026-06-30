@@ -1,5 +1,7 @@
 class_name UassetFileTab extends MarginContainer
 
+signal tab_title_changed(tab: UassetFileTab)
+
 ## Thin orchestrator for a single open .uasset file.
 ## All heavy lifting is delegated to:
 ##   TreeManager       — tree widget state and building
@@ -26,7 +28,6 @@ var _current_data: Variant = null
 var _document: AssetDocument
 
 const UASSET_TAB = preload("uid://dxsn1gcs66ay8")
-
 # ── Components ─────────────────────────────────────────────────────────────────
 var _tree_manager:    TreeManager
 var _detail_builder:  DetailPanelBuilder
@@ -69,12 +70,18 @@ func get_disambig_name() -> String:
 
 
 ## Called by main.gd after add_child / on close, and by the _dirty setter.
-## Uses set_tab_title so the label is always correct regardless of node name collisions.
+## Emits a title change so main.gd can apply shared tab truncation/scrolling.
 func _update_tab_title() -> void:
+	set_meta("tab_full_title", get_tab_title())
 	var title := (_display_base + " *") if _dirty else _display_base
 	if is_inside_tree() and get_parent() is TabContainer:
 		var tc := get_parent() as TabContainer
 		tc.set_tab_title(tc.get_tab_idx_from_control(self), title)
+	tab_title_changed.emit(self)
+
+
+func get_tab_title() -> String:
+	return (_display_base + " *") if _dirty else _display_base
 
 
 func _ready() -> void:

@@ -97,6 +97,9 @@ static func _resolve_ref_type(index: int, asset: UAssetFile) -> String:
 
 
 static func _create_editor(prop: UAssetProperty, row: PropertyRow, asset: UAssetFile = null) -> Control:
+	if is_color_struct(prop):
+		return _make_color_editor(prop, row)
+
 	match prop.prop_type:
 		"Int":
 			var spin := SpinBox.new()
@@ -311,6 +314,196 @@ static func _create_editor(prop: UAssetProperty, row: PropertyRow, asset: UAsset
 			return line
 
 
+static func is_color_struct(prop: UAssetProperty) -> bool:
+	if prop == null:
+		return false
+	if prop.prop_type == "Struct":
+		if prop.struct_type not in ["LinearColor", "Color"]:
+			return false
+		for component in ["R", "G", "B"]:
+			var child := prop.find_child(component)
+			if child == null or not _is_color_component(child):
+				return false
+		var alpha := prop.find_child("A")
+		return alpha == null or _is_color_component(alpha)
+	return _color_value_dict(prop) != null
+
+
+static func _is_color_component(prop: UAssetProperty) -> bool:
+	if prop.prop_type not in ["Float", "Int", "Byte"]:
+		return false
+	if prop.value is String:
+		return false
+	return prop.value == null or prop.value is int or prop.value is float
+
+
+static func _make_color_editor(prop: UAssetProperty, row: PropertyRow) -> Control:
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
+	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var picker := ColorPickerButton.new()
+	picker.edit_alpha = _color_has_alpha(prop)
+	picker.color = _color_from_struct(prop)
+	picker.custom_minimum_size.x = 64
+	picker.tooltip_text = "Edit %s color" % _color_type_label(prop)
+	hbox.add_child(picker)
+
+	var value_label := Label.new()
+	value_label.text = _color_label_text(prop)
+	value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	AppTheme.style_dim(value_label)
+	hbox.add_child(value_label)
+
+	picker.color_changed.connect(func(color: Color) -> void:
+		var old_state := prop.capture_state()
+		_apply_color_to_struct(prop, color)
+		value_label.text = _color_label_text(prop)
+		var new_state := prop.capture_state()
+		if new_state != old_state:
+			row.value_changed.emit(prop, old_state, new_state)
+	)
+	return hbox
+
+
+static func _color_from_struct(prop: UAssetProperty) -> Color:
+	var dict: Variant = _color_value_dict(prop)
+	if dict is Dictionary:
+		var color_dict: Dictionary = dict
+		return Color(
+			_color_dict_component_to_float(color_dict, "R", prop, 0.0),
+			_color_dict_component_to_float(color_dict, "G", prop, 0.0),
+			_color_dict_component_to_float(color_dict, "B", prop, 0.0),
+			_color_dict_component_to_float(color_dict, "A", prop, 1.0)
+		)
+	return Color(
+		_color_component_to_float(prop.find_child("R"), prop.struct_type, 0.0),
+		_color_component_to_float(prop.find_child("G"), prop.struct_type, 0.0),
+		_color_component_to_float(prop.find_child("B"), prop.struct_type, 0.0),
+		_color_component_to_float(prop.find_child("A"), prop.struct_type, 1.0)
+	)
+
+
+static func _color_component_to_float(child: UAssetProperty, struct_type: String,
+		default_value: float) -> float:
+	if child == null or child.value == null:
+		return default_value
+	var value := float(child.value)
+	if _color_component_is_byte(child, struct_type):
+		value /= 255.0
+	return clampf(value, 0.0, 1.0)
+
+
+static func _color_dict_component_to_float(dict: Dictionary, component: String,
+		prop: UAssetProperty, default_value: float) -> float:
+	if not dict.has(component) or dict[component] == null:
+		return default_value
+	var value := float(dict[component])
+	if _color_dict_is_byte(prop):
+		value /= 255.0
+	return clampf(value, 0.0, 1.0)
+
+
+static func _apply_color_to_struct(prop: UAssetProperty, color: Color) -> void:
+	var dict: Variant = _color_value_dict(prop)
+	if dict is Dictionary:
+		_apply_color_to_dict(prop, dict, color)
+		return
+
+	var components := {
+		"R": color.r,
+		"G": color.g,
+		"B": color.b,
+		"A": color.a,
+	}
+	for component in components:
+		var child := prop.find_child(str(component))
+		if child == null:
+			continue
+		var value := clampf(float(components[component]), 0.0, 1.0)
+		if _color_component_is_byte(child, prop.struct_type):
+			child.set_value(int(round(value * 255.0)))
+		else:
+			child.set_value(value)
+
+
+static func _color_component_is_byte(child: UAssetProperty, struct_type: String) -> bool:
+	return struct_type == "Color" or child.prop_type in ["Byte", "Int"]
+
+
+static func _apply_color_to_dict(prop: UAssetProperty, dict: Dictionary, color: Color) -> void:
+	var components := {
+		"R": color.r,
+		"G": color.g,
+		"B": color.b,
+		"A": color.a,
+	}
+	for component in components:
+		if not dict.has(component):
+			continue
+		var value := clampf(float(components[component]), 0.0, 1.0)
+		if _color_dict_is_byte(prop):
+			dict[component] = int(round(value * 255.0))
+		else:
+			dict[component] = value
+	prop.value = dict
+	prop.raw["Value"] = dict
+
+
+static func _color_value_dict(prop: UAssetProperty) -> Variant:
+	if prop.value is Dictionary and _dict_looks_like_color(prop.value, prop.prop_type):
+		return prop.value
+	var raw_value: Variant = prop.raw.get("Value")
+	if raw_value is Dictionary and _dict_looks_like_color(raw_value, prop.prop_type):
+		return raw_value
+	return null
+
+
+static func _dict_looks_like_color(dict: Dictionary, prop_type: String) -> bool:
+	if not (dict.has("R") and dict.has("G") and dict.has("B")):
+		return false
+	var type_name := _color_dict_type_name(dict, prop_type)
+	return type_name in ["LinearColor", "FLinearColor", "Color", "FColor"]
+
+
+static func _color_dict_type_name(dict: Dictionary, fallback_type: String) -> String:
+	var type_text := str(dict.get("$type", ""))
+	if type_text.contains("FLinearColor"):
+		return "FLinearColor"
+	if type_text.contains("FColor"):
+		return "FColor"
+	return fallback_type
+
+
+static func _color_dict_is_byte(prop: UAssetProperty) -> bool:
+	var dict: Variant = _color_value_dict(prop)
+	var color_dict: Dictionary = dict if dict is Dictionary else {}
+	var type_name := _color_dict_type_name(color_dict, prop.prop_type)
+	return type_name in ["Color", "FColor"]
+
+
+static func _color_has_alpha(prop: UAssetProperty) -> bool:
+	var dict: Variant = _color_value_dict(prop)
+	if dict is Dictionary:
+		return dict.has("A")
+	return prop.find_child("A") != null
+
+
+static func _color_type_label(prop: UAssetProperty) -> String:
+	var dict: Variant = _color_value_dict(prop)
+	if dict is Dictionary:
+		return _color_dict_type_name(dict, prop.prop_type).trim_prefix("F")
+	return prop.struct_type
+
+
+static func _color_label_text(prop: UAssetProperty) -> String:
+	var color := _color_from_struct(prop)
+	if _color_has_alpha(prop):
+		return "#%s" % color.to_html(true)
+	return "#%s" % color.to_html(false)
+
+
 ## Returns whichever text content field is populated (culture-invariant > source string).
 static func _get_text_content(prop: UAssetProperty) -> String:
 	if not prop.culture_invariant.is_empty():
@@ -463,45 +656,36 @@ static func _attach_constant_helper(spin: SpinBox, constants: Dictionary, is_int
 		tip_lines.append("  %s = %s" % [key, constants[key]])
 	spin.tooltip_text = "\n".join(tip_lines)
 
-	# Autocomplete popup for constant names
-	var popup := PopupMenu.new()
-	popup.max_size = Vector2i(400, 200)
-	line_edit.add_child(popup)
+	# Autocomplete dropdown for constant names. This is an in-tree Control, not a
+	# PopupMenu window, so it cannot take keyboard focus away from the LineEdit.
+	var dropdown := _make_constant_dropdown()
+	var dropdown_list := VBoxContainer.new()
+	dropdown.add_child(dropdown_list)
+	line_edit.add_child(dropdown)
+	line_edit.focus_exited.connect(func():
+		dropdown.hide.call_deferred()
+	)
 
 	line_edit.text_changed.connect(func(text: String):
 		if not line_edit.has_focus():
 			return
 		var token := _get_token_at_caret(text, line_edit.caret_column)
-		popup.clear()
+		_clear_constant_dropdown(dropdown_list)
 		if token.length() < 1 or token.is_valid_float():
-			popup.hide()
+			dropdown.hide()
 			return
 		var t_lower := token.to_lower()
 		var added := 0
 		for key in constants:
 			if (key as String).to_lower().contains(t_lower):
-				popup.add_item("%s  =  %s" % [key, constants[key]])
+				_add_constant_dropdown_item(dropdown_list, line_edit, dropdown, str(key), constants[key])
 				added += 1
 				if added >= 15:
 					break
 		if added > 0:
-			var gpos := line_edit.get_screen_position() + Vector2(0, line_edit.size.y)
-			popup.position = Vector2i(int(gpos.x), int(gpos.y))
-			popup.reset_size()
-			popup.show()
+			_show_constant_dropdown(dropdown, line_edit)
 		else:
-			popup.hide()
-	)
-
-	popup.index_pressed.connect(func(idx: int):
-		var item_text := popup.get_item_text(idx)
-		var const_name := item_text.split("  =  ")[0]
-		var text := line_edit.text
-		var caret := line_edit.caret_column
-		var bounds := _get_token_bounds(text, caret)
-		line_edit.text = text.substr(0, bounds[0]) + const_name + text.substr(bounds[1])
-		line_edit.caret_column = bounds[0] + const_name.length()
-		popup.hide()
+			dropdown.hide()
 	)
 
 	# Evaluate expressions with constant substitution on Enter
@@ -517,6 +701,68 @@ static func _attach_constant_helper(spin: SpinBox, constants: Dictionary, is_int
 						val = float(int(val))
 					spin.value = val
 	)
+
+
+static func _make_constant_dropdown() -> PanelContainer:
+	var dropdown := PanelContainer.new()
+	dropdown.visible = false
+	dropdown.top_level = true
+	dropdown.z_index = 100
+	dropdown.focus_mode = Control.FOCUS_NONE
+	dropdown.mouse_filter = Control.MOUSE_FILTER_STOP
+	var style := StyleBoxFlat.new()
+	style.bg_color = AppTheme.BG_PANEL
+	style.corner_radius_top_left = AppTheme.CORNER_RADIUS
+	style.corner_radius_top_right = AppTheme.CORNER_RADIUS
+	style.corner_radius_bottom_left = AppTheme.CORNER_RADIUS
+	style.corner_radius_bottom_right = AppTheme.CORNER_RADIUS
+	style.content_margin_left = 0
+	style.content_margin_right = 0
+	style.content_margin_top = 2
+	style.content_margin_bottom = 2
+	dropdown.add_theme_stylebox_override("panel", style)
+	return dropdown
+
+
+static func _clear_constant_dropdown(dropdown_list: Container) -> void:
+	for child in dropdown_list.get_children():
+		dropdown_list.remove_child(child)
+		child.queue_free()
+
+
+static func _add_constant_dropdown_item(dropdown_list: VBoxContainer, line_edit: LineEdit,
+		dropdown: Control, const_name: String, value: Variant) -> void:
+	var item := Button.new()
+	item.text = "%s  =  %s" % [const_name, value]
+	item.flat = true
+	item.focus_mode = Control.FOCUS_NONE
+	item.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	item.clip_text = true
+	item.add_theme_color_override("font_color", AppTheme.TEXT_PRIMARY)
+	item.add_theme_color_override("font_hover_color", AppTheme.TEXT_PRIMARY)
+	item.pressed.connect(func():
+		_insert_constant_name(line_edit, dropdown, const_name)
+	)
+	dropdown_list.add_child(item)
+
+
+static func _show_constant_dropdown(dropdown: Control, source: Control) -> void:
+	var source_rect := source.get_global_rect()
+	dropdown.global_position = source_rect.position + Vector2(0, source_rect.size.y)
+	dropdown.custom_minimum_size.x = maxf(source_rect.size.x, 260.0)
+	dropdown.reset_size()
+	dropdown.show()
+	source.grab_focus.call_deferred()
+
+
+static func _insert_constant_name(line_edit: LineEdit, dropdown: Control, const_name: String) -> void:
+	var text := line_edit.text
+	var caret := line_edit.caret_column
+	var bounds := _get_token_bounds(text, caret)
+	line_edit.text = text.substr(0, bounds[0]) + const_name + text.substr(bounds[1])
+	line_edit.caret_column = bounds[0] + const_name.length()
+	dropdown.hide()
+	line_edit.grab_focus.call_deferred()
 
 
 ## Replaces known constant names in text with their numeric values.

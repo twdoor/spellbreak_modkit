@@ -13,6 +13,7 @@ var _cfg:     ModConfigManager
 var _state:   ModStateManager
 var _packer:  PackingService
 var _watcher: ModFileWatcher
+var _new_mod_from_pak_service: BaseSourceService
 
 # ── State ──────────────────────────────────────────────────────────────────────
 var _mods:           Array      = []  # from ModDiscovery.scan()
@@ -20,6 +21,7 @@ var _collapsed_mods: Dictionary = {}  # mod_name -> bool  (default true = collap
 var _collapsed_dirs: Dictionary = {}  # "mod_name::rel_dir" -> bool (true = collapsed)
 var _log_lines:      Array      = []
 const _MAX_LOG := 80
+const _WATCH_TOGGLE_COOLDOWN_SEC := 0.25
 const _TEXT_FILE_EXTENSIONS := [
 	"txt", "cfg", "conf", "config", "ini", "json", "jsonc",
 	"yaml", "yml", "toml", "xml", "csv", "tsv", "md", "markdown",
@@ -33,6 +35,9 @@ const _TEXT_FILE_NAMES := [
 # File clipboard — independent of the uasset ClipboardManager
 var _file_clipboard:    Array = []   # [{mod, rel_path, full_path}, ...]
 var _clipboard_is_cut:  bool  = false
+var _watch_toggle_locked := false
+var _pending_new_mod_from_pak := ""
+var _pending_new_mod_from_pak_path := ""
 
 # Tree button IDs
 const _BTN_ADD := 0
@@ -55,6 +60,7 @@ func _ready() -> void:
 	_state   = ModStateManager.new().setup(_cfg.get_state_path())
 	_packer  = PackingService.new().setup(_cfg)
 	_watcher = ModFileWatcher.new().setup(_cfg, _state, _packer)
+	_new_mod_from_pak_service = BaseSourceService.new().setup(_cfg)
 
 	# Connect service signals
 	_packer.pack_started.connect(_on_pack_started)
@@ -62,6 +68,8 @@ func _ready() -> void:
 	_packer.pack_log.connect(_append_log)
 	_watcher.watch_status_changed.connect(_on_watch_status_changed)
 	_watcher.pack_triggered.connect(_on_watch_pack_triggered)
+	_new_mod_from_pak_service.generate_started.connect(_on_new_mod_from_pak_started)
+	_new_mod_from_pak_service.generate_finished.connect(_on_new_mod_from_pak_finished)
 	_cfg.config_changed.connect(_on_config_changed)
 
 	_build_ui()
@@ -76,6 +84,7 @@ func _exit_tree() -> void:
 	_watcher.stop()
 	_watcher.wait_to_finish()
 	_packer.wait_to_finish()
+	_new_mod_from_pak_service.wait_to_finish()
 
 
 # ── UI construction ────────────────────────────────────────────────────────────
@@ -151,6 +160,7 @@ func _build_ui() -> void:
 	_mod_tree.item_activated.connect(_on_tree_item_activated)
 	_mod_tree.item_mouse_selected.connect(_on_tree_item_mouse_selected)
 	_mod_tree.button_clicked.connect(_on_tree_button_clicked)
+	_mod_tree.gui_input.connect(_on_mod_tree_gui_input)
 	_mod_tree.empty_clicked.connect(func(_pos: Vector2, _btn: int) -> void: clear_selection())
 	add_child(_mod_tree)
 
@@ -385,7 +395,7 @@ func _build_mod_item(root: TreeItem, mod: Dictionary) -> void:
 	#item.set_custom_font_size(0, 14)
 	item.set_custom_color(0, AppTheme.MOD_ENABLED if enabled else AppTheme.MOD_DISABLED)
 	item.set_icon(0, _icon("GuiVisibilityVisible" if enabled else "GuiVisibilityHidden"))
-	item.set_tooltip_text(0, "%d files · %s\n%s  (right-click to toggle)" % [
+	item.set_tooltip_text(0, "%d files · %s\n%s  (right-click to toggle, middle-click to export as .pak)" % [
 		mod["file_count"],
 		ModDiscovery.fmt_size(mod["size_bytes"]),
 		"Enabled" if enabled else "Disabled",
@@ -494,6 +504,22 @@ func _on_tree_item_mouse_selected(_position: Vector2, mouse_button_index: int) -
 			_state.toggle((meta["mod"] as Dictionary)["name"] as String)
 			# Defer: Tree blocks clear()/create_item() while inside a signal callback.
 			_rebuild_mod_list.call_deferred()
+
+
+func _on_mod_tree_gui_input(event: InputEvent) -> void:
+	if not event is InputEventMouseButton:
+		return
+	var mouse_event := event as InputEventMouseButton
+	if not mouse_event.pressed or mouse_event.button_index != MOUSE_BUTTON_MIDDLE:
+		return
+	var item := _mod_tree.get_item_at_position(mouse_event.position)
+	if item == null:
+		return
+	var mod: Variant = _get_mod_for_item(item)
+	if mod == null:
+		return
+	_mod_tree.accept_event()
+	_open_export_mod_dialog(mod as Dictionary)
 
 
 ## Button clicks: Add (mod items), open/delete (file items).
@@ -998,6 +1024,7 @@ func _on_new_mod_pressed() -> void:
 	var dialog := ConfirmationDialog.new()
 	dialog.title = "New Mod"
 	dialog.ok_button_text = "Create"
+	dialog.add_button("From .pak...", false, "from_pak")
 	dialog.min_size = Vector2i(300, 0)
 
 	var vbox := VBoxContainer.new()
@@ -1014,21 +1041,12 @@ func _on_new_mod_pressed() -> void:
 
 	dialog.confirmed.connect(func() -> void:
 		var mod_name := edit.text.strip_edges()
-		if not FileUtils.is_safe_filename(mod_name):
-			_set_status("Mod name must be a single folder name", true)
+		var error := _validate_new_mod_name(mod_name)
+		if not error.is_empty():
+			_set_status(error, true)
 			edit.grab_focus()
 			return
-		var mod_path := _cfg.mods_dir.path_join(mod_name)
-		if DirAccess.dir_exists_absolute(mod_path):
-			_set_status("Mod '%s' already exists" % mod_name, true)
-			dialog.queue_free()
-			return
-		var cr := _cfg.get_game_profile().content_root
-		var content_path := mod_path.path_join(cr + "/Content")
-		if not FileUtils.is_path_within(content_path, mod_path):
-			_set_status("Spellbreak profile has an invalid content root", true)
-			return
-		var err := DirAccess.make_dir_recursive_absolute(content_path)
+		var err := _create_empty_mod(mod_name)
 		if err != OK:
 			_set_status("Failed to create mod folder", true)
 			dialog.queue_free()
@@ -1037,37 +1055,191 @@ func _on_new_mod_pressed() -> void:
 		_refresh_mods()
 		dialog.queue_free()
 	)
+	dialog.custom_action.connect(func(action: StringName) -> void:
+		if action != &"from_pak":
+			return
+		var mod_name := edit.text.strip_edges()
+		var error := _validate_new_mod_name(mod_name)
+		if not error.is_empty():
+			_set_status(error, true)
+			edit.grab_focus()
+			return
+		dialog.queue_free()
+		_open_new_mod_pak_dialog(mod_name)
+	)
 
 	dialog.popup_centered()
 	# Focus the text field after the popup opens.
 	edit.grab_focus.call_deferred()
 
 
+func _validate_new_mod_name(mod_name: String) -> String:
+	if not FileUtils.is_safe_filename(mod_name):
+		return "Mod name must be a single folder name"
+	var mod_path := _cfg.mods_dir.path_join(mod_name)
+	if DirAccess.dir_exists_absolute(mod_path):
+		return "Mod '%s' already exists" % mod_name
+	var cr := _cfg.get_game_profile().content_root
+	var content_path := mod_path.path_join(cr + "/Content")
+	if not FileUtils.is_path_within(content_path, mod_path):
+		return "Spellbreak profile has an invalid content root"
+	return ""
+
+
+func _create_empty_mod(mod_name: String) -> Error:
+	var mod_path := _cfg.mods_dir.path_join(mod_name)
+	var cr := _cfg.get_game_profile().content_root
+	return DirAccess.make_dir_recursive_absolute(mod_path.path_join(cr + "/Content"))
+
+
+func _open_new_mod_pak_dialog(mod_name: String) -> void:
+	if _new_mod_from_pak_service.is_generating():
+		_set_status("Already creating a mod from pak", true)
+		return
+	var dialog := FileDialog.new()
+	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	dialog.access = FileDialog.ACCESS_FILESYSTEM
+	dialog.filters = PackedStringArray(["*.pak ; Unreal Pak", "* ; All Files"])
+	dialog.use_native_dialog = true
+	var paks_dir := _cfg.get_paks_dir()
+	if DirAccess.dir_exists_absolute(paks_dir):
+		dialog.current_dir = paks_dir
+	dialog.file_selected.connect(func(path: String) -> void:
+		dialog.queue_free()
+		_start_new_mod_from_pak(mod_name, path)
+	)
+	get_tree().root.add_child(dialog)
+	dialog.popup_centered(Vector2i(900, 650))
+
+
+func _start_new_mod_from_pak(mod_name: String, pak_path: String) -> void:
+	var error := _validate_new_mod_name(mod_name)
+	if not error.is_empty():
+		_set_status(error, true)
+		return
+	_pending_new_mod_from_pak = mod_name
+	var mod_path := _cfg.mods_dir.path_join(mod_name)
+	_pending_new_mod_from_pak_path = mod_path
+	_set_status("Creating %s from %s..." % [mod_name, pak_path.get_file()])
+	_new_mod_from_pak_service.generate(pak_path, mod_path)
+
+
+func _on_new_mod_from_pak_started() -> void:
+	pass
+
+
+func _on_new_mod_from_pak_finished(success: bool, message: String,
+		_source_name: String, source_path: String) -> void:
+	var mod_name := _pending_new_mod_from_pak
+	var mod_path := _pending_new_mod_from_pak_path
+	_pending_new_mod_from_pak = ""
+	_pending_new_mod_from_pak_path = ""
+	if success:
+		_set_status("Created mod from pak: %s" % mod_name)
+		_refresh_mods()
+		return
+	var cleanup_path := source_path if not source_path.is_empty() else mod_path
+	if not cleanup_path.is_empty() and FileUtils.is_path_within(cleanup_path, _cfg.mods_dir):
+		FileUtils.remove_dir_recursive(cleanup_path)
+	_set_status(message, true)
+
+
 # ── Actions ────────────────────────────────────────────────────────────────────
 
 func _on_pack_pressed() -> void:
+	var enabled_names := _state.get_enabled_names()
+	var enabled_mods := _mods.filter(func(m): return m["name"] in enabled_names)
+	_pack_mods(enabled_mods, "No mods enabled - right-click a mod to enable")
+
+
+func _pack_mods(mods: Array, empty_message: String) -> void:
 	if not _cfg.is_configured():
 		_set_status("Configure paths in Settings first", true)
 		return
-	var enabled_names := _state.get_enabled_names()
-	if enabled_names.is_empty():
-		_set_status("No mods enabled — right-click a mod to enable", true)
+	if mods.is_empty():
+		_set_status(empty_message, true)
 		return
-	var enabled_mods := _mods.filter(func(m): return m["name"] in enabled_names)
+	if _packer.is_packing():
+		_set_status("Already packing", true)
+		return
 	_log_lines.clear()
 	_log_scroll.visible = true
-	_append_log("Packing %d mod(s)..." % enabled_mods.size())
-	_packer.pack(enabled_mods)
+	_append_log("Packing %d mod(s)..." % mods.size())
+	_packer.pack(mods)
+
+
+func _open_export_mod_dialog(mod: Dictionary) -> void:
+	if not _cfg.is_configured():
+		_set_status("Configure paths in Settings first", true)
+		return
+	if _packer.is_packing():
+		_set_status("Already packing", true)
+		return
+
+	var dialog := FileDialog.new()
+	dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	dialog.access = FileDialog.ACCESS_FILESYSTEM
+	dialog.filters = PackedStringArray(["*.pak ; Unreal Pak"])
+	dialog.use_native_dialog = true
+	dialog.current_file = "%s.pak" % _safe_export_basename(mod["name"] as String)
+	var paks_dir := _cfg.get_paks_dir()
+	if DirAccess.dir_exists_absolute(paks_dir):
+		dialog.current_dir = paks_dir
+	elif DirAccess.dir_exists_absolute(_cfg.mods_dir):
+		dialog.current_dir = _cfg.mods_dir
+	dialog.file_selected.connect(func(path: String) -> void:
+		dialog.queue_free()
+		_export_mod_to_path(mod, path)
+	)
+	get_tree().root.add_child(dialog)
+	dialog.popup_centered(Vector2i(900, 650))
+
+
+func _export_mod_to_path(mod: Dictionary, pak_path: String) -> void:
+	var mod_name := mod["name"] as String
+	_log_lines.clear()
+	_log_scroll.visible = true
+	_append_log("Exporting %s..." % mod_name)
+	_set_status("Exporting %s..." % mod_name)
+	_packer.export_to_path([mod], pak_path)
+
+
+func _safe_export_basename(mod_name: String) -> String:
+	if FileUtils.is_safe_filename(mod_name):
+		return mod_name
+	var result := ""
+	for i in range(mod_name.length()):
+		var character := mod_name.substr(i, 1)
+		result += character if FileUtils.is_safe_filename(character) else "_"
+	result = result.strip_edges().trim_suffix(".")
+	return result if not result.is_empty() else "mod"
 
 
 func _on_watch_pressed() -> void:
+	if _watch_toggle_locked:
+		return
 	if not _cfg.is_configured():
 		_set_status("Configure paths in Settings first", true)
 		return
+	_watch_toggle_locked = true
+	_watch_btn.disabled = true
 	if _watcher.is_watching():
+		_set_status("Stopping watcher...")
 		_watcher.stop()
 	else:
+		_set_status("Starting watcher...")
 		_watcher.start()
+	_release_watch_toggle.call_deferred()
+
+
+func _release_watch_toggle() -> void:
+	if not is_inside_tree():
+		_watch_toggle_locked = false
+		return
+	await get_tree().create_timer(_WATCH_TOGGLE_COOLDOWN_SEC).timeout
+	_watch_toggle_locked = false
+	if is_instance_valid(_watch_btn):
+		_watch_btn.disabled = false
 
 
 func _on_launch_pressed() -> void:

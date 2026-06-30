@@ -4,7 +4,7 @@ class_name TextureService extends RefCounted
 ## and preview for UE4 texture assets.  Subprocess pattern mirrors PackingService.
 ##
 ## Pipeline (Linux):
-##   Export: uasset -> DDS (UE4-DDS-Tools) -> PNG (ImageMagick)
+##   Export: uasset -> TGA (UE4-DDS-Tools/libtexconv) -> PNG (ImageMagick)
 ##   Import: PNG -> DDS (ImageMagick) -> inject into uasset (UE4-DDS-Tools)
 ##   Preview: export to PNG in temp dir, load as Godot Image
 
@@ -113,7 +113,7 @@ func _on_operation_done(success: bool, message: String) -> void:
 # ── Core operations ───────────────────────────────────────────────────────────
 
 
-## Export uasset -> DDS -> PNG.
+## Export uasset -> TGA -> PNG.
 ## If output_png is empty, writes to the preview cache dir.
 ## Returns [success: bool, message: String, png_path: String].
 func _do_export_png(uasset_path: String, output_png: String) -> Array:
@@ -129,7 +129,8 @@ func _do_export_png(uasset_path: String, output_png: String) -> Array:
 	if magick.is_empty():
 		return [false, "ImageMagick (magick) not found in PATH", ""]
 
-	# Step 1: Export to DDS in temp dir
+	# Step 1: Export to TGA in temp dir. ImageMagick's DDS reader only supports
+	# a subset of DDS/BC formats on Linux, so libtexconv handles DDS decoding.
 	var tmp_dir := OS.get_temp_dir().path_join("sb_tex_%d" % Time.get_ticks_usec())
 	DirAccess.make_dir_recursive_absolute(tmp_dir)
 
@@ -142,21 +143,27 @@ func _do_export_png(uasset_path: String, output_png: String) -> Array:
 	var dds_ver := _cfg.get_game_profile().dds_tools_version
 	var output: Array = []
 	var code := ProcessUtils.run_python_script(python, main_py, dds_tools_dir, [
-		uasset_path, "--mode", "export", "--export_as", "dds", "--version", dds_ver,
+		uasset_path, "--mode", "export", "--export_as", "tga", "--version", dds_ver,
 		"--save_folder", tmp_dir, "--skip_non_texture",
 	], output)
 	if code != 0:
 		_remove_dir(tmp_dir)
 		var err_text := ProcessUtils.output_text(output)
-		return [false, "DDS export failed (exit %d): %s" % [code, err_text], ""]
+		return [false, "Texture export failed (exit %d): %s" % [code, err_text], ""]
 
-	# Find the exported DDS file
-	var dds_path := _find_file_in_dir(tmp_dir, "dds")
-	if dds_path.is_empty():
+	# Find the exported image file. HDR textures may be converted to .hdr
+	# instead of .tga by UE4-DDS-Tools.
+	var intermediate_path := _find_file_in_dir(tmp_dir, "tga")
+	if intermediate_path.is_empty():
+		intermediate_path = _find_file_in_dir(tmp_dir, "hdr")
+	if intermediate_path.is_empty():
+		var dds_path := _find_file_in_dir(tmp_dir, "dds")
 		_remove_dir(tmp_dir)
-		return [false, "No DDS file produced by UE4-DDS-Tools", ""]
+		if dds_path.is_empty():
+			return [false, "No image file produced by UE4-DDS-Tools", ""]
+		return [false, "Texture format could only be exported as DDS, which ImageMagick cannot reliably preview on Linux", ""]
 
-	# Step 2: Convert DDS -> PNG via ImageMagick
+	# Step 2: Convert TGA/HDR -> PNG via ImageMagick
 	var target_png := output_png
 	if target_png.is_empty():
 		# Use cache dir
@@ -166,12 +173,13 @@ func _do_export_png(uasset_path: String, output_png: String) -> Array:
 
 	var staged_png := tmp_dir.path_join("converted.png")
 	var convert_output: Array = []
-	var convert_code := OS.execute(magick, [dds_path, staged_png], convert_output, true, false)
+	var convert_code := OS.execute(magick, [intermediate_path, staged_png], convert_output, true, false)
 
 	if convert_code != 0:
 		_remove_dir(tmp_dir)
 		var err_text := ProcessUtils.output_text(convert_output)
-		return [false, "DDS->PNG conversion failed: %s" % err_text, ""]
+		return [false, "%s->PNG conversion failed: %s" % [
+				intermediate_path.get_extension().to_upper(), err_text], ""]
 
 	if not FileAccess.file_exists(staged_png):
 		_remove_dir(tmp_dir)

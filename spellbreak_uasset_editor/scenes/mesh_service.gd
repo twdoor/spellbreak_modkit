@@ -6,7 +6,7 @@ class_name MeshService extends RefCounted
 ##
 ## Pipeline:
 ##   Preview: uasset → glTF (umodel -export -gltf) → GLTFDocument in Godot
-##   Export:  same pipeline, user picks output path
+##   Export:  umodel glTF → Godot glTF round-trip → Blender-friendly GLB
 
 signal operation_finished(success: bool, message: String)
 
@@ -102,9 +102,9 @@ func find_animation_assets_for_mesh(mesh_uasset_path: String,
 	return paths
 
 
-## Export mesh from a .uasset to a user-chosen output directory.
+## Export mesh from a .uasset to a user-chosen output directory as GLB.
 ## Runs in a background thread. Emits operation_finished when done.
-func export_gltf(uasset_path: String, output_dir: String) -> void:
+func export_glb(uasset_path: String, output_dir: String) -> void:
 	if _busy:
 		return
 	_busy = true
@@ -154,6 +154,21 @@ func get_cached_mesh(uasset_path: String) -> String:
 	return gltf
 
 
+## Remove cached glTF/material/texture exports for this mesh asset.
+## Texture edits can change referenced files without changing the mesh .uasset,
+## so refresh needs an explicit cache clear.
+func clear_cached_mesh(uasset_path: String) -> void:
+	var cache_dir := _get_cache_dir()
+	var dir := DirAccess.open(cache_dir)
+	if not dir:
+		return
+	var prefix := "v%d_%s_" % [CACHE_VERSION, str(uasset_path.hash())]
+	for child_dir in dir.get_directories():
+		var name := str(child_dir)
+		if name.begins_with(prefix):
+			FileUtils.remove_dir_recursive(cache_dir.path_join(name))
+
+
 ## Check if cached MD5Anim files exist for this asset.
 func get_cached_animations(uasset_path: String) -> Array[String]:
 	var cache_subdir := _get_cache_dir().path_join(_animation_cache_key(uasset_path))
@@ -166,7 +181,7 @@ func get_cached_animations(uasset_path: String) -> Array[String]:
 
 
 func _export_thread(uasset_path: String, output_dir: String) -> void:
-	var result := _do_export_gltf(uasset_path, output_dir)
+	var result := _do_export_glb(uasset_path, output_dir)
 	call_deferred("_on_operation_done", result[0], result[1])
 
 
@@ -211,6 +226,63 @@ func _do_export_gltf(uasset_path: String, output_dir: String) -> Array:
 		return [false, "No glTF file produced by umodel", ""]
 
 	return [true, "Exported to %s" % gltf_path.get_file(), gltf_path]
+
+
+## User-facing mesh export: write a normalized .glb that Blender and other
+## stricter importers accept more reliably than umodel's raw glTF.
+## Returns [success: bool, message: String, glb_path: String].
+func _do_export_glb(uasset_path: String, output_dir: String) -> Array:
+	var staging_dir := _get_cache_dir().path_join("export_%s_%s" % [
+		str(uasset_path.hash()), str(Time.get_ticks_usec())
+	])
+	var raw_result := _do_export_gltf(uasset_path, staging_dir)
+	if not raw_result[0]:
+		FileUtils.remove_dir_recursive(staging_dir)
+		return raw_result
+
+	var converted := _write_glb_from_gltf(str(raw_result[2]), output_dir)
+	FileUtils.remove_dir_recursive(staging_dir)
+	return converted
+
+
+func _write_glb_from_gltf(gltf_path: String, output_dir: String) -> Array:
+	if not FileAccess.file_exists(gltf_path):
+		return [false, "glTF file not found: %s" % gltf_path, ""]
+	var mkdir_error := DirAccess.make_dir_recursive_absolute(output_dir)
+	if mkdir_error != OK:
+		return [false, "Could not create export folder (error %d)" % mkdir_error, ""]
+
+	var input_doc := GLTFDocument.new()
+	var input_state := GLTFState.new()
+	var error := input_doc.append_from_file(gltf_path, input_state, 0, gltf_path.get_base_dir())
+	if error != OK:
+		return [false, "Could not read exported glTF (error %d)" % error, ""]
+
+	var scene := input_doc.generate_scene(input_state)
+	if scene == null:
+		return [false, "Could not build scene from exported glTF", ""]
+
+	var material_result := MeshPreviewMaterialLoader.apply_to_scene(
+		scene, get_preview_resource_root(gltf_path))
+
+	var output_doc := GLTFDocument.new()
+	var output_state := GLTFState.new()
+	error = output_doc.append_from_scene(scene, output_state)
+	scene.free()
+	if error != OK:
+		return [false, "Could not prepare Blender-compatible GLB (error %d)" % error, ""]
+
+	var glb_path := output_dir.path_join("%s.glb" % gltf_path.get_file().get_basename())
+	error = output_doc.write_to_filesystem(output_state, glb_path)
+	if error != OK:
+		return [false, "Could not write GLB (error %d)" % error, ""]
+	var applied_count := int(material_result.get("applied", 0))
+	var texture_count := int(material_result.get("texture_count", 0))
+	var message := "Exported GLB: %s" % glb_path.get_file()
+	if applied_count > 0:
+		message += " (%d textured material(s), %d texture(s))" % [
+			applied_count, texture_count]
+	return [true, message, glb_path]
 
 
 ## Export an animation package to MD5Anim via umodel.

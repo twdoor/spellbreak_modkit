@@ -54,8 +54,33 @@ func pack(enabled_mods: Array) -> void:
 	_thread.start(_pack_thread.bind(enabled_mods.duplicate()))
 
 
+## Export the selected mod(s) to an explicit .pak path plus a sibling .sig.
+## This is used by Mod Manager middle-click export and does not install into the game folder.
+func export_to_path(mods: Array, output_pak_path: String) -> void:
+	_packing_mutex.lock()
+	if _packing:
+		_packing_mutex.unlock()
+		return
+	if mods.is_empty():
+		_packing_mutex.unlock()
+		pack_finished.emit(false, "No mod selected")
+		return
+	_packing = true
+	_packing_mutex.unlock()
+	pack_started.emit()
+	if _thread and _thread.is_alive():
+		_thread.wait_to_finish()
+	_thread = Thread.new()
+	_thread.start(_export_thread.bind(mods.duplicate(), output_pak_path))
+
+
 func _pack_thread(enabled_mods: Array) -> void:
 	var result := _do_pack(enabled_mods)
+	call_deferred("_on_pack_done", result[0], result[1])
+
+
+func _export_thread(mods: Array, output_pak_path: String) -> void:
+	var result := _do_pack_to_path(mods, output_pak_path)
 	call_deferred("_on_pack_done", result[0], result[1])
 
 
@@ -169,6 +194,124 @@ func _do_pack(enabled_mods: Array) -> Array:
 		pak_size = fa.get_length()
 		fa.close()
 	return [true, "Packed %s.pak + .sig (%s)" % [pak_name, ModDiscovery.fmt_size(pak_size)]]
+
+
+## Core export logic for explicit save-as packing.
+func _do_pack_to_path(mods: Array, output_pak_path: String) -> Array:
+	var u4pak_path := _cfg.get_u4pak_path()
+	if not FileAccess.file_exists(u4pak_path):
+		return [false, "u4pak.py not found: %s" % u4pak_path]
+	var python := ProcessUtils.find_python()
+	if python.is_empty():
+		return [false, "Python was not found in PATH"]
+
+	var pak_path := _normalized_pak_output_path(output_pak_path)
+	if pak_path.is_empty():
+		return [false, "Select an output .pak path"]
+	var output_dir := pak_path.get_base_dir()
+	var mkdir_error := DirAccess.make_dir_recursive_absolute(output_dir)
+	if mkdir_error != OK:
+		return [false, "Could not create export folder (error %d)" % mkdir_error]
+
+	var tmp_dir := OS.get_temp_dir().path_join("sb_pack_export_%d" % Time.get_ticks_msec())
+	var merged := tmp_dir.path_join("merged")
+	DirAccess.make_dir_recursive_absolute(merged)
+
+	var merge_result := _merge_mods_to_dir(mods, merged)
+	if not bool(merge_result[0]):
+		FileUtils.remove_dir_recursive(tmp_dir)
+		return [false, str(merge_result[1])]
+
+	_emit_log("")
+	_emit_log("Packing export...")
+	var staged_pak := FileUtils.unique_sibling_path(pak_path, "pack")
+	var exit_code := _run_u4pak(python, u4pak_path, staged_pak, merged)
+	FileUtils.remove_dir_recursive(tmp_dir)
+	if exit_code != 0:
+		if FileAccess.file_exists(staged_pak):
+			DirAccess.remove_absolute(staged_pak)
+		return [false, "Export failed (exit %d)" % exit_code]
+	if not _staged_pak_is_valid(staged_pak):
+		if FileAccess.file_exists(staged_pak):
+			DirAccess.remove_absolute(staged_pak)
+		return [false, "Export completed without producing a valid pak"]
+
+	var sig_path := pak_path.get_basename() + ".sig"
+	var staged_sig := FileUtils.unique_sibling_path(sig_path, "sig")
+	var sig_error := _stage_sig_file(staged_sig)
+	if sig_error != OK:
+		DirAccess.remove_absolute(staged_pak)
+		return [false, "Could not stage signature file (error %d)" % sig_error]
+
+	var install_error := FileUtils.install_staged_files([
+		{"source": staged_pak, "target": pak_path},
+		{"source": staged_sig, "target": sig_path},
+	])
+	if install_error != OK:
+		for staged in [staged_pak, staged_sig]:
+			if FileAccess.file_exists(staged):
+				DirAccess.remove_absolute(staged)
+		return [false, "Could not write exported files (error %d)" % install_error]
+
+	var pak_size := 0
+	var fa := FileAccess.open(pak_path, FileAccess.READ)
+	if fa:
+		pak_size = fa.get_length()
+		fa.close()
+	return [true, "Exported %s + %s (%s)" % [
+		pak_path.get_file(), sig_path.get_file(), ModDiscovery.fmt_size(pak_size)
+	]]
+
+
+func _merge_mods_to_dir(mods: Array, merged: String) -> Array:
+	var profile := _cfg.get_game_profile()
+	var content_root := profile.content_root
+	_emit_log("Merging %d mod(s):" % mods.size())
+	for mod in mods:
+		_emit_log("  -> %s" % mod["name"])
+		var mod_content := (mod["path"] as String).path_join(content_root)
+		if not FileUtils.is_path_within(mod_content, mod["path"]):
+			return [false, "Content root escapes mod '%s'" % mod["name"]]
+		if not DirAccess.dir_exists_absolute(mod_content):
+			continue
+		var copy_error := _copy_dir_recursive(mod_content, merged.path_join(content_root))
+		if copy_error != OK:
+			return [false, "Could not merge mod '%s' (error %d)" % [mod["name"], copy_error]]
+	return [true, ""]
+
+
+func _normalized_pak_output_path(path: String) -> String:
+	path = path.strip_edges()
+	if path.is_empty():
+		return ""
+	if path.get_extension().to_lower() == "pak":
+		return path
+	if path.get_extension().is_empty():
+		return path + ".pak"
+	return path.get_basename() + ".pak"
+
+
+func _staged_pak_is_valid(staged_pak: String) -> bool:
+	var staged_fa := FileAccess.open(staged_pak, FileAccess.READ)
+	if not staged_fa:
+		return false
+	var valid := staged_fa.get_length() > 0
+	staged_fa.close()
+	return valid
+
+
+func _stage_sig_file(staged_sig: String) -> Error:
+	var src_sig := ""
+	var paks_dir := _cfg.get_paks_dir()
+	if DirAccess.dir_exists_absolute(paks_dir):
+		src_sig = _find_sig(paks_dir)
+	if not src_sig.is_empty():
+		var sig_error := FileUtils.copy_file(src_sig, staged_sig)
+		if sig_error == OK:
+			_emit_log("Sig: %s" % src_sig.get_file())
+		return sig_error
+	_emit_log("Sig: empty (no template found)")
+	return FileUtils.write_bytes_atomic(staged_sig, PackedByteArray())
 
 
 func _run_u4pak(python: String, u4pak_path: String, pak_path: String, merged_dir: String) -> int:
