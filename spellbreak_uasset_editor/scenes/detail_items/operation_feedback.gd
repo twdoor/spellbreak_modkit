@@ -21,6 +21,7 @@ var _retry_callback: Callable
 var _dismissible := false
 var _expanded := false
 var _auto_dismiss_seconds := 0.0
+var _status_text := ""
 var _lines := PackedStringArray()
 
 
@@ -37,6 +38,7 @@ func clear_log() -> void:
 	_sync_log()
 	if is_instance_valid(_copy_btn):
 		_copy_btn.disabled = true
+	_refresh_visibility()
 
 
 func set_retry_callback(callback: Callable) -> void:
@@ -73,7 +75,9 @@ func set_expanded(expanded: bool) -> void:
 
 
 func set_status(text: String, kind: int = AppTheme.StatusKind.IDLE) -> void:
+	_status_text = text
 	AppTheme.set_status_label(_status_label, text, kind)
+	_refresh_visibility()
 
 
 func set_busy(text: String) -> void:
@@ -97,6 +101,7 @@ func add_line(text: String) -> void:
 	_sync_log()
 	if is_instance_valid(_copy_btn):
 		_copy_btn.disabled = _lines.is_empty()
+	_refresh_visibility()
 
 
 func add_path(label: String, path: String) -> void:
@@ -112,6 +117,7 @@ func log_text() -> String:
 func _build_ui() -> void:
 	add_theme_constant_override("separation", AppTheme.SPACING_TIGHT)
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	visible = false
 
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
@@ -171,6 +177,10 @@ func _sync_log() -> void:
 	if not is_instance_valid(_log_edit):
 		return
 	_log_edit.text = log_text()
+
+
+func _refresh_visibility() -> void:
+	visible = not _status_text.is_empty() or not _lines.is_empty()
 
 
 func _on_retry_pressed() -> void:
