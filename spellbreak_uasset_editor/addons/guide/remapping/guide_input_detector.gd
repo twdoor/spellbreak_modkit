@@ -68,6 +68,10 @@ var _saved_mapping_contexts:Array[GUIDEMappingContext] = []
 
 # The last detected input.
 var _last_detected_input:GUIDEInput = null
+# Abort inputs currently subscribed to GUIDE state.
+var _abort_inputs_in_use:Array[GUIDEInput] = []
+# Inputs that must return to neutral before disabled mapping contexts are restored.
+var _post_clear_inputs:Array[GUIDEInput] = []
 
 func _ready():
 	# don't run the process function if we are not detecting to not waste resources
@@ -120,11 +124,12 @@ func detect(value_type:GUIDEAction.GUIDEActionValueType,
 
 	# If we are already detecting, abort this.
 	if _status == DetectionState.DETECTING or _status == DetectionState.INPUT_PRE_CLEAR or _status == DetectionState.INPUT_POST_CLEAR:
-		for input in abort_detection_on:
-			input._end_usage()
+		_clear_abort_inputs()
 	
 	# and start a new detection.
 	_status = DetectionState.COUNTDOWN
+	_clear_abort_inputs()
+	_clear_post_clear_inputs()
 	
 	_value_type = value_type
 	_device_types = device_types
@@ -144,21 +149,24 @@ func _begin_detection():
 	
 	_status = DetectionState.INPUT_PRE_CLEAR
 
+	var guide: Variant = _get_guide()
 	# enable all abort detection inputs
-	for input in abort_detection_on:
-		input._state = GUIDE._input_state
-		input._begin_usage()
+	if guide != null:
+		for input in abort_detection_on:
+			input._state = guide._input_state
+			input._begin_usage()
+			_abort_inputs_in_use.append(input)
 
 	# we also use this inside the editor where the GUIDE
 	# singleton is not active. Here we don't need to enable
 	# and disable the mapping contexts.		
-	if not Engine.is_editor_hint():	
+	if not Engine.is_editor_hint() and guide != null:
 		# save currently active mapping contexts
-		_saved_mapping_contexts = GUIDE.get_enabled_mapping_contexts()
+		_saved_mapping_contexts = guide.get_enabled_mapping_contexts()
 		
 		# disable all mapping contexts
 		for context in _saved_mapping_contexts:
-			GUIDE.disable_mapping_context(context)
+			guide.disable_mapping_context(context)
 			
 	# enable _process so we can start the pre-clear phase
 	# once the _process function has determined that no abort input
@@ -169,12 +177,21 @@ func _begin_detection():
 ## does nothing.
 func abort_detection() -> void:
 	_timer.stop()
-	# if we are currently detecting, deliver the null result
-	# which will gracefully shut down everything
-	if _status == DetectionState.DETECTING:
+	_clear_post_clear_inputs()
+	if _status == DetectionState.IDLE:
+		_clear_abort_inputs()
+		return
+	if _status == DetectionState.COUNTDOWN:
+		_clear_abort_inputs()
+		_status = DetectionState.IDLE
+		input_detected.emit(null)
+		return
+	# Delivering null runs the same post-clear and context-restore path as a
+	# finished detection.
+	if _status == DetectionState.INPUT_PRE_CLEAR \
+			or _status == DetectionState.DETECTING \
+			or _status == DetectionState.INPUT_POST_CLEAR:
 		_deliver(null)
-
-	# in any other state we don't need to do anything
 
 ## This is called while we are waiting for input to be released.
 func _process(delta: float) -> void:
@@ -186,10 +203,13 @@ func _process(delta: float) -> void:
 	# check if the input is still actuated. We do this to avoid the problem
 	# of this input accidentally triggering something in the mapping contexts
 	# when we enable them again.
-	for input in abort_detection_on:
+	for input in _abort_inputs_in_use:
 		if input._value.is_finite() and input._value.length() > 0:
 			# we still have input, so we are still waiting
 			# retry next frame
+			return
+	for input in _post_clear_inputs:
+		if input._value.is_finite() and input._value.length() > 0:
 			return
 			
 	# if we are here, the input is no longer actuated
@@ -206,15 +226,15 @@ func _process(delta: float) -> void:
 	# otherwise, this was post-clear, so we can tear down the whole
 	# thing.
 	
-	# tear down the inputs
-	for input in abort_detection_on:
-		input._end_usage()
+	_clear_abort_inputs()
+	_clear_post_clear_inputs()
 	
 	# restore the mapping contexts
 	# but only when not running in the editor
-	if not Engine.is_editor_hint():
+	var guide: Variant = _get_guide()
+	if not Engine.is_editor_hint() and guide != null:
 		for context in _saved_mapping_contexts:
-			GUIDE.enable_mapping_context(context)
+			guide.enable_mapping_context(context)
 		
 	# set status to idle
 	_status = DetectionState.IDLE
@@ -235,7 +255,9 @@ func _input(event:InputEvent) -> void:
 	# up to date. This should have no effect because we disabled all mapping
 	# contexts.
 	if not Engine.is_editor_hint():
-		GUIDE.inject_input(event)	
+		var guide: Variant = _get_guide()
+		if guide != null:
+			guide.inject_input(event)
 
 	if _status == DetectionState.DETECTING:
 		# check if any abort input will trigger
@@ -286,7 +308,9 @@ func _try_detect_bool(event:InputEvent) -> void:
 	
 	if event is InputEventKey and event.is_released():
 		var result := GUIDEInputKey.new()
-		result.key = event.physical_keycode
+		result.key = event.physical_keycode if event.physical_keycode != KEY_NONE else event.keycode
+		if result.key == KEY_NONE:
+			return
 		result.shift = event.shift_pressed
 		result.control = event.ctrl_pressed
 		result.meta = event.meta_pressed
@@ -388,7 +412,36 @@ func _find_joy_index(device_id:int) -> int:
 
 func _deliver(input:GUIDEInput) -> void:
 	# print("deliver" , input)
+	_clear_post_clear_inputs()
 	_last_detected_input = input
+	var guide: Variant = _get_guide()
+	if input != null and not Engine.is_editor_hint() and guide != null:
+		input._state = guide._input_state
+		input._begin_usage()
+		_post_clear_inputs.append(input)
 	_status = DetectionState.INPUT_POST_CLEAR
 	# enable processing so we can check if the input is released before we re-enable GUIDE's mapping contexts
 	set_process(true)
+
+
+func _clear_post_clear_inputs() -> void:
+	for input in _post_clear_inputs:
+		if is_instance_valid(input):
+			input._end_usage()
+			input._state = null
+	_post_clear_inputs.clear()
+
+
+func _clear_abort_inputs() -> void:
+	for input in _abort_inputs_in_use:
+		if is_instance_valid(input):
+			input._end_usage()
+			input._state = null
+	_abort_inputs_in_use.clear()
+
+
+func _get_guide():
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		return null
+	return tree.root.get_node_or_null("GUIDE")

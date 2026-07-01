@@ -16,7 +16,8 @@ var _mesh_root: Node3D
 var _loading_label: Label
 var _export_btn: Button
 var _refresh_btn: Button
-var _status_label: Label
+var _feedback: OperationFeedback
+var _last_operation: Callable
 var _extract_job_id := -1
 var _animation_job_id := -1
 
@@ -89,11 +90,8 @@ func _build_impl() -> void:
 		_add_info("umodel not configured. Set the path in Settings to enable 3D mesh preview.")
 	else:
 		# Loading label
-		_loading_label = Label.new()
-		_loading_label.text = "Extracting mesh..."
-		AppTheme.style_muted(_loading_label)
-		_loading_label.add_theme_font_size_override("font_size", AppTheme.FONT_STATUS)
-		_container.add_child(_loading_label)
+		_loading_label = _add_status_label(
+			"Extracting mesh...", AppTheme.StatusKind.WORKING, AppTheme.FONT_STATUS)
 
 		# 3D viewport
 		_viewport_container = SubViewportContainer.new()
@@ -177,12 +175,8 @@ func _build_impl() -> void:
 		_refresh_btn.disabled = true
 		_refresh_btn.tooltip_text = "umodel not configured"
 
-	# Status label
-	_status_label = Label.new()
-	_status_label.add_theme_font_size_override("font_size", AppTheme.FONT_SMALL)
-	AppTheme.style_muted(_status_label)
-	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-	_container.add_child(_status_label)
+	_feedback = OperationFeedback.new().setup(_retry_last_operation)
+	_container.add_child(_feedback)
 
 	_add_separator()
 
@@ -235,7 +229,8 @@ func _build_impl() -> void:
 func _load_mesh_async(mesh_service: MeshService) -> void:
 	var uasset_path := _get_mesh_uasset_path()
 	if not uasset_path.ends_with(".uasset"):
-		_loading_label.text = "Mesh preview requires a .uasset file (not JSON)"
+		_set_status_label(_loading_label, "Mesh preview requires a .uasset file (not JSON)",
+			AppTheme.StatusKind.ERROR)
 		return
 
 	# Check cache first
@@ -245,13 +240,15 @@ func _load_mesh_async(mesh_service: MeshService) -> void:
 		return
 
 	if _ctx.background_jobs == null:
-		_loading_label.text = "Background job service is unavailable"
+		_set_status_label(_loading_label, "Background job service is unavailable",
+			AppTheme.StatusKind.ERROR)
 		return
 	_extract_job_id = _ctx.background_jobs.run(
 		func() -> Array: return mesh_service.get_preview_mesh(uasset_path),
 		_on_mesh_job_finished)
 	if _extract_job_id < 0:
-		_loading_label.text = "Could not start mesh extraction job"
+		_set_status_label(_loading_label, "Could not start mesh extraction job",
+			AppTheme.StatusKind.ERROR)
 		if is_instance_valid(_refresh_btn):
 			_refresh_btn.disabled = false
 
@@ -265,12 +262,10 @@ func _on_mesh_extracted(gltf_path: String, error: String) -> void:
 	if not gltf_path.is_empty():
 		_on_mesh_file_ready(gltf_path)
 	else:
-		if is_instance_valid(_loading_label):
-			var msg := "Failed to extract mesh"
-			if not error.is_empty():
-				msg += ": " + error
-			_loading_label.text = msg
-			_loading_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+		var msg := "Failed to extract mesh"
+		if not error.is_empty():
+			msg += ": " + error
+		_set_status_label(_loading_label, msg, AppTheme.StatusKind.ERROR)
 		if is_instance_valid(_refresh_btn):
 			_refresh_btn.disabled = false
 
@@ -294,16 +289,14 @@ func _on_mesh_file_ready(gltf_path: String) -> void:
 	var gltf_state := GLTFState.new()
 	var err := gltf_doc.append_from_file(gltf_path, gltf_state)
 	if err != OK:
-		if is_instance_valid(_loading_label):
-			_loading_label.text = "Failed to load glTF (error %d)" % err
-			_loading_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+		_set_status_label(_loading_label, "Failed to load glTF (error %d)" % err,
+			AppTheme.StatusKind.ERROR)
 		return
 
 	var scene := gltf_doc.generate_scene(gltf_state)
 	if scene == null:
-		if is_instance_valid(_loading_label):
-			_loading_label.text = "Failed to generate scene from glTF"
-			_loading_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+		_set_status_label(_loading_label, "Failed to generate scene from glTF",
+			AppTheme.StatusKind.ERROR)
 		return
 
 	var mesh_service := _ctx.mesh_service
@@ -349,10 +342,10 @@ func _on_mesh_file_ready(gltf_path: String) -> void:
 		_resize_handle.visible = true
 	if is_instance_valid(_loading_label):
 		var material_count := int(material_result["applied"])
-		_loading_label.text = "Left drag: orbit | Middle drag: pan | Scroll: zoom"
+		var status := "Left drag: orbit | Middle drag: pan | Scroll: zoom"
 		if material_count > 0:
-			_loading_label.text += " | %d textured material(s)" % material_count
-		_loading_label.add_theme_color_override("font_color", AppTheme.STATUS_SUCCESS)
+			status += " | %d textured material(s)" % material_count
+		_set_status_label(_loading_label, status, AppTheme.StatusKind.SUCCESS)
 	if is_instance_valid(_refresh_btn):
 		_refresh_btn.disabled = false
 	_set_animation_controls_ready(_preview_skeleton != null)
@@ -410,12 +403,7 @@ func _add_preview_environment(scene_root: Node3D) -> void:
 func _build_animation_controls() -> void:
 	_add_section_label("ANIMATION PREVIEW")
 
-	_anim_status_label = Label.new()
-	_anim_status_label.text = "Load the skeletal mesh preview first."
-	_anim_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-	_anim_status_label.add_theme_font_size_override("font_size", AppTheme.FONT_SMALL)
-	AppTheme.style_muted(_anim_status_label)
-	_container.add_child(_anim_status_label)
+	_anim_status_label = _add_status_label("Load the skeletal mesh preview first.")
 
 	var load_row := HBoxContainer.new()
 	load_row.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
@@ -552,7 +540,8 @@ func _on_auto_animation_pressed() -> void:
 	_auto_animation_index = 0
 	_auto_animation_active = true
 	_set_anim_status("Trying animation 1/%d: %s" % [
-		_auto_animation_candidates.size(), _animation_display_name(_auto_animation_candidates[0])], false)
+		_auto_animation_candidates.size(), _animation_display_name(_auto_animation_candidates[0])],
+		false, AppTheme.StatusKind.WORKING)
 	_load_animation_asset_async(_auto_animation_candidates[0])
 
 
@@ -593,7 +582,7 @@ func _try_next_auto_animation(reason: String = "") -> void:
 		_auto_animation_index + 1,
 		_auto_animation_candidates.size(),
 		_animation_display_name(path),
-	], false)
+	], false, AppTheme.StatusKind.WORKING)
 	_load_animation_asset_async(path)
 
 
@@ -611,8 +600,8 @@ func _on_load_animation_pressed() -> void:
 	var dialog := FileDialog.new()
 	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
-	dialog.use_native_dialog = true
 	dialog.filters = PackedStringArray(["*.uasset ; Unreal animation asset"])
+	AppTheme.configure_file_dialog(dialog)
 	dialog.current_dir = base_path.get_base_dir()
 	dialog.file_selected.connect(func(path: String) -> void:
 		dialog.queue_free()
@@ -636,7 +625,7 @@ func _load_animation_asset_async(path: String) -> void:
 	_set_animation_loaded(false)
 	_anim_paths.clear()
 	_anim_selector.clear()
-	_set_anim_status("Extracting animation...", false)
+	_set_anim_status("Extracting animation...", false, AppTheme.StatusKind.WORKING)
 	_animation_job_id = _ctx.background_jobs.run(
 		func() -> Array: return mesh_service.get_preview_animations(path),
 		func(result: Array) -> void: _on_animation_job_finished(path, result))
@@ -722,7 +711,7 @@ func _load_md5_animation(md5_path: String) -> bool:
 			built.get("rotation_mode", "local"))
 	if not missing.is_empty():
 		status += " %d source-only bone(s) ignored." % missing.size()
-	_set_anim_status(status, false)
+	_set_anim_status(status, false, AppTheme.StatusKind.SUCCESS)
 	return true
 
 
@@ -831,12 +820,12 @@ func _set_slider_value(value: float) -> void:
 	_anim_slider_updating = false
 
 
-func _set_anim_status(message: String, is_error: bool) -> void:
-	if not is_instance_valid(_anim_status_label):
-		return
-	_anim_status_label.text = message
-	_anim_status_label.add_theme_color_override("font_color",
-		AppTheme.STATUS_ERROR if is_error else AppTheme.TEXT_MUTED)
+func _set_anim_status(message: String, is_error: bool,
+		kind: int = AppTheme.StatusKind.IDLE) -> void:
+	if is_error:
+		kind = AppTheme.StatusKind.ERROR
+	_set_status_label(_anim_status_label, message,
+		kind)
 
 
 func _find_skeleton(node: Node) -> Skeleton3D:
@@ -981,8 +970,8 @@ func _on_refresh_preview_pressed() -> void:
 		return
 	var uasset_path := _get_mesh_uasset_path()
 	if not uasset_path.ends_with(".uasset"):
-		if is_instance_valid(_loading_label):
-			_loading_label.text = "Mesh preview requires a .uasset file (not JSON)"
+		_set_status_label(_loading_label, "Mesh preview requires a .uasset file (not JSON)",
+			AppTheme.StatusKind.ERROR)
 		return
 	if _extract_job_id >= 0 and _ctx.background_jobs:
 		_ctx.background_jobs.cancel(_extract_job_id)
@@ -990,10 +979,7 @@ func _on_refresh_preview_pressed() -> void:
 	mesh_service.clear_cached_mesh(uasset_path)
 	if is_instance_valid(_refresh_btn):
 		_refresh_btn.disabled = true
-	if is_instance_valid(_loading_label):
-		_loading_label.text = "Refreshing mesh preview..."
-		AppTheme.style_muted(_loading_label)
-		_loading_label.add_theme_font_size_override("font_size", AppTheme.FONT_STATUS)
+	_set_status_label(_loading_label, "Refreshing mesh preview...", AppTheme.StatusKind.WORKING)
 	_load_mesh_async(mesh_service)
 
 
@@ -1010,22 +996,54 @@ func _on_export_pressed() -> void:
 	var dialog := FileDialog.new()
 	dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
-	dialog.use_native_dialog = true
+	AppTheme.configure_file_dialog(dialog)
 	dialog.dir_selected.connect(func(path: String) -> void:
-		_status_label.text = "Exporting..."
-		_export_btn.disabled = true
-		mesh_service.operation_finished.connect(_on_export_finished, CONNECT_ONE_SHOT)
-		mesh_service.export_glb(uasset_path, path)
+		_run_mesh_export(uasset_path, path)
 		dialog.queue_free()
 	)
 	_container.get_tree().root.add_child(dialog)
 	dialog.popup_centered(Vector2i(800, 600))
 
 
+func _run_mesh_export(uasset_path: String, output_dir: String) -> void:
+	var mesh_service := _ctx.mesh_service
+	if mesh_service == null or mesh_service.is_busy():
+		return
+	_last_operation = func() -> void: _run_mesh_export(uasset_path, output_dir)
+	_start_feedback("Mesh export", [
+		["Source", uasset_path],
+		["Output folder", output_dir],
+	])
+	if is_instance_valid(_export_btn):
+		_export_btn.disabled = true
+	mesh_service.operation_finished.connect(_on_export_finished, CONNECT_ONE_SHOT)
+	mesh_service.export_glb(uasset_path, output_dir)
+
+
 func _on_export_finished(success: bool, message: String) -> void:
-	if is_instance_valid(_status_label):
-		_status_label.text = message
-		_status_label.add_theme_color_override("font_color",
-			AppTheme.STATUS_SUCCESS if success else AppTheme.STATUS_ERROR)
+	_finish_feedback(success, message)
 	if is_instance_valid(_export_btn):
 		_export_btn.disabled = false
+
+
+func _retry_last_operation() -> void:
+	if _last_operation.is_valid():
+		_last_operation.call()
+
+
+func _start_feedback(title: String, paths: Array) -> void:
+	if not is_instance_valid(_feedback):
+		return
+	_feedback.clear_log()
+	_feedback.set_busy("%s..." % title)
+	_feedback.add_line(title)
+	for pair in paths:
+		if pair is Array and pair.size() >= 2:
+			_feedback.add_path(str(pair[0]), str(pair[1]))
+
+
+func _finish_feedback(success: bool, message: String) -> void:
+	if not is_instance_valid(_feedback):
+		return
+	_feedback.add_line("Result: %s" % message)
+	_feedback.set_result(success, message)

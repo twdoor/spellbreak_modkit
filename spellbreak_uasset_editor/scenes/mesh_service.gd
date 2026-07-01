@@ -11,8 +11,7 @@ class_name MeshService extends RefCounted
 signal operation_finished(success: bool, message: String)
 
 var _cfg: ModConfigManager
-var _thread: Thread = null
-var _busy: bool = false
+var _operation := SingleBackgroundOperation.new()
 
 const CACHE_DIR := "sb_mesh_cache"
 const CACHE_VERSION := 2
@@ -26,13 +25,12 @@ func setup(cfg: ModConfigManager) -> MeshService:
 
 
 func is_busy() -> bool:
-	return _busy
+	return _operation.is_busy()
 
 
 ## Block until the worker thread has fully exited. Call from _exit_tree().
 func wait_to_finish() -> void:
-	if _thread and _thread.is_started():
-		_thread.wait_to_finish()
+	_operation.wait_to_finish()
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -105,13 +103,7 @@ func find_animation_assets_for_mesh(mesh_uasset_path: String,
 ## Export mesh from a .uasset to a user-chosen output directory as GLB.
 ## Runs in a background thread. Emits operation_finished when done.
 func export_glb(uasset_path: String, output_dir: String) -> void:
-	if _busy:
-		return
-	_busy = true
-	if _thread and _thread.is_alive():
-		_thread.wait_to_finish()
-	_thread = Thread.new()
-	_thread.start(_export_thread.bind(uasset_path, output_dir))
+	_start_operation(_do_export_glb.bind(uasset_path, output_dir))
 
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
@@ -177,19 +169,22 @@ func get_cached_animations(uasset_path: String) -> Array[String]:
 	return _find_files_recursive(cache_subdir, "md5anim")
 
 
-# ── Thread entry points ──────────────────────────────────────────────────────
+# ── Background operations ────────────────────────────────────────────────────
 
 
-func _export_thread(uasset_path: String, output_dir: String) -> void:
-	var result := _do_export_glb(uasset_path, output_dir)
-	call_deferred("_on_operation_done", result[0], result[1])
+func _start_operation(task: Callable) -> void:
+	var error := _operation.start(task, _on_operation_done)
+	if error == ERR_ALREADY_IN_USE:
+		return
+	if error != OK:
+		operation_finished.emit(false, "Could not start mesh operation (error %d)" % error)
 
 
-func _on_operation_done(success: bool, message: String) -> void:
-	_busy = false
-	if _thread:
-		_thread.wait_to_finish()
-	operation_finished.emit(success, message)
+func _on_operation_done(result: Variant) -> void:
+	if not result is Array or result.size() < 2:
+		operation_finished.emit(false, "Mesh operation returned an invalid result")
+		return
+	operation_finished.emit(bool(result[0]), str(result[1]))
 
 
 # ── Core operation ───────────────────────────────────────────────────────────
@@ -205,7 +200,9 @@ func _do_export_gltf(uasset_path: String, output_dir: String) -> Array:
 	if not FileAccess.file_exists(uasset_path):
 		return [false, "File not found: %s" % uasset_path, ""]
 
-	DirAccess.make_dir_recursive_absolute(output_dir)
+	var output_dir_error := DirAccess.make_dir_recursive_absolute(output_dir)
+	if output_dir_error != OK:
+		return [false, "Could not create export folder (error %d)" % output_dir_error, ""]
 
 	# umodel command: export as glTF using Spellbreak's UE version flag.
 	var game_flag := _cfg.get_game_profile().umodel_game_flag
@@ -232,9 +229,10 @@ func _do_export_gltf(uasset_path: String, output_dir: String) -> Array:
 ## stricter importers accept more reliably than umodel's raw glTF.
 ## Returns [success: bool, message: String, glb_path: String].
 func _do_export_glb(uasset_path: String, output_dir: String) -> Array:
-	var staging_dir := _get_cache_dir().path_join("export_%s_%s" % [
-		str(uasset_path.hash()), str(Time.get_ticks_usec())
-	])
+	var tmp_result := FileUtils.make_temp_dir("sb_mesh_export")
+	if not bool(tmp_result.get("ok", false)):
+		return [false, str(tmp_result.get("error", "Could not create temp directory")), ""]
+	var staging_dir := str(tmp_result["path"])
 	var raw_result := _do_export_gltf(uasset_path, staging_dir)
 	if not raw_result[0]:
 		FileUtils.remove_dir_recursive(staging_dir)
@@ -295,7 +293,9 @@ func _do_export_md5anim(uasset_path: String, output_dir: String) -> Array:
 	if not FileAccess.file_exists(uasset_path):
 		return [false, "File not found: %s" % uasset_path, []]
 
-	DirAccess.make_dir_recursive_absolute(output_dir)
+	var output_dir_error := DirAccess.make_dir_recursive_absolute(output_dir)
+	if output_dir_error != OK:
+		return [false, "Could not create animation export folder (error %d)" % output_dir_error, []]
 
 	var game_flag := _cfg.get_game_profile().umodel_game_flag
 	var output: Array = []

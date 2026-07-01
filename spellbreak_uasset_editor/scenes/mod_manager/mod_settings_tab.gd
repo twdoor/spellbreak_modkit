@@ -12,9 +12,11 @@ var _cfg: ModConfigManager
 var _sources_container: VBoxContainer
 var _base_source_service: BaseSourceService
 var _base_source_btn: Button
-var _base_source_status: Label
+var _base_source_feedback: OperationFeedback
 var _base_source_status_text := ""
 var _base_source_status_error := false
+var _base_source_status_kind: int = AppTheme.StatusKind.IDLE
+var _last_base_source_operation: Callable
 var _initial_snapshot: Dictionary = {}
 var _save_btn: Button
 var _close_or_revert_btn: Button
@@ -132,7 +134,7 @@ func _build_ui() -> void:
 		var dialog := FileDialog.new()
 		dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 		dialog.access = FileDialog.ACCESS_FILESYSTEM
-		dialog.use_native_dialog = true
+		AppTheme.configure_file_dialog(dialog)
 		dialog.file_selected.connect(func(path: String) -> void:
 			umodel_edit.text = path
 			_cfg.umodel_path = path
@@ -173,10 +175,14 @@ func _build_ui() -> void:
 	source_actions.add_child(generate_btn)
 	content.add_child(source_actions)
 
-	_base_source_status = _hint(_base_source_status_text)
-	_base_source_status.visible = not _base_source_status_text.is_empty()
-	AppTheme.style_status(_base_source_status, _base_source_status_error)
-	content.add_child(_base_source_status)
+	_base_source_feedback = OperationFeedback.new().setup(_retry_base_source_generation)
+	_base_source_feedback.visible = not _base_source_status_text.is_empty()
+	if not _base_source_status_text.is_empty():
+		_base_source_feedback.set_status(_base_source_status_text, _base_source_status_kind)
+		_base_source_feedback.add_line(_base_source_status_text)
+		_base_source_feedback.set_retry_enabled(
+				_base_source_status_error and _last_base_source_operation.is_valid())
+	content.add_child(_base_source_feedback)
 
 	# ── Config file path (read-only info) ──
 	content.add_child(_section("Config File"))
@@ -306,7 +312,7 @@ func _open_base_pak_dialog() -> void:
 	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
 	dialog.filters = PackedStringArray(["*.pak ; Unreal Pak", "* ; All Files"])
-	dialog.use_native_dialog = true
+	AppTheme.configure_file_dialog(dialog)
 	var paks_dir := _cfg.get_paks_dir()
 	if DirAccess.dir_exists_absolute(paks_dir):
 		dialog.current_dir = paks_dir
@@ -322,7 +328,7 @@ func _open_base_source_output_dialog(pak_path: String) -> void:
 	var dialog := FileDialog.new()
 	dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
-	dialog.use_native_dialog = true
+	AppTheme.configure_file_dialog(dialog)
 	dialog.dir_selected.connect(func(path: String) -> void:
 		dialog.queue_free()
 		_confirm_or_generate_base_source(pak_path, path)
@@ -350,7 +356,12 @@ func _confirm_or_generate_base_source(pak_path: String, output_dir: String) -> v
 
 
 func _start_base_source_generation(pak_path: String, output_dir: String) -> void:
-	_set_base_source_status("Extracting %s..." % pak_path.get_file(), false)
+	_last_base_source_operation = func() -> void:
+		_confirm_or_generate_base_source(pak_path, output_dir)
+	_show_base_source_feedback("Extracting %s..." % pak_path.get_file())
+	_append_base_source_log("Source generation")
+	_append_base_source_log("Package: %s" % pak_path)
+	_append_base_source_log("Output folder: %s" % output_dir)
 	_base_source_service.generate(pak_path, output_dir)
 
 
@@ -365,9 +376,15 @@ func _on_base_source_generate_finished(success: bool, message: String,
 		_base_source_btn.disabled = false
 	if success:
 		_add_generated_source(source_name, source_path)
-		_set_base_source_status("%s. Source added; save settings to keep it." % message, false)
+		var success_message := "%s. Source added; save settings to keep it." % message
+		_append_base_source_log("OK: %s" % success_message)
+		_set_base_source_status(success_message, false, AppTheme.StatusKind.SUCCESS)
 	else:
-		_set_base_source_status(message, true)
+		_append_base_source_log("ERROR: %s" % message)
+		_set_base_source_status(message, true, AppTheme.StatusKind.ERROR)
+	if is_instance_valid(_base_source_feedback):
+		_base_source_feedback.set_retry_enabled(
+				not success and _last_base_source_operation.is_valid())
 
 
 func _add_generated_source(source_name: String, source_path: String) -> void:
@@ -398,14 +415,32 @@ func _unique_source_name(base_name: String) -> String:
 	return "%s %d" % [base_name, idx]
 
 
-func _set_base_source_status(text: String, is_error: bool) -> void:
+func _set_base_source_status(text: String, is_error: bool,
+		kind: int = AppTheme.StatusKind.IDLE) -> void:
 	_base_source_status_text = text
 	_base_source_status_error = is_error
-	if is_instance_valid(_base_source_status):
-		_base_source_status.text = text
-		_base_source_status.visible = not text.is_empty()
-		AppTheme.style_status(_base_source_status, is_error)
+	_base_source_status_kind = kind
+	if is_instance_valid(_base_source_feedback):
+		_base_source_feedback.visible = not text.is_empty()
+		_base_source_feedback.set_status(text, kind)
 	status_changed.emit(text, is_error)
+
+
+func _show_base_source_feedback(status_text: String) -> void:
+	_set_base_source_status(status_text, false, AppTheme.StatusKind.WORKING)
+	if is_instance_valid(_base_source_feedback):
+		_base_source_feedback.clear_log()
+		_base_source_feedback.set_retry_enabled(false)
+
+
+func _append_base_source_log(line: String) -> void:
+	if is_instance_valid(_base_source_feedback):
+		_base_source_feedback.add_line(line)
+
+
+func _retry_base_source_generation() -> void:
+	if _last_base_source_operation.is_valid():
+		_last_base_source_operation.call()
 
 
 func _dir_has_entries(path: String) -> bool:
@@ -522,7 +557,7 @@ func _open_dir_dialog(line_edit: LineEdit, on_select: Callable) -> void:
 	var dialog := FileDialog.new()
 	dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
 	dialog.access    = FileDialog.ACCESS_FILESYSTEM
-	dialog.use_native_dialog = true
+	AppTheme.configure_file_dialog(dialog)
 	dialog.dir_selected.connect(func(path: String) -> void:
 		line_edit.text = path
 		on_select.call(path)
@@ -538,7 +573,7 @@ func _open_file_dialog(line_edit: LineEdit, on_select: Callable) -> void:
 	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	dialog.access    = FileDialog.ACCESS_FILESYSTEM
 	dialog.filters   = PackedStringArray(["*.pak ; Unreal Pak", "* ; All Files"])
-	dialog.use_native_dialog = true
+	AppTheme.configure_file_dialog(dialog)
 	dialog.file_selected.connect(func(path: String) -> void:
 		line_edit.text = path
 		on_select.call(path)

@@ -18,11 +18,11 @@ var _capturing_item: Variant = null
 var _dirty := false
 
 
-static func load_saved_config() -> GUIDERemappingConfig:
+static func load_saved_config(mapping_context: GUIDEMappingContext = null) -> GUIDERemappingConfig:
 	if FileAccess.file_exists(KEYMAP_PATH):
 		var loaded := ResourceLoader.load(KEYMAP_PATH)
 		if loaded is GUIDERemappingConfig:
-			return loaded as GUIDERemappingConfig
+			return normalize_config_for_mapping(loaded as GUIDERemappingConfig, mapping_context)
 	return GUIDERemappingConfig.new()
 
 
@@ -34,9 +34,128 @@ static func save_config(config: GUIDERemappingConfig) -> Error:
 	return ResourceSaver.save(config, KEYMAP_PATH)
 
 
+static func normalize_config_for_mapping(config: GUIDERemappingConfig,
+		mapping_context: GUIDEMappingContext) -> GUIDERemappingConfig:
+	if config == null:
+		return GUIDERemappingConfig.new()
+	if mapping_context == null:
+		return config.duplicate()
+
+	var normalized := GUIDERemappingConfig.new()
+	normalized.custom_data = config.custom_data.duplicate(true)
+
+	for raw_context in config.remapped_inputs.keys():
+		if not _context_matches(raw_context, mapping_context):
+			continue
+		var action_entries = config.remapped_inputs[raw_context]
+		if not action_entries is Dictionary:
+			continue
+		for raw_action in (action_entries as Dictionary).keys():
+			var action := _find_matching_action(mapping_context, raw_action)
+			if action == null:
+				continue
+			var slots = (action_entries as Dictionary)[raw_action]
+			if not slots is Dictionary:
+				continue
+			for raw_index in (slots as Dictionary).keys():
+				if not raw_index is int:
+					continue
+				var index := int(raw_index)
+				if not _action_has_mapping_slot(mapping_context, action, index):
+					continue
+				normalized._bind(mapping_context, action, (slots as Dictionary)[raw_index], index)
+
+	_resolve_default_collisions(normalized, mapping_context)
+	return normalized
+
+
+static func _context_matches(raw_context: Variant, mapping_context: GUIDEMappingContext) -> bool:
+	if raw_context == mapping_context:
+		return true
+	if not raw_context is GUIDEMappingContext:
+		return false
+	var raw_resource := raw_context as GUIDEMappingContext
+	if not mapping_context.resource_path.is_empty() \
+			and raw_resource.resource_path == mapping_context.resource_path:
+		return true
+	if not mapping_context.display_name.is_empty() \
+			and raw_resource.display_name == mapping_context.display_name:
+		return true
+	return false
+
+
+static func _find_matching_action(mapping_context: GUIDEMappingContext, raw_action: Variant) -> GUIDEAction:
+	for action_mapping: GUIDEActionMapping in mapping_context.mappings:
+		var action := action_mapping.action
+		if _action_matches(raw_action, action):
+			return action
+	return null
+
+
+static func _action_matches(raw_action: Variant, action: GUIDEAction) -> bool:
+	if raw_action == action:
+		return true
+	if not raw_action is GUIDEAction:
+		return false
+	var raw_resource := raw_action as GUIDEAction
+	if not action.resource_path.is_empty() and raw_resource.resource_path == action.resource_path:
+		return true
+	if not action.name.is_empty() and raw_resource.name == action.name:
+		return true
+	return false
+
+
+static func _action_has_mapping_slot(mapping_context: GUIDEMappingContext,
+		action: GUIDEAction, index: int) -> bool:
+	if index < 0:
+		return false
+	for action_mapping: GUIDEActionMapping in mapping_context.mappings:
+		if action_mapping.action == action:
+			return action_mapping.input_mappings.size() > index
+	return false
+
+
+static func _resolve_default_collisions(config: GUIDERemappingConfig,
+		mapping_context: GUIDEMappingContext) -> void:
+	var explicit_inputs := _collect_explicit_inputs(config, mapping_context)
+	if explicit_inputs.is_empty():
+		return
+	for action_mapping: GUIDEActionMapping in mapping_context.mappings:
+		var action := action_mapping.action
+		for index in action_mapping.input_mappings.size():
+			if config._has(mapping_context, action, index):
+				continue
+			var default_input := action_mapping.input_mappings[index].input
+			if default_input == null:
+				continue
+			for explicit in explicit_inputs:
+				if default_input.is_same_as(explicit["input"]):
+					config._bind(mapping_context, action, null, index)
+					break
+
+
+static func _collect_explicit_inputs(config: GUIDERemappingConfig,
+		mapping_context: GUIDEMappingContext) -> Array:
+	var result: Array = []
+	if not config.remapped_inputs.has(mapping_context):
+		return result
+	var action_entries = config.remapped_inputs[mapping_context]
+	if not action_entries is Dictionary:
+		return result
+	for action in (action_entries as Dictionary).keys():
+		var slots = (action_entries as Dictionary)[action]
+		if not slots is Dictionary:
+			continue
+		for index in (slots as Dictionary).keys():
+			var input = (slots as Dictionary)[index]
+			if input is GUIDEInput:
+				result.append({"action": action, "index": index, "input": input})
+	return result
+
+
 func setup(mapping_context: GUIDEMappingContext, config: GUIDERemappingConfig) -> KeymapSettingsTab:
 	_mapping_context = mapping_context
-	_working_config = config.duplicate() if config != null else GUIDERemappingConfig.new()
+	_working_config = normalize_config_for_mapping(config, mapping_context)
 	return self
 
 
@@ -52,7 +171,7 @@ func _ready() -> void:
 
 func refresh(config: GUIDERemappingConfig = null) -> void:
 	if config != null:
-		_working_config = config.duplicate()
+		_working_config = normalize_config_for_mapping(config, _mapping_context)
 	_dirty = false
 	if _detector and _detector.is_detecting:
 		_detector.abort_detection()
@@ -278,12 +397,14 @@ func _on_input_detected(input: GUIDEInput) -> void:
 		_set_status("Input capture cancelled", true)
 		return
 	var collisions: Array = _remapper.get_input_collisions(item, input)
+	for collision in collisions:
+		_remapper.set_bound_input(collision, null)
 	_remapper.set_bound_input(item, input)
 	var message: String = "Bound %s to %s" % [_item_label(item), _format_input(input)]
 	if not collisions.is_empty():
 		var names := collisions.map(func(other: Variant) -> String: return _item_label(other))
-		message += " (also used by %s)" % ", ".join(PackedStringArray(names))
-	_after_binding_changed(message, not collisions.is_empty())
+		message += " (replaced %s)" % ", ".join(PackedStringArray(names))
+	_after_binding_changed(message)
 
 
 func _after_binding_changed(message: String, is_warning: bool = false) -> void:

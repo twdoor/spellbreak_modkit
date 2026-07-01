@@ -7,9 +7,7 @@ signal generate_started
 signal generate_finished(success: bool, message: String, source_name: String, source_path: String)
 
 var _cfg: ModConfigManager
-var _thread: Thread = null
-var _generating := false
-var _mutex := Mutex.new()
+var _operation := SingleBackgroundOperation.new()
 
 
 func setup(cfg: ModConfigManager) -> BaseSourceService:
@@ -18,44 +16,28 @@ func setup(cfg: ModConfigManager) -> BaseSourceService:
 
 
 func is_generating() -> bool:
-	_mutex.lock()
-	var result := _generating
-	_mutex.unlock()
-	return result
+	return _operation.is_busy()
 
 
 func wait_to_finish() -> void:
-	if _thread and _thread.is_started():
-		_thread.wait_to_finish()
+	_operation.wait_to_finish()
 
 
 func generate(pak_path: String, output_dir: String) -> void:
-	_mutex.lock()
-	if _generating:
-		_mutex.unlock()
+	var error := _operation.start(_do_generate.bind(pak_path, output_dir), _on_generate_done)
+	if error == ERR_ALREADY_IN_USE:
 		return
-	_generating = true
-	_mutex.unlock()
-
+	if error != OK:
+		generate_finished.emit(false, "Could not start source generation (error %d)" % error, "", "")
+		return
 	generate_started.emit()
-	if _thread and _thread.is_alive():
-		_thread.wait_to_finish()
-	_thread = Thread.new()
-	_thread.start(_generate_thread.bind(pak_path, output_dir))
 
 
-func _generate_thread(pak_path: String, output_dir: String) -> void:
-	var result := _do_generate(pak_path, output_dir)
-	call_deferred("_on_generate_done", result[0], result[1], result[2], result[3])
-
-
-func _on_generate_done(success: bool, message: String, source_name: String, source_path: String) -> void:
-	_mutex.lock()
-	_generating = false
-	_mutex.unlock()
-	if _thread:
-		_thread.wait_to_finish()
-	generate_finished.emit(success, message, source_name, source_path)
+func _on_generate_done(result: Variant) -> void:
+	if not result is Array or result.size() < 4:
+		generate_finished.emit(false, "Source generation returned an invalid result", "", "")
+		return
+	generate_finished.emit(bool(result[0]), str(result[1]), str(result[2]), str(result[3]))
 
 
 func _do_generate(pak_path: String, output_dir: String) -> Array:

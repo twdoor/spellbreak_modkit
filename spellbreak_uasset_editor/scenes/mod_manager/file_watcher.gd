@@ -65,7 +65,14 @@ func start() -> void:
 	_active_mtx.unlock()
 
 	_thread = Thread.new()
-	_thread.start(_watch_loop)
+	var error := _thread.start(_watch_loop)
+	if error != OK:
+		_thread = null
+		_active_mtx.lock()
+		_active = false
+		_active_mtx.unlock()
+		watch_status_changed.emit(false)
+		return
 	watch_status_changed.emit(true)
 
 

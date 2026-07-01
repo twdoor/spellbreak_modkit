@@ -11,9 +11,7 @@ signal pack_finished(success: bool, message: String)
 signal pack_log(line: String)
 
 var _cfg: ModConfigManager
-var _thread: Thread = null
-var _packing: bool = false
-var _packing_mutex := Mutex.new()
+var _operation := SingleBackgroundOperation.new()
 
 
 func setup(cfg: ModConfigManager) -> PackingService:
@@ -22,75 +20,47 @@ func setup(cfg: ModConfigManager) -> PackingService:
 
 
 func is_packing() -> bool:
-	_packing_mutex.lock()
-	var result := _packing
-	_packing_mutex.unlock()
-	return result
+	return _operation.is_busy()
 
 
 ## Block until the pack thread has fully exited. Call from _exit_tree().
 func wait_to_finish() -> void:
-	if _thread and _thread.is_started():
-		_thread.wait_to_finish()
+	_operation.wait_to_finish()
 
 
 ## Pack all enabled mods. enabled_mods: Array of dicts from ModDiscovery.scan().
 ## Runs in a background thread; emits pack_started / pack_log / pack_finished.
 func pack(enabled_mods: Array) -> void:
-	_packing_mutex.lock()
-	if _packing:
-		_packing_mutex.unlock()
-		return
 	if enabled_mods.is_empty():
-		_packing_mutex.unlock()
 		pack_finished.emit(false, "No mods enabled")
 		return
-	_packing = true
-	_packing_mutex.unlock()
-	pack_started.emit()
-	if _thread and _thread.is_alive():
-		_thread.wait_to_finish()
-	_thread = Thread.new()
-	_thread.start(_pack_thread.bind(enabled_mods.duplicate()))
+	_start_pack_operation(_do_pack.bind(enabled_mods.duplicate()))
 
 
 ## Export the selected mod(s) to an explicit .pak path plus a sibling .sig.
 ## This is used by Mod Manager middle-click export and does not install into the game folder.
 func export_to_path(mods: Array, output_pak_path: String) -> void:
-	_packing_mutex.lock()
-	if _packing:
-		_packing_mutex.unlock()
-		return
 	if mods.is_empty():
-		_packing_mutex.unlock()
 		pack_finished.emit(false, "No mod selected")
 		return
-	_packing = true
-	_packing_mutex.unlock()
+	_start_pack_operation(_do_pack_to_path.bind(mods.duplicate(), output_pak_path))
+
+
+func _start_pack_operation(task: Callable) -> void:
+	var error := _operation.start(task, _on_pack_done)
+	if error == ERR_ALREADY_IN_USE:
+		return
+	if error != OK:
+		pack_finished.emit(false, "Could not start packing operation (error %d)" % error)
+		return
 	pack_started.emit()
-	if _thread and _thread.is_alive():
-		_thread.wait_to_finish()
-	_thread = Thread.new()
-	_thread.start(_export_thread.bind(mods.duplicate(), output_pak_path))
 
 
-func _pack_thread(enabled_mods: Array) -> void:
-	var result := _do_pack(enabled_mods)
-	call_deferred("_on_pack_done", result[0], result[1])
-
-
-func _export_thread(mods: Array, output_pak_path: String) -> void:
-	var result := _do_pack_to_path(mods, output_pak_path)
-	call_deferred("_on_pack_done", result[0], result[1])
-
-
-func _on_pack_done(success: bool, message: String) -> void:
-	_packing_mutex.lock()
-	_packing = false
-	_packing_mutex.unlock()
-	if _thread:
-		_thread.wait_to_finish()
-	pack_finished.emit(success, message)
+func _on_pack_done(result: Variant) -> void:
+	if not result is Array or result.size() < 2:
+		pack_finished.emit(false, "Packing operation returned an invalid result")
+		return
+	pack_finished.emit(bool(result[0]), str(result[1]))
 
 
 ## Core packing logic (runs in worker thread).
@@ -108,10 +78,15 @@ func _do_pack(enabled_mods: Array) -> Array:
 	if python.is_empty():
 		return [false, "Python was not found in PATH"]
 
-	# Create temp merge directory
-	var tmp_dir := OS.get_temp_dir().path_join("sb_pack_%d" % Time.get_ticks_msec())
+	var tmp_result := FileUtils.make_temp_dir("sb_pack")
+	if not bool(tmp_result.get("ok", false)):
+		return [false, str(tmp_result.get("error", "Could not create temp directory"))]
+	var tmp_dir := str(tmp_result["path"])
 	var merged  := tmp_dir.path_join("merged")
-	DirAccess.make_dir_recursive_absolute(merged)
+	var merge_dir_error := DirAccess.make_dir_recursive_absolute(merged)
+	if merge_dir_error != OK:
+		FileUtils.remove_dir_recursive(tmp_dir)
+		return [false, "Could not create merge directory (error %d)" % merge_dir_error]
 
 	var profile := _cfg.get_game_profile()
 	var content_root := profile.content_root
@@ -177,10 +152,11 @@ func _do_pack(enabled_mods: Array) -> Array:
 			return [false, "Could not stage signature file (error %d)" % sig_error]
 		_emit_log("Sig: empty (no template found)")
 
-	var install_error := FileUtils.install_staged_files([
+	var install_result := FileUtils.install_staged_files_with_result([
 		{"source": staged_pak, "target": pak_path},
 		{"source": staged_sig, "target": sig_path},
-	])
+	], [], true, "pak-backup")
+	var install_error := int(install_result.get("error", ERR_BUG))
 	if install_error != OK:
 		if FileAccess.file_exists(staged_pak):
 			DirAccess.remove_absolute(staged_pak)
@@ -193,7 +169,11 @@ func _do_pack(enabled_mods: Array) -> Array:
 	if fa:
 		pak_size = fa.get_length()
 		fa.close()
-	return [true, "Packed %s.pak + .sig (%s)" % [pak_name, ModDiscovery.fmt_size(pak_size)]]
+	var message := "Packed %s.pak + .sig (%s)" % [pak_name, ModDiscovery.fmt_size(pak_size)]
+	var backup_summary := FileUtils.format_backup_summary(install_result.get("backups", []))
+	if not backup_summary.is_empty():
+		message += ". " + backup_summary
+	return [true, message]
 
 
 ## Core export logic for explicit save-as packing.
@@ -213,9 +193,15 @@ func _do_pack_to_path(mods: Array, output_pak_path: String) -> Array:
 	if mkdir_error != OK:
 		return [false, "Could not create export folder (error %d)" % mkdir_error]
 
-	var tmp_dir := OS.get_temp_dir().path_join("sb_pack_export_%d" % Time.get_ticks_msec())
+	var tmp_result := FileUtils.make_temp_dir("sb_pack_export")
+	if not bool(tmp_result.get("ok", false)):
+		return [false, str(tmp_result.get("error", "Could not create temp directory"))]
+	var tmp_dir := str(tmp_result["path"])
 	var merged := tmp_dir.path_join("merged")
-	DirAccess.make_dir_recursive_absolute(merged)
+	var merge_dir_error := DirAccess.make_dir_recursive_absolute(merged)
+	if merge_dir_error != OK:
+		FileUtils.remove_dir_recursive(tmp_dir)
+		return [false, "Could not create merge directory (error %d)" % merge_dir_error]
 
 	var merge_result := _merge_mods_to_dir(mods, merged)
 	if not bool(merge_result[0]):
@@ -243,10 +229,11 @@ func _do_pack_to_path(mods: Array, output_pak_path: String) -> Array:
 		DirAccess.remove_absolute(staged_pak)
 		return [false, "Could not stage signature file (error %d)" % sig_error]
 
-	var install_error := FileUtils.install_staged_files([
+	var install_result := FileUtils.install_staged_files_with_result([
 		{"source": staged_pak, "target": pak_path},
 		{"source": staged_sig, "target": sig_path},
-	])
+	], [], true, "pak-backup")
+	var install_error := int(install_result.get("error", ERR_BUG))
 	if install_error != OK:
 		for staged in [staged_pak, staged_sig]:
 			if FileAccess.file_exists(staged):
@@ -258,9 +245,13 @@ func _do_pack_to_path(mods: Array, output_pak_path: String) -> Array:
 	if fa:
 		pak_size = fa.get_length()
 		fa.close()
-	return [true, "Exported %s + %s (%s)" % [
+	var message := "Exported %s + %s (%s)" % [
 		pak_path.get_file(), sig_path.get_file(), ModDiscovery.fmt_size(pak_size)
-	]]
+	]
+	var backup_summary := FileUtils.format_backup_summary(install_result.get("backups", []))
+	if not backup_summary.is_empty():
+		message += ". " + backup_summary
+	return [true, message]
 
 
 func _merge_mods_to_dir(mods: Array, merged: String) -> Array:

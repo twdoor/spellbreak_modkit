@@ -292,6 +292,73 @@ func _ensure_default_properties() -> void:
 				(data_arr as Array).append(default_raw.duplicate(true))
 
 
+func validate_for_save() -> Array[Dictionary]:
+	var issues: Array[Dictionary] = []
+	for i in exports.size():
+		var expo := exports[i]
+		_validate_package_index(expo.class_index, "Export %d ClassIndex" % [i + 1], issues)
+		_validate_package_index(expo.super_index, "Export %d SuperIndex" % [i + 1], issues)
+		_validate_package_index(expo.outer_index, "Export %d OuterIndex" % [i + 1], issues)
+		_validate_package_index(expo.template_index, "Export %d TemplateIndex" % [i + 1], issues)
+		for field in _DEPENDENCY_FIELDS:
+			var raw_dependencies: Variant = expo.raw.get(field)
+			if raw_dependencies is Array:
+				for raw_index in raw_dependencies:
+					_validate_package_index(int(raw_index),
+							"Export %d %s" % [i + 1, field], issues)
+		for prop in expo.properties:
+			_validate_property_indices(prop, "Export %d property %s" % [i + 1, prop.prop_name],
+					issues)
+	for i in imports.size():
+		var imp := imports[i]
+		_validate_package_index(imp.outer_index, "Import %d OuterIndex" % [i + 1], issues)
+	return issues
+
+
+func _validate_package_index(index: int, context: String, issues: Array[Dictionary]) -> void:
+	if index == 0:
+		return
+	if index > 0 and index <= exports.size():
+		return
+	if index < 0 and -index <= imports.size():
+		return
+	issues.append({
+		"context": context,
+		"message": "Invalid package index %d (exports: %d, imports: %d)" % [
+			index, exports.size(), imports.size()],
+	})
+
+
+func _validate_property_indices(prop: UAssetProperty, context: String,
+		issues: Array[Dictionary]) -> void:
+	if prop.prop_type == "Object":
+		var value := int(prop.value) if prop.value != null else 0
+		_validate_package_index(value, context, issues)
+	elif prop.value is Dictionary or prop.value is Array:
+		_validate_raw_object_references(prop.value, context, issues)
+	for child in prop.children:
+		_validate_property_indices(child, "%s.%s" % [context, child.prop_name], issues)
+
+
+func _validate_raw_object_references(value: Variant, context: String,
+		issues: Array[Dictionary]) -> void:
+	if value is Dictionary:
+		var dictionary := value as Dictionary
+		var type_name := str(dictionary.get("$type", ""))
+		if "ObjectPropertyData" in type_name \
+				and (dictionary.get("Value") is int or dictionary.get("Value") is float):
+			_validate_package_index(int(dictionary["Value"]), context, issues)
+		for key in dictionary:
+			var child: Variant = dictionary[key]
+			if child is Dictionary or child is Array:
+				_validate_raw_object_references(child, "%s.%s" % [context, str(key)], issues)
+	elif value is Array:
+		for i in value.size():
+			var child: Variant = value[i]
+			if child is Dictionary or child is Array:
+				_validate_raw_object_references(child, "%s[%d]" % [context, i], issues)
+
+
 ## Save back to disk. If loaded from a .uasset binary, writes binary directly — no .json file.
 ## Pass a path to save-as; omit to overwrite the original.
 func save_file(path: String = "") -> Error:
@@ -306,13 +373,27 @@ func save_file(path: String = "") -> Error:
 	var data := _to_dict()
 	_fix_float_to_int(data)
 	var json_string := JSON.stringify(data, "  ")
+	var validation_issues := validate_for_save()
+	if not validation_issues.is_empty():
+		for issue: Dictionary in validation_issues:
+			push_error("UAssetFile: %s: %s" % [
+				str(issue.get("context", "Asset")),
+				str(issue.get("message", "Invalid package reference")),
+			])
+		return ERR_INVALID_DATA
 
 	# Binary save path: write JSON to a temp file, call converter, delete temp
 	if not binary_path.is_empty() and (path.is_empty() or path.ends_with(".uasset")):
 		var out_uasset := target if target.ends_with(".uasset") else binary_path
-		var tmp_json := OS.get_temp_dir().path_join("sb_edit_%d.json" % Time.get_ticks_msec())
+		var tmp_result := FileUtils.make_temp_dir("sb_edit")
+		if not bool(tmp_result.get("ok", false)):
+			push_error("UAssetFile: " + str(tmp_result.get("error", "Could not create temp directory")))
+			return ERR_CANT_CREATE
+		var tmp_dir := str(tmp_result["path"])
+		var tmp_json := tmp_dir.path_join("asset.json")
 		var dll := _get_converter_dll()
 		if dll.is_empty() or not FileAccess.file_exists(dll):
+			FileUtils.remove_dir_recursive(tmp_dir)
 			push_error("UAssetFile: Converter not found")
 			return ERR_FILE_NOT_FOUND
 		var stage_stem := out_uasset.get_base_dir().path_join(
@@ -326,6 +407,8 @@ func save_file(path: String = "") -> Error:
 		while true:
 			var tmp_file := FileAccess.open(tmp_json, FileAccess.WRITE)
 			if not tmp_file:
+				FileUtils.remove_dir_recursive(tmp_dir)
+				_remove_staged_asset_files(stage_stem)
 				push_error("UAssetFile: Cannot write temp file: " + tmp_json)
 				return ERR_FILE_CANT_WRITE
 			tmp_file.store_string(json_string)
@@ -342,7 +425,7 @@ func save_file(path: String = "") -> Error:
 			var missing := _extract_dummy_fname(err_text)
 
 			if missing.is_empty() or retries >= MAX_NAME_RETRIES:
-				DirAccess.remove_absolute(tmp_json)
+				FileUtils.remove_dir_recursive(tmp_dir)
 				_remove_staged_asset_files(stage_stem)
 				push_error("UAssetFile: Converter failed (exit %d): %s" % [exit_code, err_text])
 				return ERR_FILE_CANT_WRITE
@@ -354,7 +437,7 @@ func save_file(path: String = "") -> Error:
 			json_string = JSON.stringify(data2, "  ")
 			retries += 1
 
-		DirAccess.remove_absolute(tmp_json)
+		FileUtils.remove_dir_recursive(tmp_dir)
 		var staged_files: Array = []
 		var removed_targets: Array[String] = []
 		for extension in ["uasset", "uexp", "ubulk", "uptnl"]:

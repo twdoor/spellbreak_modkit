@@ -318,7 +318,9 @@ func _input(event: InputEvent) -> void:
 	# print("%s - %s" % [Engine.get_process_frames(), event])
 	# ----------------------- KEYBOARD -----------------------------
 	if event is InputEventKey:
-		var index: int = event.physical_keycode
+		var index: int = event.physical_keycode if event.physical_keycode != KEY_NONE else event.keycode
+		if index == KEY_NONE:
+			return
 
 		# check if the key already changed value this frame
 		# if so, record the change only, it will be applied at the

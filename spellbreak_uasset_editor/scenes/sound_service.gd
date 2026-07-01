@@ -10,8 +10,7 @@ class_name SoundService extends RefCounted
 signal operation_finished(success: bool, message: String)
 
 var _cfg: ModConfigManager
-var _thread: Thread = null
-var _busy: bool = false
+var _operation := SingleBackgroundOperation.new()
 
 ## OGG Vorbis magic bytes: "OggS"
 static var OGG_MAGIC := PackedByteArray([0x4F, 0x67, 0x67, 0x53])
@@ -26,13 +25,12 @@ func setup(cfg: ModConfigManager) -> SoundService:
 
 
 func is_busy() -> bool:
-	return _busy
+	return _operation.is_busy()
 
 
 ## Block until the worker thread has fully exited. Call from _exit_tree().
 func wait_to_finish() -> void:
-	if _thread and _thread.is_started():
-		_thread.wait_to_finish()
+	_operation.wait_to_finish()
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -51,25 +49,14 @@ func get_audio_data(uasset_path: String) -> PackedByteArray:
 ## Export audio from a SoundWave .uasset to an .ogg file.
 ## Runs in a background thread. Emits operation_finished when done.
 func export_ogg(uasset_path: String, output_ogg: String) -> void:
-	if _busy:
-		return
-	_busy = true
-	if _thread and _thread.is_alive():
-		_thread.wait_to_finish()
-	_thread = Thread.new()
-	_thread.start(_export_thread.bind(uasset_path, output_ogg))
+	_start_operation(_do_export_ogg.bind(uasset_path, output_ogg))
 
 
 ## Inject an OGG file into a SoundWave .uasset, replacing the existing audio.
 ## Runs in a background thread. Emits operation_finished when done.
 func inject_ogg(uasset_path: String, ogg_path: String) -> void:
-	if _busy:
-		return
-	_busy = true
-	if _thread and _thread.is_alive():
-		_thread.wait_to_finish()
-	_thread = Thread.new()
-	_thread.start(_inject_thread.bind(uasset_path, ogg_path))
+	_start_operation(_do_inject_ogg.bind(uasset_path, ogg_path),
+			_invalidate_cache.bind(uasset_path))
 
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
@@ -92,34 +79,35 @@ func get_cached_audio(uasset_path: String) -> String:
 	return ""
 
 
-# ── Thread entry points ──────────────────────────────────────────────────────
+# ── Background operations ────────────────────────────────────────────────────
 
 
-func _export_thread(uasset_path: String, output_ogg: String) -> void:
+func _start_operation(task: Callable, success_callback: Callable = Callable()) -> void:
+	var error := _operation.start(task, _on_operation_done.bind(success_callback))
+	if error == ERR_ALREADY_IN_USE:
+		return
+	if error != OK:
+		operation_finished.emit(false, "Could not start audio operation (error %d)" % error)
+
+
+func _on_operation_done(result: Variant, success_callback: Callable) -> void:
+	if not result is Array or result.size() < 2:
+		operation_finished.emit(false, "Audio operation returned an invalid result")
+		return
+	var success := bool(result[0])
+	if success and success_callback.is_valid():
+		success_callback.call()
+	operation_finished.emit(success, str(result[1]))
+
+
+func _do_export_ogg(uasset_path: String, output_ogg: String) -> Array:
 	var result := _do_extract_audio(uasset_path)
 	if result[0]:
 		var write_error := FileUtils.write_bytes_atomic(output_ogg, result[2])
 		if write_error == OK:
-			call_deferred("_on_operation_done", true, "Exported to %s" % output_ogg.get_file())
-		else:
-			call_deferred("_on_operation_done", false,
-				"Failed to write %s (error %d)" % [output_ogg, write_error])
-	else:
-		call_deferred("_on_operation_done", false, result[1])
-
-
-func _inject_thread(uasset_path: String, ogg_path: String) -> void:
-	var result := _do_inject_ogg(uasset_path, ogg_path)
-	if result[0]:
-		_invalidate_cache(uasset_path)
-	call_deferred("_on_operation_done", result[0], result[1])
-
-
-func _on_operation_done(success: bool, message: String) -> void:
-	_busy = false
-	if _thread:
-		_thread.wait_to_finish()
-	operation_finished.emit(success, message)
+			return [true, "Exported to %s" % output_ogg.get_file()]
+		return [false, "Failed to write %s (error %d)" % [output_ogg, write_error]]
+	return [false, str(result[1])]
 
 
 # ── Core extraction ──────────────────────────────────────────────────────────
@@ -340,14 +328,20 @@ func _do_inject_ogg(uasset_path: String, ogg_path: String) -> Array:
 	result_data.append_array(new_ogg)
 	result_data.append_array(suffix)
 
-	# Write back
-	var write_error := FileUtils.write_bytes_atomic(target_file, result_data)
+	# Write back through the staged installer so the replaced companion remains
+	# available as an explicit restore point after a successful injection.
+	var write_result := FileUtils.write_bytes_atomic_with_result(
+			target_file, result_data, true, "audio-backup")
+	var write_error := int(write_result.get("error", ERR_BUG))
 	if write_error != OK:
 		return [false, "Failed to write %s (error %d)" % [target_file, write_error]]
 
 	var msg := "Injected %s into %s" % [ogg_path.get_file(), target_file.get_file()]
 	if new_ogg.size() != old_size:
 		msg += " (size changed: %d → %d bytes)" % [old_size, new_ogg.size()]
+	var backup_summary := FileUtils.format_backup_summary(write_result.get("backups", []))
+	if not backup_summary.is_empty():
+		msg += ". " + backup_summary
 	return [true, msg]
 
 

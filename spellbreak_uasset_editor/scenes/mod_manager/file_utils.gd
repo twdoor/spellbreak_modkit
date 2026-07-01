@@ -56,59 +56,97 @@ static func is_safe_filename(name: String) -> bool:
 	return true
 
 
+static func make_temp_dir(prefix: String) -> Dictionary:
+	var temp_root := OS.get_temp_dir()
+	var base := "%s_%d_%d" % [prefix, OS.get_process_id(), Time.get_ticks_usec()]
+	for suffix in range(16):
+		var dir_name := base if suffix == 0 else "%s_%d" % [base, suffix]
+		var path := temp_root.path_join(dir_name)
+		if DirAccess.dir_exists_absolute(path):
+			continue
+		var error := DirAccess.make_dir_recursive_absolute(path)
+		if error == OK:
+			return {"ok": true, "path": path}
+		if error != ERR_ALREADY_EXISTS:
+			return {
+				"ok": false,
+				"error": "Could not create temp directory %s (error %d)" % [path, error],
+			}
+	return {
+		"ok": false,
+		"error": "Could not create a unique temp directory in %s" % temp_root,
+	}
+
+
 ## Write a complete file through a sibling temporary file, then replace the target.
 static func write_bytes_atomic(path: String, data: PackedByteArray) -> Error:
+	var result := write_bytes_atomic_with_result(path, data)
+	return result.get("error", ERR_BUG) as Error
+
+
+static func write_bytes_atomic_with_result(path: String, data: PackedByteArray,
+		keep_backup: bool = false, backup_label: String = "bak") -> Dictionary:
 	var parent_error := DirAccess.make_dir_recursive_absolute(path.get_base_dir())
 	if parent_error != OK:
-		return parent_error
+		return {"error": parent_error, "backups": []}
 	var staged := unique_sibling_path(path, "tmp")
 	var output := FileAccess.open(staged, FileAccess.WRITE)
 	if not output:
-		return FileAccess.get_open_error()
+		return {"error": FileAccess.get_open_error(), "backups": []}
 	output.store_buffer(data)
 	output.close()
-	var error := install_staged_files([{"source": staged, "target": path}])
+	var result := install_staged_files_with_result(
+			[{"source": staged, "target": path}], [], keep_backup, backup_label)
+	var error := int(result.get("error", ERR_BUG))
 	if error != OK and FileAccess.file_exists(staged):
 		DirAccess.remove_absolute(staged)
-	return error
+	return result
 
 
 ## Install staged files and remove obsolete targets as one transaction.
 ## Each file entry is {"source": absolute_path, "target": absolute_path}.
 static func install_staged_files(files: Array, removed_targets: Array = []) -> Error:
+	var result := install_staged_files_with_result(files, removed_targets)
+	return result.get("error", ERR_BUG) as Error
+
+
+## Variant of install_staged_files() that can keep the transaction backups after
+## a successful install. Returned backups are {"backup": path, "target": path}.
+static func install_staged_files_with_result(files: Array, removed_targets: Array = [],
+		keep_backups: bool = false, backup_label: String = "bak") -> Dictionary:
 	if files.is_empty():
-		return ERR_INVALID_PARAMETER
+		return {"error": ERR_INVALID_PARAMETER, "backups": []}
 	var install_targets: Dictionary = {}
 	for pair: Dictionary in files:
 		var source: String = pair.get("source", "")
 		var target: String = pair.get("target", "")
 		if source.is_empty() or target.is_empty() or not FileAccess.file_exists(source):
-			return ERR_FILE_NOT_FOUND
+			return {"error": ERR_FILE_NOT_FOUND, "backups": []}
 		if install_targets.has(target):
-			return ERR_ALREADY_EXISTS
+			return {"error": ERR_ALREADY_EXISTS, "backups": []}
 		install_targets[target] = true
 		var parent_error := DirAccess.make_dir_recursive_absolute(target.get_base_dir())
 		if parent_error != OK:
-			return parent_error
+			return {"error": parent_error, "backups": []}
 	for target: String in removed_targets:
 		if target.is_empty():
-			return ERR_INVALID_PARAMETER
+			return {"error": ERR_INVALID_PARAMETER, "backups": []}
 
 	var backups: Array = []
 	var backup_targets: Array[String] = []
 	for pair: Dictionary in files:
-		backup_targets.append(pair["target"])
+		backup_targets.append(str(pair["target"]))
 	for target: String in removed_targets:
 		if not install_targets.has(target) and target not in backup_targets:
 			backup_targets.append(target)
 	for target in backup_targets:
 		if not FileAccess.file_exists(target):
 			continue
-		var backup := unique_sibling_path(target, "bak")
+		var backup := unique_sibling_path(target, backup_label)
 		var backup_error := DirAccess.rename_absolute(target, backup)
 		if backup_error != OK:
 			_restore_backups(backups)
-			return backup_error
+			return {"error": backup_error, "backups": []}
 		backups.append({"backup": backup, "target": target})
 
 	var installed: Array[String] = []
@@ -121,11 +159,54 @@ static func install_staged_files(files: Array, removed_targets: Array = []) -> E
 				if FileAccess.file_exists(installed_target):
 					DirAccess.remove_absolute(installed_target)
 			_restore_backups(backups)
-			return install_error
+			return {"error": install_error, "backups": []}
 		installed.append(target)
 
-	for pair: Dictionary in backups:
-		DirAccess.remove_absolute(pair["backup"])
+	if not keep_backups:
+		for pair: Dictionary in backups:
+			DirAccess.remove_absolute(pair["backup"])
+	return {"error": OK, "backups": backups if keep_backups else []}
+
+
+static func format_backup_summary(backups: Array) -> String:
+	if backups.is_empty():
+		return ""
+	var paths := PackedStringArray()
+	for entry: Dictionary in backups:
+		var backup_path := str(entry.get("backup", ""))
+		if not backup_path.is_empty():
+			paths.append(backup_path)
+	if paths.is_empty():
+		return ""
+	var joined := ", ".join(paths)
+	if paths.size() == 1:
+		return "Backup: %s" % joined
+	return "Backups: %s" % joined
+
+
+static func restore_backup(backup_entry: Dictionary, keep_current_backup: bool = true) -> Error:
+	var backup := str(backup_entry.get("backup", ""))
+	var target := str(backup_entry.get("target", ""))
+	if backup.is_empty() or target.is_empty():
+		return ERR_INVALID_PARAMETER
+	if not FileAccess.file_exists(backup):
+		return ERR_FILE_NOT_FOUND
+
+	var current_backup := ""
+	if FileAccess.file_exists(target):
+		current_backup = unique_sibling_path(target, "pre-restore")
+		var move_error := DirAccess.rename_absolute(target, current_backup)
+		if move_error != OK:
+			return move_error
+
+	var copy_error := copy_file(backup, target)
+	if copy_error != OK:
+		if not current_backup.is_empty() and FileAccess.file_exists(current_backup):
+			DirAccess.rename_absolute(current_backup, target)
+		return copy_error
+
+	if not keep_current_backup and not current_backup.is_empty() and FileAccess.file_exists(current_backup):
+		DirAccess.remove_absolute(current_backup)
 	return OK
 
 

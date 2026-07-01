@@ -50,8 +50,18 @@ const REF_LINE_COLOR := Color(0.5, 0.7, 1.0, 1.0)        # soft-object line edit
 # ── Status colors ────────────────────────────────────────────────────────────
 const STATUS_SUCCESS := Color(0.4, 0.8, 0.4, 1.0)
 const STATUS_ERROR   := Color(0.8, 0.4, 0.4, 1.0)
+const STATUS_WARNING := Color(0.86, 0.68, 0.32, 1.0)
 const STATUS_ACTIVE  := Color(0.3, 0.9, 0.3, 1.0)        # watch-mode active
 const STATUS_IDLE    := Color(0.5, 0.5, 0.5, 1.0)
+const STATUS_WORKING := Color(0.698, 0.737, 0.761, 1.0)
+
+enum StatusKind {
+	IDLE,
+	WORKING,
+	WARNING,
+	SUCCESS,
+	ERROR,
+}
 
 # ── Font sizes ───────────────────────────────────────────────────────────────
 const FONT_HEADER    := 16
@@ -117,6 +127,16 @@ static func apply_theme(win: Window) -> void:
 	win.transparent_bg = false
 	win.extend_to_title = false
 
+
+## Standard file picker setup. Native OS pickers are often application-modal,
+## which prevents checking paths or hovering the app while choosing a file.
+static func configure_file_dialog(dialog: FileDialog) -> void:
+	apply_theme(dialog)
+	dialog.use_native_dialog = false
+	dialog.exclusive = false
+	dialog.transient = false
+	dialog.always_on_top = false
+
 ## Apply "header" styling to a Label.
 static func style_header(label: Label) -> void:
 	label.add_theme_font_size_override("font_size", FONT_HEADER)
@@ -173,6 +193,41 @@ static func style_muted_btn(btn: Button) -> void:
 ## Apply status color to a Label.
 static func style_status(label: Label, is_error: bool) -> void:
 	label.add_theme_color_override("font_color", STATUS_ERROR if is_error else STATUS_IDLE)
+
+static func status_color(kind: int) -> Color:
+	match kind:
+		StatusKind.WORKING:
+			return STATUS_WORKING
+		StatusKind.WARNING:
+			return STATUS_WARNING
+		StatusKind.SUCCESS:
+			return STATUS_SUCCESS
+		StatusKind.ERROR:
+			return STATUS_ERROR
+		_:
+			return STATUS_IDLE
+
+## Apply semantic status color to a Label.
+static func style_status_kind(label: Label, kind: int = StatusKind.IDLE) -> void:
+	label.add_theme_color_override("font_color", status_color(kind))
+
+## Create a standard status Label for inline operation feedback.
+static func make_status_label(text: String = "", kind: int = StatusKind.IDLE,
+		font_size: int = FONT_SMALL) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	label.add_theme_font_size_override("font_size", font_size)
+	style_status_kind(label, kind)
+	return label
+
+## Update a standard status Label.
+static func set_status_label(label: Label, text: String,
+		kind: int = StatusKind.IDLE) -> void:
+	if not is_instance_valid(label):
+		return
+	label.text = text
+	style_status_kind(label, kind)
 
 ## Create a standard toast StyleBoxFlat.
 static func make_toast_style() -> StyleBoxFlat:

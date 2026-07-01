@@ -86,6 +86,18 @@ func _add_info(text: String) -> void:
 	_container.add_child(label)
 
 
+func _add_status_label(text: String = "", kind: int = AppTheme.StatusKind.IDLE,
+		font_size: int = AppTheme.FONT_SMALL) -> Label:
+	var label := AppTheme.make_status_label(text, kind, font_size)
+	_container.add_child(label)
+	return label
+
+
+func _set_status_label(label: Label, text: String,
+		kind: int = AppTheme.StatusKind.IDLE) -> void:
+	AppTheme.set_status_label(label, text, kind)
+
+
 func _add_info_row(key: String, value: String) -> void:
 	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", AppTheme.SPACING_ROW)

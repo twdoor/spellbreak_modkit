@@ -6,6 +6,7 @@ class_name ModManagerPanel extends VBoxContainer
 
 signal open_asset_requested(path: String)
 signal open_settings_requested
+signal open_diagnostics_requested
 signal status_changed(text: String, is_error: bool)
 
 # ── Services ───────────────────────────────────────────────────────────────────
@@ -20,6 +21,7 @@ var _mods:           Array      = []  # from ModDiscovery.scan()
 var _collapsed_mods: Dictionary = {}  # mod_name -> bool  (default true = collapsed)
 var _collapsed_dirs: Dictionary = {}  # "mod_name::rel_dir" -> bool (true = collapsed)
 var _log_lines:      Array      = []
+var _last_pack_operation: Callable
 const _MAX_LOG := 80
 const _WATCH_TOGGLE_COOLDOWN_SEC := 0.25
 const _TEXT_FILE_EXTENSIONS := [
@@ -48,8 +50,8 @@ const _BTN_OPEN_EXTERNAL := 1
 var _mod_tree:  Tree
 var _watch_btn: Button
 var _pack_btn:  Button
-var _log_label: Label
-var _log_scroll: ScrollContainer
+var _operation_feedback: OperationFeedback
+var _operation_feedback_wrapper: MarginContainer
 
 
 func _ready() -> void:
@@ -138,6 +140,14 @@ func _build_ui() -> void:
 	new_mod_btn.pressed.connect(_on_new_mod_pressed)
 	toolbar.add_child(new_mod_btn)
 
+	var diagnostics_btn := Button.new()
+	diagnostics_btn.text = "Health"
+	diagnostics_btn.icon = _icon("StatusWarning")
+	diagnostics_btn.tooltip_text = "Check paths, tools, and writable folders"
+	AppTheme.style_muted_btn(diagnostics_btn)
+	diagnostics_btn.pressed.connect(func() -> void: open_diagnostics_requested.emit())
+	toolbar.add_child(diagnostics_btn)
+
 	var settings_btn := Button.new()
 	settings_btn.text = "Settings"
 	settings_btn.icon = _icon("Tools")
@@ -166,23 +176,19 @@ func _build_ui() -> void:
 
 	add_child(HSeparator.new())
 
-	# ── Log ──
-	_log_scroll = ScrollContainer.new()
-	_log_scroll.custom_minimum_size.y = 100
-	_log_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_log_scroll.visible = false
-
-	var log_margin := MarginContainer.new()
-	log_margin.add_theme_constant_override("margin_left",   AppTheme.MARGIN_LOG_H)
-	log_margin.add_theme_constant_override("margin_right",  AppTheme.MARGIN_LOG_H)
-	log_margin.add_theme_constant_override("margin_top",    AppTheme.MARGIN_LOG_TOP)
-	log_margin.add_theme_constant_override("margin_bottom", AppTheme.MARGIN_LOG_BOTTOM)
-	_log_label = Label.new()
-	AppTheme.style_muted(_log_label)
-	_log_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-	log_margin.add_child(_log_label)
-	_log_scroll.add_child(log_margin)
-	add_child(_log_scroll)
+	# ── Operation feedback ──
+	_operation_feedback_wrapper = MarginContainer.new()
+	_operation_feedback_wrapper.add_theme_constant_override("margin_left", AppTheme.MARGIN_LOG_H)
+	_operation_feedback_wrapper.add_theme_constant_override("margin_right", AppTheme.MARGIN_LOG_H)
+	_operation_feedback_wrapper.add_theme_constant_override("margin_top", AppTheme.MARGIN_LOG_TOP)
+	_operation_feedback_wrapper.add_theme_constant_override("margin_bottom", AppTheme.MARGIN_LOG_BOTTOM)
+	_operation_feedback_wrapper.visible = false
+	_operation_feedback = OperationFeedback.new().setup(_retry_last_pack_operation, true)
+	_operation_feedback.set_auto_dismiss_seconds(8.0)
+	_operation_feedback.dismiss_requested.connect(
+		func() -> void: _operation_feedback_wrapper.visible = false)
+	_operation_feedback_wrapper.add_child(_operation_feedback)
+	add_child(_operation_feedback_wrapper)
 
 
 ## Returns a Godot editor icon by name, or null when EditorIcons aren't in the theme.
@@ -673,10 +679,14 @@ func paste_clipboard() -> void:
 			if delete_error != OK:
 				failed += 1
 				remaining_clipboard.append(entry)
+			else:
+				ModManifest.write_workspace_manifest(entry["mod"] as Dictionary, _cfg)
 		_file_clipboard = remaining_clipboard
 		_clipboard_is_cut = not _file_clipboard.is_empty()
 
 	var msg := "Pasted %d file(s) into %s" % [copied, target_mod["name"]]
+	if copied > 0 and ModManifest.write_workspace_manifest(target_mod, _cfg) != OK:
+		msg += " (manifest update failed)"
 	if failed > 0:
 		msg += " (%d failed)" % failed
 	_set_status(msg, failed > 0 and copied == 0)
@@ -712,7 +722,9 @@ func delete_selection() -> void:
 			for entry: Dictionary in files:
 				var mod_path: String = (entry["mod"] as Dictionary)["path"]
 				if mod_path not in deleted_mod_paths:
-					_delete_file_raw(entry["mod"] as Dictionary, entry["full_path"] as String)
+					var owner_mod := entry["mod"] as Dictionary
+					if _delete_file_raw(owner_mod, entry["full_path"] as String) == OK:
+						ModManifest.write_workspace_manifest(owner_mod, _cfg)
 			_set_status("Deleted %d mod(s)" % mods.size()
 				+ (", %d file(s)" % files.size() if not files.is_empty() else ""))
 			_refresh_mods()
@@ -724,7 +736,9 @@ func delete_selection() -> void:
 
 	# Files only — no confirmation needed.
 	for entry: Dictionary in files:
-		_delete_file_raw(entry["mod"] as Dictionary, entry["full_path"] as String)
+		var mod := entry["mod"] as Dictionary
+		if _delete_file_raw(mod, entry["full_path"] as String) == OK:
+			ModManifest.write_workspace_manifest(mod, _cfg)
 	_set_status("Deleted %d file(s)" % files.size())
 	_refresh_mods()
 
@@ -772,6 +786,7 @@ func _remove_mod_file(mod: Dictionary, full_path: String) -> void:
 	if err != OK:
 		_set_status("Failed to remove: %s" % full_path.get_file(), true)
 		return
+	ModManifest.write_workspace_manifest(mod, _cfg)
 	_set_status("Removed %s from %s" % [full_path.get_file(), mod["name"]])
 	_refresh_mods()
 
@@ -974,7 +989,7 @@ func _open_add_files_dialog(mod: Dictionary, source: Dictionary, preferred_rel_d
 	var dialog := FileDialog.new()
 	dialog.file_mode       = FileDialog.FILE_MODE_OPEN_FILES
 	dialog.access          = FileDialog.ACCESS_FILESYSTEM
-	dialog.use_native_dialog = true
+	AppTheme.configure_file_dialog(dialog)
 	dialog.current_dir     = initial_dir
 	dialog.files_selected.connect(func(paths: PackedStringArray) -> void:
 		_copy_files_to_mod(mod, source_path, paths)
@@ -989,6 +1004,7 @@ func _copy_files_to_mod(mod: Dictionary, source_root: String, file_paths: Packed
 	var mod_path: String = mod["path"]
 	var copied := 0
 	var failed := 0
+	var copied_sources: Array = []
 	for src_file in file_paths:
 		if not FileUtils.is_path_within(src_file, source_root):
 			_set_status("File is outside source root — skipped: %s" % src_file.get_file(), true)
@@ -1002,11 +1018,14 @@ func _copy_files_to_mod(mod: Dictionary, source_root: String, file_paths: Packed
 			continue
 		if FileUtils.copy_file(src_file, dst) == OK:
 			copied += 1
+			copied_sources.append(src_file)
 		else:
 			_set_status("Could not write: %s" % dst.get_file(), true)
 			failed += 1
 	if copied > 0:
 		var msg := "Copied %d file(s) to %s" % [copied, mod["name"]]
+		if ModManifest.record_copied_files(mod, source_root, copied_sources, _cfg) != OK:
+			msg += " (manifest update failed)"
 		if failed > 0:
 			msg += " (%d failed)" % failed
 		_set_status(msg)
@@ -1089,7 +1108,10 @@ func _validate_new_mod_name(mod_name: String) -> String:
 func _create_empty_mod(mod_name: String) -> Error:
 	var mod_path := _cfg.mods_dir.path_join(mod_name)
 	var cr := _cfg.get_game_profile().content_root
-	return DirAccess.make_dir_recursive_absolute(mod_path.path_join(cr + "/Content"))
+	var create_error := DirAccess.make_dir_recursive_absolute(mod_path.path_join(cr + "/Content"))
+	if create_error != OK:
+		return create_error
+	return ModManifest.write_workspace_manifest({"name": mod_name, "path": mod_path}, _cfg)
 
 
 func _open_new_mod_pak_dialog(mod_name: String) -> void:
@@ -1100,7 +1122,7 @@ func _open_new_mod_pak_dialog(mod_name: String) -> void:
 	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
 	dialog.filters = PackedStringArray(["*.pak ; Unreal Pak", "* ; All Files"])
-	dialog.use_native_dialog = true
+	AppTheme.configure_file_dialog(dialog)
 	var paks_dir := _cfg.get_paks_dir()
 	if DirAccess.dir_exists_absolute(paks_dir):
 		dialog.current_dir = paks_dir
@@ -1135,7 +1157,12 @@ func _on_new_mod_from_pak_finished(success: bool, message: String,
 	_pending_new_mod_from_pak = ""
 	_pending_new_mod_from_pak_path = ""
 	if success:
-		_set_status("Created mod from pak: %s" % mod_name)
+		var manifest_error := ModManifest.write_workspace_manifest(
+				{"name": mod_name, "path": mod_path}, _cfg)
+		var status := "Created mod from pak: %s" % mod_name
+		if manifest_error != OK:
+			status += " (manifest update failed)"
+		_set_status(status)
 		_refresh_mods()
 		return
 	var cleanup_path := source_path if not source_path.is_empty() else mod_path
@@ -1162,9 +1189,12 @@ func _pack_mods(mods: Array, empty_message: String) -> void:
 	if _packer.is_packing():
 		_set_status("Already packing", true)
 		return
-	_log_lines.clear()
-	_log_scroll.visible = true
+	_last_pack_operation = func() -> void: _pack_mods(mods, empty_message)
+	_show_operation_feedback("Packing %d mod(s)..." % mods.size())
 	_append_log("Packing %d mod(s)..." % mods.size())
+	_update_manifests_for_mods(mods)
+	if not _run_build_preflight(mods):
+		return
 	_packer.pack(mods)
 
 
@@ -1180,7 +1210,7 @@ func _open_export_mod_dialog(mod: Dictionary) -> void:
 	dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
 	dialog.filters = PackedStringArray(["*.pak ; Unreal Pak"])
-	dialog.use_native_dialog = true
+	AppTheme.configure_file_dialog(dialog)
 	dialog.current_file = "%s.pak" % _safe_export_basename(mod["name"] as String)
 	var paks_dir := _cfg.get_paks_dir()
 	if DirAccess.dir_exists_absolute(paks_dir):
@@ -1197,9 +1227,13 @@ func _open_export_mod_dialog(mod: Dictionary) -> void:
 
 func _export_mod_to_path(mod: Dictionary, pak_path: String) -> void:
 	var mod_name := mod["name"] as String
-	_log_lines.clear()
-	_log_scroll.visible = true
+	_last_pack_operation = func() -> void: _export_mod_to_path(mod, pak_path)
+	_show_operation_feedback("Exporting %s..." % mod_name)
 	_append_log("Exporting %s..." % mod_name)
+	_append_log("Output: %s" % pak_path)
+	_update_manifests_for_mods([mod])
+	if not _run_build_preflight([mod]):
+		return
 	_set_status("Exporting %s..." % mod_name)
 	_packer.export_to_path([mod], pak_path)
 
@@ -1314,10 +1348,11 @@ func _on_pack_started() -> void:
 
 func _on_pack_finished(success: bool, message: String) -> void:
 	_pack_btn.disabled = false
-	_append_log(("✓ " if success else "✗ ") + message)
+	_append_log(("OK: " if success else "ERROR: ") + message)
+	if is_instance_valid(_operation_feedback):
+		_operation_feedback.set_result(success, message)
+		_operation_feedback.set_retry_enabled(not success and _last_pack_operation.is_valid())
 	_set_status(message, not success)
-	await get_tree().process_frame
-	_log_scroll.scroll_vertical = int(_log_scroll.get_v_scroll_bar().max_value)
 
 
 func _on_watch_status_changed(active: bool) -> void:
@@ -1334,6 +1369,9 @@ func _on_watch_status_changed(active: bool) -> void:
 
 
 func _on_watch_pack_triggered(n: int) -> void:
+	_last_pack_operation = Callable()
+	_show_operation_feedback("[watch #%d] Packing..." % n)
+	_append_log("[watch #%d] Packing..." % n)
 	_set_status("[watch #%d] Packing..." % n)
 
 
@@ -1348,13 +1386,69 @@ func _on_config_changed() -> void:
 	_refresh_mods()
 
 
+func _update_manifests_for_mods(mods: Array) -> void:
+	for mod: Dictionary in mods:
+		var error := ModManifest.write_workspace_manifest(mod, _cfg)
+		if error == OK:
+			_append_log("Manifest: %s" % ModManifest.manifest_path(mod))
+		else:
+			_append_log("Manifest failed for %s (error %d)" % [mod.get("name", "mod"), error])
+
+
+func _run_build_preflight(mods: Array) -> bool:
+	var issues: Array[Dictionary] = []
+	for mod: Dictionary in mods:
+		issues.append_array(ModPreflight.validate_mod_for_pack(mod, _cfg))
+	var errors := ModPreflight.error_count(issues)
+	var warnings := ModPreflight.warning_count(issues)
+	for issue in issues:
+		_append_log("Preflight %s [%s]: %s" % [
+			ModPreflight.severity_text(int(issue.get("severity", ModPreflight.Severity.WARNING))),
+			str(issue.get("mod", "mod")),
+			str(issue.get("message", "")),
+		])
+	if errors > 0:
+		var message := "Preflight failed: %d error(s), %d warning(s)" % [errors, warnings]
+		if is_instance_valid(_operation_feedback):
+			_operation_feedback.set_result(false, message)
+		_set_status(message, true)
+		return false
+	if warnings > 0:
+		_append_log("Preflight: %d warning(s), continuing" % warnings)
+	else:
+		_append_log("Preflight: OK")
+	return true
+
+
 # ── Log ────────────────────────────────────────────────────────────────────────
 
 func _append_log(line: String) -> void:
 	_log_lines.append(line)
 	if _log_lines.size() > _MAX_LOG:
 		_log_lines = _log_lines.slice(_log_lines.size() - _MAX_LOG)
-	_log_label.text = "\n".join(_log_lines)
+		if is_instance_valid(_operation_feedback):
+			_operation_feedback.clear_log()
+			for existing_line in _log_lines:
+				_operation_feedback.add_line(str(existing_line))
+		return
+	if is_instance_valid(_operation_feedback):
+		_operation_feedback.add_line(line)
+
+
+func _show_operation_feedback(status_text: String) -> void:
+	_log_lines.clear()
+	if is_instance_valid(_operation_feedback_wrapper):
+		_operation_feedback_wrapper.visible = true
+	if is_instance_valid(_operation_feedback):
+		_operation_feedback.clear_log()
+		_operation_feedback.set_expanded(false)
+		_operation_feedback.set_busy(status_text)
+		_operation_feedback.set_retry_enabled(false)
+
+
+func _retry_last_pack_operation() -> void:
+	if _last_pack_operation.is_valid():
+		_last_pack_operation.call()
 
 
 func _set_status(text: String, error: bool = false) -> void:

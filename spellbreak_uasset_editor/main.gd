@@ -59,10 +59,11 @@ const _STARTUP_OPEN_EXTENSIONS := ["uasset", "json"]
 func _ready() -> void:
 	_background_jobs = BackgroundJobRunner.new()
 	_configure_shortcut_actions()
-	_keymap_config = KeymapSettingsTab.load_saved_config()
+	_keymap_config = KeymapSettingsTab.load_saved_config(mapping)
 	GUIDE.enable_mapping_context(mapping)
 	GUIDE.set_remapping_config(_keymap_config)
 
+	AppTheme.configure_file_dialog(open_file_popup)
 	open_file_popup.file_selected.connect(_on_file_selected)
 	open_file_popup.files_selected.connect(_on_files_selected)
 
@@ -249,6 +250,24 @@ func _setup_mod_tab() -> void:
 	)
 	keymap.status_changed.connect(_on_mod_status_changed)
 
+	var diagnostics := DiagnosticsTab.new().setup(panel.get_config())
+	tab_cont.add_child(diagnostics)
+	tab_cont.move_child(diagnostics, 3)
+	tab_cont.set_tab_title(3, "Diagnostics")
+	tab_cont.set_tab_hidden(3, true)
+
+	panel.open_diagnostics_requested.connect(func() -> void:
+		diagnostics.refresh()
+		tab_cont.set_tab_hidden(3, false)
+		tab_cont.current_tab = 3
+	)
+
+	diagnostics.close_requested.connect(func() -> void:
+		tab_cont.set_tab_hidden(3, true)
+		tab_cont.current_tab = 1 if not tab_cont.is_tab_hidden(1) else 0
+	)
+	diagnostics.status_changed.connect(_on_mod_status_changed)
+
 
 func _on_mod_status_changed(text: String, is_error: bool) -> void:
 	_status_label.text = text
@@ -328,9 +347,8 @@ func _build_compare_dialog() -> void:
 		"*.uasset ; Unreal Asset (binary)",
 		"*.json ; UAssetAPI JSON",
 	])
-	_compare_file_popup.use_native_dialog = true
 	_compare_file_popup.file_selected.connect(_on_compare_file_selected)
-	AppTheme.apply_theme(_compare_file_popup)
+	AppTheme.configure_file_dialog(_compare_file_popup)
 	add_child(_compare_file_popup)
 
 

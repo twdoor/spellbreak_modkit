@@ -10,7 +10,8 @@ var _preview_rect: TextureRect
 var _loading_label: Label
 var _export_btn: Button
 var _import_btn: Button
-var _status_label: Label
+var _feedback: OperationFeedback
+var _last_operation: Callable
 var _preview_job_id := -1
 
 
@@ -47,10 +48,8 @@ func _build_impl() -> void:
 		var preview_container := VBoxContainer.new()
 		preview_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-		_loading_label = Label.new()
-		_loading_label.text = "Loading preview..."
-		AppTheme.style_muted(_loading_label)
-		_loading_label.add_theme_font_size_override("font_size", AppTheme.FONT_STATUS)
+		_loading_label = AppTheme.make_status_label(
+			"Loading preview...", AppTheme.StatusKind.WORKING, AppTheme.FONT_STATUS)
 		preview_container.add_child(_loading_label)
 
 		_preview_rect = TextureRect.new()
@@ -97,12 +96,8 @@ func _build_impl() -> void:
 		_import_btn.disabled = true
 		_import_btn.tooltip_text = "ImageMagick (magick) not found in PATH"
 
-	# Status label for operation feedback
-	_status_label = Label.new()
-	_status_label.add_theme_font_size_override("font_size", AppTheme.FONT_SMALL)
-	AppTheme.style_muted(_status_label)
-	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-	_container.add_child(_status_label)
+	_feedback = OperationFeedback.new().setup(_retry_last_operation)
+	_container.add_child(_feedback)
 
 	_add_separator()
 
@@ -156,7 +151,8 @@ func _load_preview_async(tex_service: TextureService) -> void:
 	var asset := _ctx.get_asset()
 	var uasset_path := asset.binary_path if not asset.binary_path.is_empty() else asset.file_path
 	if not uasset_path.ends_with(".uasset"):
-		_loading_label.text = "Preview requires a .uasset file (not JSON)"
+		_set_status_label(_loading_label, "Preview requires a .uasset file (not JSON)",
+			AppTheme.StatusKind.ERROR)
 		return
 
 	# Check cache first
@@ -168,7 +164,8 @@ func _load_preview_async(tex_service: TextureService) -> void:
 			return
 
 	if _ctx.background_jobs == null:
-		_loading_label.text = "Background job service is unavailable"
+		_set_status_label(_loading_label, "Background job service is unavailable",
+			AppTheme.StatusKind.ERROR)
 		return
 	_preview_job_id = _ctx.background_jobs.run(
 		func() -> Image: return tex_service.get_preview_image(uasset_path),
@@ -180,9 +177,7 @@ func _on_preview_loaded(img: Image) -> void:
 	if img:
 		_show_preview(img)
 	else:
-		if is_instance_valid(_loading_label):
-			_loading_label.text = "Failed to load preview"
-			_loading_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+		_set_status_label(_loading_label, "Failed to load preview", AppTheme.StatusKind.ERROR)
 
 
 func dispose() -> void:
@@ -203,7 +198,8 @@ func _show_preview(img: Image) -> void:
 	var display_w := minf(max_w, img.get_width())
 	_preview_rect.custom_minimum_size = Vector2(display_w, display_w * aspect)
 	if is_instance_valid(_loading_label):
-		_loading_label.text = "%dx%d" % [img.get_width(), img.get_height()]
+		_set_status_label(_loading_label, "%dx%d" % [img.get_width(), img.get_height()],
+			AppTheme.StatusKind.SUCCESS)
 
 
 # ── Export / Import actions ───────────────────────────────────────────────────
@@ -222,28 +218,32 @@ func _on_export_pressed() -> void:
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
 	dialog.filters = PackedStringArray(["*.png ; PNG Image"])
 	dialog.current_file = uasset_path.get_file().get_basename() + ".png"
-	dialog.use_native_dialog = true
+	AppTheme.configure_file_dialog(dialog)
 	dialog.file_selected.connect(func(path: String) -> void:
-		_status_label.text = "Exporting..."
-		_export_btn.disabled = true
-		_import_btn.disabled = true
-		tex_service.operation_finished.connect(_on_export_finished, CONNECT_ONE_SHOT)
-		tex_service.export_png(uasset_path, path)
+		_run_texture_export(uasset_path, path)
 		dialog.queue_free()
 	)
 	_container.get_tree().root.add_child(dialog)
 	dialog.popup_centered(Vector2i(800, 600))
 
 
+func _run_texture_export(uasset_path: String, output_path: String) -> void:
+	var tex_service := _ctx.texture_service
+	if tex_service == null or tex_service.is_busy():
+		return
+	_last_operation = func() -> void: _run_texture_export(uasset_path, output_path)
+	_start_feedback("Texture export", [
+		["Source", uasset_path],
+		["Output", output_path],
+	])
+	_set_action_buttons_disabled(true)
+	tex_service.operation_finished.connect(_on_export_finished, CONNECT_ONE_SHOT)
+	tex_service.export_png(uasset_path, output_path)
+
+
 func _on_export_finished(success: bool, message: String) -> void:
-	if is_instance_valid(_status_label):
-		_status_label.text = message
-		_status_label.add_theme_color_override("font_color",
-			AppTheme.STATUS_SUCCESS if success else AppTheme.STATUS_ERROR)
-	if is_instance_valid(_export_btn):
-		_export_btn.disabled = false
-	if is_instance_valid(_import_btn):
-		_import_btn.disabled = false
+	_finish_feedback(success, message)
+	_set_action_buttons_disabled(false)
 
 
 func _on_import_pressed() -> void:
@@ -251,8 +251,8 @@ func _on_import_pressed() -> void:
 	if tex_service == null or tex_service.is_busy():
 		return
 	if _ctx.is_dirty():
-		_status_label.text = "Save asset changes before importing a texture"
-		_status_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+		_start_feedback("Texture import blocked", [])
+		_finish_feedback(false, "Save asset changes before importing a texture", false)
 		return
 
 	var asset := _ctx.get_asset()
@@ -263,32 +263,69 @@ func _on_import_pressed() -> void:
 	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
 	dialog.filters = PackedStringArray(["*.png ; PNG Image"])
-	dialog.use_native_dialog = true
+	AppTheme.configure_file_dialog(dialog)
 	dialog.file_selected.connect(func(path: String) -> void:
-		_status_label.text = "Injecting..."
-		_export_btn.disabled = true
-		_import_btn.disabled = true
-		tex_service.operation_finished.connect(_on_import_finished, CONNECT_ONE_SHOT)
-		tex_service.inject_png(uasset_path, path, output_dir)
+		_run_texture_import(uasset_path, path, output_dir)
 		dialog.queue_free()
 	)
 	_container.get_tree().root.add_child(dialog)
 	dialog.popup_centered(Vector2i(800, 600))
 
 
+func _run_texture_import(uasset_path: String, png_path: String, output_dir: String) -> void:
+	var tex_service := _ctx.texture_service
+	if tex_service == null or tex_service.is_busy():
+		return
+	_last_operation = func() -> void: _run_texture_import(uasset_path, png_path, output_dir)
+	_start_feedback("Texture import", [
+		["Target", uasset_path],
+		["Input", png_path],
+		["Output folder", output_dir],
+	])
+	_set_action_buttons_disabled(true)
+	tex_service.operation_finished.connect(_on_import_finished, CONNECT_ONE_SHOT)
+	tex_service.inject_png(uasset_path, png_path, output_dir)
+
+
 func _on_import_finished(success: bool, message: String) -> void:
-	if is_instance_valid(_status_label):
-		_status_label.text = message
-		_status_label.add_theme_color_override("font_color",
-			AppTheme.STATUS_SUCCESS if success else AppTheme.STATUS_ERROR)
-	if is_instance_valid(_export_btn):
-		_export_btn.disabled = false
-	if is_instance_valid(_import_btn):
-		_import_btn.disabled = false
+	_finish_feedback(success, message)
+	_set_action_buttons_disabled(false)
 	# Reload preview after successful import
 	if success:
 		if _ctx.reload_asset.is_valid():
 			var reloaded := bool(_ctx.reload_asset.call())
-			if not reloaded and is_instance_valid(_status_label):
-				_status_label.text = message + " Reload failed; close and reopen before saving."
-				_status_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+			if not reloaded:
+				_finish_feedback(false,
+					message + " Reload failed; close and reopen before saving.", false)
+
+
+func _retry_last_operation() -> void:
+	if _last_operation.is_valid():
+		_last_operation.call()
+
+
+func _start_feedback(title: String, paths: Array) -> void:
+	if not is_instance_valid(_feedback):
+		return
+	_feedback.clear_log()
+	_feedback.set_busy("%s..." % title)
+	_feedback.add_line(title)
+	for pair in paths:
+		if pair is Array and pair.size() >= 2:
+			_feedback.add_path(str(pair[0]), str(pair[1]))
+
+
+func _finish_feedback(success: bool, message: String, retryable: bool = true) -> void:
+	if not is_instance_valid(_feedback):
+		return
+	_feedback.add_line("Result: %s" % message)
+	_feedback.set_result(success, message)
+	if not retryable:
+		_feedback.set_retry_enabled(false)
+
+
+func _set_action_buttons_disabled(disabled: bool) -> void:
+	if is_instance_valid(_export_btn):
+		_export_btn.disabled = disabled
+	if is_instance_valid(_import_btn):
+		_import_btn.disabled = disabled

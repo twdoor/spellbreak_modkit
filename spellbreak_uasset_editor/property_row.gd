@@ -531,7 +531,7 @@ static func _on_change(row: PropertyRow, new_value: Variant) -> void:
 	row.value_changed.emit(row.property, old_state, row.property.capture_state())
 
 
-## Creates a LineEdit with a filter-as-you-type tag autocomplete popup.
+## Creates a LineEdit with a filter-as-you-type tag autocomplete dropdown.
 ## on_change is called with the selected/submitted tag string.
 ## tag_list: the array of known Spellbreak tags to search against.
 static func _make_tag_autocomplete(current: String, on_change: Callable, tag_list: Array = []) -> Control:
@@ -539,50 +539,63 @@ static func _make_tag_autocomplete(current: String, on_change: Callable, tag_lis
 	line.text = current
 	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	var popup := PopupMenu.new()
-	popup.max_size = Vector2i(500, 280)
-	line.add_child(popup)
+	var dropdown := CompletionDropdown.make()
+	var dropdown_list := VBoxContainer.new()
+	dropdown.add_child(dropdown_list)
+	line.add_child(dropdown)
+
+	var committed := {"value": current}
+	var commit := func(value: String) -> void:
+		if value == committed["value"]:
+			return
+		committed["value"] = value
+		on_change.call(value)
 
 	line.text_changed.connect(func(t: String):
-		popup.clear()
+		CompletionDropdown.clear(dropdown_list)
 		if t.length() < 2:
-			popup.hide()
+			dropdown.hide()
 			return
 		var t_lower := t.to_lower()
 		var added := 0
 		for tag in tag_list:
 			if (tag as String).to_lower().contains(t_lower):
-				popup.add_item(tag)
+				_add_completion_dropdown_item(dropdown_list, line, dropdown, str(tag),
+					func(value: String) -> void:
+						commit.call(value))
 				added += 1
 				if added >= 20:
 					break
 		if added > 0:
-			var gpos := line.get_screen_position() + Vector2(0, line.size.y)
-			popup.position = Vector2i(int(gpos.x), int(gpos.y))
-			popup.reset_size()
-			popup.show()
+			CompletionDropdown.show(dropdown, line, 280.0)
 		else:
-			popup.hide()
-	)
-
-	popup.index_pressed.connect(func(idx: int):
-		var tag := popup.get_item_text(idx)
-		line.text = tag
-		popup.hide()
-		on_change.call(tag)
+			dropdown.hide()
 	)
 
 	line.focus_exited.connect(func():
-		if not popup.visible:
-			on_change.call(line.text)
+		dropdown.hide.call_deferred()
+		commit.call(line.text)
 	)
 
 	line.text_submitted.connect(func(t: String):
-		popup.hide()
-		on_change.call(t)
+		dropdown.hide()
+		commit.call(t)
 	)
 
 	return line
+
+
+static func _add_completion_dropdown_item(dropdown_list: VBoxContainer, line_edit: LineEdit,
+		dropdown: Control, text: String, on_selected: Callable) -> void:
+	CompletionDropdown.add_button(dropdown_list, text, func() -> void:
+		line_edit.set_block_signals(true)
+		line_edit.text = text
+		line_edit.set_block_signals(false)
+		line_edit.caret_column = text.length()
+		dropdown.hide()
+		line_edit.grab_focus.call_deferred()
+		on_selected.call(text)
+	)
 
 
 ## Creates an editable list of gameplay tags for a GameplayTagContainer property.
@@ -658,7 +671,7 @@ static func _attach_constant_helper(spin: SpinBox, constants: Dictionary, is_int
 
 	# Autocomplete dropdown for constant names. This is an in-tree Control, not a
 	# PopupMenu window, so it cannot take keyboard focus away from the LineEdit.
-	var dropdown := _make_constant_dropdown()
+	var dropdown := CompletionDropdown.make()
 	var dropdown_list := VBoxContainer.new()
 	dropdown.add_child(dropdown_list)
 	line_edit.add_child(dropdown)
@@ -670,7 +683,7 @@ static func _attach_constant_helper(spin: SpinBox, constants: Dictionary, is_int
 		if not line_edit.has_focus():
 			return
 		var token := _get_token_at_caret(text, line_edit.caret_column)
-		_clear_constant_dropdown(dropdown_list)
+		CompletionDropdown.clear(dropdown_list)
 		if token.length() < 1 or token.is_valid_float():
 			dropdown.hide()
 			return
@@ -678,12 +691,13 @@ static func _attach_constant_helper(spin: SpinBox, constants: Dictionary, is_int
 		var added := 0
 		for key in constants:
 			if (key as String).to_lower().contains(t_lower):
-				_add_constant_dropdown_item(dropdown_list, line_edit, dropdown, str(key), constants[key])
+				_add_constant_dropdown_item(dropdown_list, line_edit, dropdown, str(key),
+						constants[key])
 				added += 1
 				if added >= 15:
 					break
 		if added > 0:
-			_show_constant_dropdown(dropdown, line_edit)
+			CompletionDropdown.show(dropdown, line_edit)
 		else:
 			dropdown.hide()
 	)
@@ -703,56 +717,11 @@ static func _attach_constant_helper(spin: SpinBox, constants: Dictionary, is_int
 	)
 
 
-static func _make_constant_dropdown() -> PanelContainer:
-	var dropdown := PanelContainer.new()
-	dropdown.visible = false
-	dropdown.top_level = true
-	dropdown.z_index = 100
-	dropdown.focus_mode = Control.FOCUS_NONE
-	dropdown.mouse_filter = Control.MOUSE_FILTER_STOP
-	var style := StyleBoxFlat.new()
-	style.bg_color = AppTheme.BG_PANEL
-	style.corner_radius_top_left = AppTheme.CORNER_RADIUS
-	style.corner_radius_top_right = AppTheme.CORNER_RADIUS
-	style.corner_radius_bottom_left = AppTheme.CORNER_RADIUS
-	style.corner_radius_bottom_right = AppTheme.CORNER_RADIUS
-	style.content_margin_left = 0
-	style.content_margin_right = 0
-	style.content_margin_top = 2
-	style.content_margin_bottom = 2
-	dropdown.add_theme_stylebox_override("panel", style)
-	return dropdown
-
-
-static func _clear_constant_dropdown(dropdown_list: Container) -> void:
-	for child in dropdown_list.get_children():
-		dropdown_list.remove_child(child)
-		child.queue_free()
-
-
 static func _add_constant_dropdown_item(dropdown_list: VBoxContainer, line_edit: LineEdit,
 		dropdown: Control, const_name: String, value: Variant) -> void:
-	var item := Button.new()
-	item.text = "%s  =  %s" % [const_name, value]
-	item.flat = true
-	item.focus_mode = Control.FOCUS_NONE
-	item.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	item.clip_text = true
-	item.add_theme_color_override("font_color", AppTheme.TEXT_PRIMARY)
-	item.add_theme_color_override("font_hover_color", AppTheme.TEXT_PRIMARY)
-	item.pressed.connect(func():
+	CompletionDropdown.add_button(dropdown_list, "%s  =  %s" % [const_name, value], func() -> void:
 		_insert_constant_name(line_edit, dropdown, const_name)
 	)
-	dropdown_list.add_child(item)
-
-
-static func _show_constant_dropdown(dropdown: Control, source: Control) -> void:
-	var source_rect := source.get_global_rect()
-	dropdown.global_position = source_rect.position + Vector2(0, source_rect.size.y)
-	dropdown.custom_minimum_size.x = maxf(source_rect.size.x, 260.0)
-	dropdown.reset_size()
-	dropdown.show()
-	source.grab_focus.call_deferred()
 
 
 static func _insert_constant_name(line_edit: LineEdit, dropdown: Control, const_name: String) -> void:

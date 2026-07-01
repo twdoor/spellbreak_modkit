@@ -36,9 +36,15 @@ func _run() -> void:
 	_test_background_job_shutdown()
 	_test_file_watcher_rapid_toggle()
 	_test_atomic_file_install()
+	_test_mod_manifest()
+	_test_mod_preflight()
+	_test_uasset_save_validation()
 	_test_path_safety()
 	_test_process_arguments()
 	_test_update_version_compare()
+	_test_keymap_config_rebinds_loaded_resources()
+	_test_keymap_migration_user_binding_wins_new_defaults()
+	_test_guide_remap_rebuilds_default_active_mapping()
 	_test_base_source_generation()
 	_test_packing_transaction()
 
@@ -122,6 +128,71 @@ func _test_update_version_compare() -> void:
 		"update checker ignores older releases")
 	_expect(UpdateChecker.normalize_version("v0.10.0") == "0.10.0",
 		"update checker normalizes v-prefixed tags")
+
+
+func _test_keymap_config_rebinds_loaded_resources() -> void:
+	var current_mapping := _load_test_mapping_context()
+	var loaded_mapping := _load_test_mapping_context()
+	var loaded_open := _find_test_action(loaded_mapping, "res://guide/open.tres")
+	var current_open := _find_test_action(current_mapping, "res://guide/open.tres")
+	var input := _make_key_input(KEY_L, true)
+
+	var saved_config := GUIDERemappingConfig.new()
+	saved_config._bind(loaded_mapping, loaded_open, input, 0)
+
+	var normalized := KeymapSettingsTab.normalize_config_for_mapping(saved_config, current_mapping)
+	var rebound := normalized._get_bound_input_or_null(current_mapping, current_open, 0)
+	_expect(rebound != null and rebound.is_same_as(input),
+		"keymap migration rebinds saved resource keys to the active mapping")
+
+
+func _test_keymap_migration_user_binding_wins_new_defaults() -> void:
+	var mapping := _load_test_mapping_context()
+	var open_action := _find_test_action(mapping, "res://guide/open.tres")
+	var compare_action := _find_test_action(mapping, "res://guide/compare.tres")
+	var input := _make_key_input(KEY_K, true)
+
+	var saved_config := GUIDERemappingConfig.new()
+	saved_config._bind(mapping, open_action, input, 0)
+
+	var normalized := KeymapSettingsTab.normalize_config_for_mapping(saved_config, mapping)
+	var open_input := normalized._get_bound_input_or_null(mapping, open_action, 0)
+	_expect(open_input != null and open_input.is_same_as(input),
+		"keymap migration preserves the user's explicit binding")
+	_expect(normalized._has(mapping, compare_action, 0)
+			and normalized._get_bound_input_or_null(mapping, compare_action, 0) == null,
+		"keymap migration clears a new default shortcut that collides with a saved user binding")
+
+
+func _test_guide_remap_rebuilds_default_active_mapping() -> void:
+	var guide_script: Script = load("res://addons/guide/guide.gd")
+	var reset_script: Script = load("res://addons/guide/guide_reset.gd")
+	var guide = guide_script.new()
+	guide._input_state = GUIDEInputState.new()
+	guide._input_state._reset()
+	guide._reset_node = reset_script.new()
+	guide._reset_node.guide = guide
+
+	var mapping := _load_test_mapping_context()
+	var open_action := _find_test_action(mapping, "res://guide/open.tres")
+	var save_action := _find_test_action(mapping, "res://guide/save.tres")
+	var open_default := _default_input_for_action(mapping, open_action, 0)
+
+	guide.enable_mapping_context(mapping)
+
+	var remap := GUIDERemappingConfig.new()
+	remap._bind(mapping, open_action, null, 0)
+	remap._bind(mapping, save_action, open_default, 0)
+	guide.set_remapping_config(remap)
+
+	var active_open := _active_input_for_action(guide, open_action, 0)
+	var active_save := _active_input_for_action(guide, save_action, 0)
+	_expect(active_open == null,
+		"GUIDE remapping can explicitly unbind the first default action slot")
+	_expect(active_save != null and active_save.is_same_as(open_default),
+		"GUIDE remapping applies a new binding over an existing default action mapping")
+
+	guide.free()
 
 
 func _test_swap_and_snapshot_restore() -> void:
@@ -819,7 +890,96 @@ func _test_atomic_file_install() -> void:
 	_expect(FileAccess.get_file_as_string(target) == "new", "atomic file install replaces content")
 	_expect(not FileAccess.file_exists(staged), "atomic file install consumes staged file")
 	_expect(not FileAccess.file_exists(obsolete), "atomic file install removes obsolete companions")
+
+	staged = root.path_join("staged-again.bin")
+	FileUtils.write_bytes_atomic(staged, "newer".to_utf8_buffer())
+	var result := FileUtils.install_staged_files_with_result(
+		[{"source": staged, "target": target}], [], true, "restore")
+	_expect(int(result.get("error", ERR_BUG)) == OK,
+		"atomic file install can keep a persistent restore backup")
+	var backups: Array = result.get("backups", [])
+	_expect(backups.size() == 1 and FileAccess.file_exists(str(backups[0]["backup"])),
+		"persistent restore backup is kept after successful install")
+	if backups.size() == 1:
+		_expect(FileAccess.get_file_as_string(str(backups[0]["backup"])) == "new",
+			"persistent restore backup contains the replaced content")
+	_expect(FileAccess.get_file_as_string(target) == "newer",
+		"persistent-backup install still replaces content")
+	if backups.size() == 1:
+		var restore_error := FileUtils.restore_backup(backups[0])
+		_expect(restore_error == OK and FileAccess.get_file_as_string(target) == "new",
+			"persistent restore backup can restore replaced content")
 	FileUtils.remove_dir_recursive(root)
+
+
+func _test_mod_manifest() -> void:
+	var root := OS.get_temp_dir().path_join("sb_test_manifest_%d" % Time.get_ticks_usec())
+	var source_root := root.path_join("Source")
+	var mod_path := root.path_join("Mods/TestMod")
+	var source_file := source_root.path_join("g3/Content/Items/Test.uasset")
+	var target_file := mod_path.path_join("g3/Content/Items/Test.uasset")
+	var manual_file := mod_path.path_join("g3/Content/Items/Manual.uexp")
+	FileUtils.write_bytes_atomic(source_file, "asset".to_utf8_buffer())
+	FileUtils.copy_file(source_file, target_file)
+	FileUtils.write_bytes_atomic(manual_file, "manual".to_utf8_buffer())
+
+	var config := ModConfigManager.new()
+	config.mods_dir = root.path_join("Mods")
+	config.sources = [{"name": "Source", "path": source_root}]
+	var mod := {"name": "TestMod", "path": mod_path}
+	var error := ModManifest.record_copied_files(mod, source_root, [source_file], config)
+	_expect(error == OK and FileAccess.file_exists(ModManifest.manifest_path(mod)),
+		"mod manifest is written after copied files are recorded")
+
+	var manifest: Dictionary = JSON.parse_string(
+			FileAccess.get_file_as_string(ModManifest.manifest_path(mod)))
+	var by_target := {}
+	for entry: Dictionary in manifest.get("files", []):
+		by_target[str(entry.get("target", ""))] = entry
+	_expect(by_target.has("g3/Content/Items/Test.uasset"),
+		"mod manifest records copied target path")
+	_expect(by_target.has("g3/Content/Items/Manual.uexp"),
+		"mod manifest snapshots manually present target path")
+	var copied_entry: Dictionary = by_target.get("g3/Content/Items/Test.uasset", {})
+	var source_info: Dictionary = copied_entry.get("source", {})
+	_expect(str(source_info.get("path", "")) == source_file,
+		"mod manifest preserves copied file source path")
+	_expect(str(manifest.get("build", {}).get("content_root", "")) == "g3",
+		"mod manifest records build content root")
+	FileUtils.remove_dir_recursive(root)
+
+
+func _test_mod_preflight() -> void:
+	var root := OS.get_temp_dir().path_join("sb_test_preflight_%d" % Time.get_ticks_usec())
+	var mod_path := root.path_join("Mods/TestMod")
+	FileUtils.write_bytes_atomic(mod_path.path_join("g3/Content/Good.uasset"),
+			"asset".to_utf8_buffer())
+	FileUtils.write_bytes_atomic(mod_path.path_join("g3/Content/Good.uexp"),
+			"companion".to_utf8_buffer())
+	FileUtils.write_bytes_atomic(mod_path.path_join("g3/Content/Orphan.uexp"),
+			"orphan".to_utf8_buffer())
+	FileUtils.write_bytes_atomic(mod_path.path_join("g3/Content/Loose.bin"),
+			"loose".to_utf8_buffer())
+
+	var config := ModConfigManager.new()
+	config.mods_dir = root.path_join("Mods")
+	var issues := ModPreflight.validate_mod_for_pack({"name": "TestMod", "path": mod_path}, config)
+	_expect(ModPreflight.error_count(issues) >= 1,
+		"mod preflight reports orphan package companion as an error")
+	_expect(ModPreflight.warning_count(issues) >= 1,
+		"mod preflight reports unusual loose files as warnings")
+	FileUtils.remove_dir_recursive(root)
+
+
+func _test_uasset_save_validation() -> void:
+	var asset := _make_asset()
+	_expect(asset.validate_for_save().is_empty(),
+		"uasset save validation accepts valid package indices")
+	asset.exports[0].class_index = -99
+	var issues := asset.validate_for_save()
+	_expect(not issues.is_empty()
+			and "Invalid package index" in str(issues[0].get("message", "")),
+		"uasset save validation rejects invalid package indices")
 
 
 func _test_path_safety() -> void:
@@ -953,6 +1113,11 @@ func _test_packing_transaction() -> void:
 	_expect(result[0] and FileAccess.file_exists(pak_path), "u4pak integration produces a pak")
 	FileUtils.write_bytes_atomic(paks_dir.path_join("Game.sig"), "sig-template".to_utf8_buffer())
 
+	FileUtils.write_bytes_atomic(mod_dir.path_join("g3/Content/example.bin"), "payload2".to_utf8_buffer())
+	var second_result := packer._do_pack([{"name": "TestMod", "path": mod_dir}])
+	_expect(second_result[0] and "Backup" in str(second_result[1]),
+		"repacking an existing installed pak reports retained backup paths")
+
 	var export_path := root.path_join("exports/TestMod.pak")
 	var export_result := packer._do_pack_to_path([{"name": "TestMod", "path": mod_dir}], export_path)
 	_expect(export_result[0]
@@ -975,6 +1140,55 @@ func _test_packing_transaction() -> void:
 			"failed packing preserves the previously installed pak")
 
 	FileUtils.remove_dir_recursive(root)
+
+
+func _load_test_mapping_context() -> GUIDEMappingContext:
+	var mapping := ResourceLoader.load("res://guide/mapping.tres", "",
+		ResourceLoader.CACHE_MODE_IGNORE) as GUIDEMappingContext
+	mapping.display_name = "Editor"
+	for action_mapping: GUIDEActionMapping in mapping.mappings:
+		var action := action_mapping.action
+		action.name = action.resource_path.get_file().get_basename()
+		action.display_name = action.name.capitalize()
+		action.display_category = "Test"
+		action.is_remappable = not action.resource_path.ends_with("/shift.tres") \
+			and not action.resource_path.ends_with("/ctrl.tres")
+	return mapping
+
+
+func _find_test_action(mapping: GUIDEMappingContext, resource_path: String) -> GUIDEAction:
+	for action_mapping: GUIDEActionMapping in mapping.mappings:
+		if action_mapping.action.resource_path == resource_path:
+			return action_mapping.action
+	_expect(false, "test mapping action exists: " + resource_path)
+	return null
+
+
+func _default_input_for_action(mapping: GUIDEMappingContext, action: GUIDEAction,
+		index: int) -> GUIDEInput:
+	for action_mapping: GUIDEActionMapping in mapping.mappings:
+		if action_mapping.action == action and action_mapping.input_mappings.size() > index:
+			return action_mapping.input_mappings[index].input
+	_expect(false, "test mapping default input exists")
+	return null
+
+
+func _active_input_for_action(guide, action: GUIDEAction, index: int) -> GUIDEInput:
+	for action_mapping: GUIDEActionMapping in guide._active_action_mappings:
+		if action_mapping.action == action and action_mapping.input_mappings.size() > index:
+			return action_mapping.input_mappings[index].input
+	return null
+
+
+func _make_key_input(key: Key, control: bool = false, shift: bool = false,
+		alt: bool = false, meta: bool = false) -> GUIDEInputKey:
+	var input := GUIDEInputKey.new()
+	input.key = key
+	input.control = control
+	input.shift = shift
+	input.alt = alt
+	input.meta = meta
+	return input
 
 
 func _make_asset() -> UAssetFile:

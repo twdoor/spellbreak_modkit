@@ -45,11 +45,12 @@ var _locked:bool = false
 func _ready():
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_reset_node = GUIDEReset.new()
+	_reset_node.guide = self
 	_input_state = GUIDEInputState.new()
 	_input_state._reset()
 	add_child(_reset_node)
 	# attach to the current viewport to get input events
-	GUIDEInputTracker._instrument.call_deferred(get_viewport())
+	GUIDEInputTracker._instrument.call_deferred(get_viewport(), self)
 	
 	get_tree().node_added.connect(_on_node_added)
 	
@@ -64,7 +65,7 @@ func _on_node_added(node:Node) -> void:
 	if not node is Window:
 		return
 		
-	GUIDEInputTracker._instrument(node)
+	GUIDEInputTracker._instrument(node, self)
 	
 
 ## Injects input into GUIDE. GUIDE will call this automatically but 
@@ -229,7 +230,8 @@ func _update_caches() -> void:
 	for context:GUIDEMappingContext in sorted_contexts:
 		for action_mapping:GUIDEActionMapping in context.mappings:
 			for existing_mapping:GUIDEActionMapping in _active_action_mappings:
-				if _is_same_action_mapping(existing_mapping, action_mapping):
+				if not _has_remapping_for_action(context, action_mapping) \
+						and _is_same_action_mapping(existing_mapping, action_mapping):
 					# we will keep using this mapping, so we will make sure its inputs and modifiers
 					# are kept and not duplicated. We don't add the action mapping to the new action mappings
 					# yet, because the order of the action mappings is important and we will
@@ -273,7 +275,8 @@ func _update_caches() -> void:
 			# is likely more expensive than the creation of a new one).
 			var found_existing:bool = false
 			for existing_mapping:GUIDEActionMapping in _active_action_mappings:
-				if _is_same_action_mapping(existing_mapping, action_mapping):
+				if not _has_remapping_for_action(context, action_mapping) \
+						and _is_same_action_mapping(existing_mapping, action_mapping):
 					# we found an existing mapping, so we can just use it
 					# and we can skip the rest of the processing for this mapping.
 					new_action_mappings.append(existing_mapping)
@@ -515,6 +518,16 @@ func _update_caches() -> void:
 	
 	# and notify interested parties that the input mappings have changed
 	input_mappings_changed.emit()
+
+
+func _has_remapping_for_action(context: GUIDEMappingContext, action_mapping: GUIDEActionMapping) -> bool:
+	if _active_remapping_config == null or action_mapping.action == null:
+		return false
+	for index in action_mapping.input_mappings.size():
+		if _active_remapping_config._has(context, action_mapping.action, index):
+			return true
+	return false
+
 
 ## Helper function which determines whether two action mappings are the same.
 ## They are the same if they have the same action, the same input mappings

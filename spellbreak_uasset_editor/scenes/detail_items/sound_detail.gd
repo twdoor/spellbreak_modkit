@@ -15,6 +15,8 @@ var _seek_slider: HSlider
 var _export_btn: Button
 var _import_btn: Button
 var _status_label: Label
+var _action_feedback: OperationFeedback
+var _last_operation: Callable
 var _extract_job_id := -1
 
 var _audio_bytes: PackedByteArray
@@ -51,11 +53,8 @@ func _build_impl() -> void:
 		_add_info("SoundService not available.")
 	else:
 		# Loading label (shown while extracting audio)
-		_status_label = Label.new()
-		_status_label.text = "Extracting audio..."
-		AppTheme.style_muted(_status_label)
-		_status_label.add_theme_font_size_override("font_size", AppTheme.FONT_STATUS)
-		_container.add_child(_status_label)
+		_status_label = _add_status_label(
+			"Extracting audio...", AppTheme.StatusKind.WORKING, AppTheme.FONT_STATUS)
 
 		# Player controls (hidden until audio loads)
 		var controls := VBoxContainer.new()
@@ -130,13 +129,8 @@ func _build_impl() -> void:
 
 	_container.add_child(action_row)
 
-	# Status label for export feedback (reuse _status_label if already created)
-	if _status_label == null:
-		_status_label = Label.new()
-		_status_label.add_theme_font_size_override("font_size", AppTheme.FONT_SMALL)
-		AppTheme.style_muted(_status_label)
-		_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-		_container.add_child(_status_label)
+	_action_feedback = OperationFeedback.new().setup(_retry_last_operation)
+	_container.add_child(_action_feedback)
 
 	_add_separator()
 
@@ -190,7 +184,8 @@ func _load_audio_async(snd_service: SoundService) -> void:
 	var asset := _ctx.get_asset()
 	var uasset_path := asset.binary_path if not asset.binary_path.is_empty() else asset.file_path
 	if not uasset_path.ends_with(".uasset"):
-		_status_label.text = "Audio preview requires a .uasset file (not JSON)"
+		_set_status_label(_status_label, "Audio preview requires a .uasset file (not JSON)",
+			AppTheme.StatusKind.ERROR)
 		return
 
 	# Check cache first
@@ -205,7 +200,8 @@ func _load_audio_async(snd_service: SoundService) -> void:
 				return
 
 	if _ctx.background_jobs == null:
-		_status_label.text = "Background job service is unavailable"
+		_set_status_label(_status_label, "Background job service is unavailable",
+			AppTheme.StatusKind.ERROR)
 		return
 	_extract_job_id = _ctx.background_jobs.run(
 		func() -> PackedByteArray: return snd_service.get_audio_data(uasset_path),
@@ -217,9 +213,8 @@ func _on_audio_loaded(data: PackedByteArray) -> void:
 	if not data.is_empty():
 		_on_audio_extracted(data)
 	else:
-		if is_instance_valid(_status_label):
-			_status_label.text = "No audio data found in this asset"
-			_status_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+		_set_status_label(_status_label, "No audio data found in this asset",
+			AppTheme.StatusKind.ERROR)
 
 
 func dispose() -> void:
@@ -236,9 +231,8 @@ func _on_audio_extracted(data: PackedByteArray) -> void:
 	# Load into AudioStreamOggVorbis
 	var stream := AudioStreamOggVorbis.load_from_buffer(data)
 	if stream == null:
-		if is_instance_valid(_status_label):
-			_status_label.text = "Failed to decode OGG audio (%d bytes)" % data.size()
-			_status_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+		_set_status_label(_status_label, "Failed to decode OGG audio (%d bytes)" % data.size(),
+			AppTheme.StatusKind.ERROR)
 		return
 
 	if not is_instance_valid(_player):
@@ -252,19 +246,17 @@ func _on_audio_extracted(data: PackedByteArray) -> void:
 		controls.visible = true
 
 	# Update status
-	if is_instance_valid(_status_label):
-		var duration := stream.get_length()
-		_status_label.text = "Audio loaded — %s — %d bytes" % [_format_time(duration), data.size()]
-		_status_label.add_theme_color_override("font_color", AppTheme.STATUS_SUCCESS)
+	var duration := stream.get_length()
+	_set_status_label(_status_label, "Audio loaded — %s — %d bytes" % [
+		_format_time(duration), data.size()], AppTheme.StatusKind.SUCCESS)
 
 	# Update time label
 	if is_instance_valid(_time_label):
-		var duration := stream.get_length()
 		_time_label.text = "0:00 / %s" % _format_time(duration)
 
 	# Set up slider max
 	if is_instance_valid(_seek_slider):
-		_seek_slider.max_value = stream.get_length()
+		_seek_slider.max_value = duration
 
 
 # ── Playback controls ────────────────────────────────────────────────────────
@@ -356,36 +348,44 @@ func _on_export_pressed() -> void:
 	if snd_service == null or snd_service.is_busy():
 		return
 
-	# If we already have the audio bytes, write directly; otherwise extract first
-	if _audio_bytes.is_empty():
-		if is_instance_valid(_status_label):
-			_status_label.text = "No audio data to export"
-			_status_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
-		return
-
 	var asset := _ctx.get_asset()
 	var uasset_path := asset.binary_path if not asset.binary_path.is_empty() else asset.file_path
+	if not uasset_path.ends_with(".uasset"):
+		_start_feedback("Audio export blocked", [])
+		_finish_feedback(false, "Export requires a .uasset file (not JSON)", false)
+		return
 
 	var dialog := FileDialog.new()
 	dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
 	dialog.filters = PackedStringArray(["*.ogg ; OGG Vorbis Audio"])
 	dialog.current_file = uasset_path.get_file().get_basename() + ".ogg"
-	dialog.use_native_dialog = true
+	AppTheme.configure_file_dialog(dialog)
 	dialog.file_selected.connect(func(path: String) -> void:
-		var write_error := FileUtils.write_bytes_atomic(path, _audio_bytes)
-		if write_error == OK:
-			if is_instance_valid(_status_label):
-				_status_label.text = "Exported to %s" % path.get_file()
-				_status_label.add_theme_color_override("font_color", AppTheme.STATUS_SUCCESS)
-		else:
-			if is_instance_valid(_status_label):
-				_status_label.text = "Failed to write %s (error %d)" % [path, write_error]
-				_status_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+		_run_sound_export(uasset_path, path)
 		dialog.queue_free()
 	)
 	_container.get_tree().root.add_child(dialog)
 	dialog.popup_centered(Vector2i(800, 600))
+
+
+func _run_sound_export(uasset_path: String, output_path: String) -> void:
+	var snd_service := _ctx.sound_service
+	if snd_service == null or snd_service.is_busy():
+		return
+	_last_operation = func() -> void: _run_sound_export(uasset_path, output_path)
+	_start_feedback("Audio export", [
+		["Source", uasset_path],
+		["Output", output_path],
+	])
+	_set_action_buttons_disabled(true)
+	snd_service.operation_finished.connect(_on_export_finished, CONNECT_ONE_SHOT)
+	snd_service.export_ogg(uasset_path, output_path)
+
+
+func _on_export_finished(success: bool, message: String) -> void:
+	_finish_feedback(success, message)
+	_set_action_buttons_disabled(false)
 
 
 # ── Import action ────────────────────────────────────────────────────────────
@@ -396,52 +396,89 @@ func _on_import_pressed() -> void:
 	if snd_service == null or snd_service.is_busy():
 		return
 	if _ctx.is_dirty():
-		if is_instance_valid(_status_label):
-			_status_label.text = "Save asset changes before importing audio"
-			_status_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+		_start_feedback("Audio import blocked", [])
+		_finish_feedback(false, "Save asset changes before importing audio", false)
 		return
 
 	var asset := _ctx.get_asset()
 	var uasset_path := asset.binary_path if not asset.binary_path.is_empty() else asset.file_path
 	if not uasset_path.ends_with(".uasset"):
-		if is_instance_valid(_status_label):
-			_status_label.text = "Import requires a .uasset file (not JSON)"
-			_status_label.add_theme_color_override("font_color", AppTheme.STATUS_ERROR)
+		_start_feedback("Audio import blocked", [])
+		_finish_feedback(false, "Import requires a .uasset file (not JSON)", false)
 		return
 
 	var dialog := FileDialog.new()
 	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
 	dialog.filters = PackedStringArray(["*.ogg ; OGG Vorbis Audio"])
-	dialog.use_native_dialog = true
+	AppTheme.configure_file_dialog(dialog)
 	dialog.file_selected.connect(func(path: String) -> void:
-		_status_label.text = "Injecting..."
-		_export_btn.disabled = true
-		_import_btn.disabled = true
-		snd_service.operation_finished.connect(_on_import_finished, CONNECT_ONE_SHOT)
-		snd_service.inject_ogg(uasset_path, path)
+		_run_sound_import(uasset_path, path)
 		dialog.queue_free()
 	)
 	_container.get_tree().root.add_child(dialog)
 	dialog.popup_centered(Vector2i(800, 600))
 
 
+func _run_sound_import(uasset_path: String, ogg_path: String) -> void:
+	var snd_service := _ctx.sound_service
+	if snd_service == null or snd_service.is_busy():
+		return
+	_last_operation = func() -> void: _run_sound_import(uasset_path, ogg_path)
+	_start_feedback("Audio import", [
+		["Target", uasset_path],
+		["Input", ogg_path],
+	])
+	_set_action_buttons_disabled(true)
+	snd_service.operation_finished.connect(_on_import_finished, CONNECT_ONE_SHOT)
+	snd_service.inject_ogg(uasset_path, ogg_path)
+
+
 func _on_import_finished(success: bool, message: String) -> void:
-	if is_instance_valid(_status_label):
-		_status_label.text = message
-		_status_label.add_theme_color_override("font_color",
-			AppTheme.STATUS_SUCCESS if success else AppTheme.STATUS_ERROR)
-	if is_instance_valid(_export_btn):
-		_export_btn.disabled = false
-	if is_instance_valid(_import_btn):
-		_import_btn.disabled = false
+	_finish_feedback(success, message)
+	_set_action_buttons_disabled(false)
 	# Reload preview after successful import
 	if success:
 		if _ctx.reload_asset.is_valid():
-			_ctx.reload_asset.call()
+			var reloaded := bool(_ctx.reload_asset.call())
+			if not reloaded:
+				_finish_feedback(false,
+					message + " Reload failed; close and reopen before saving.", false)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+func _retry_last_operation() -> void:
+	if _last_operation.is_valid():
+		_last_operation.call()
+
+
+func _start_feedback(title: String, paths: Array) -> void:
+	if not is_instance_valid(_action_feedback):
+		return
+	_action_feedback.clear_log()
+	_action_feedback.set_busy("%s..." % title)
+	_action_feedback.add_line(title)
+	for pair in paths:
+		if pair is Array and pair.size() >= 2:
+			_action_feedback.add_path(str(pair[0]), str(pair[1]))
+
+
+func _finish_feedback(success: bool, message: String, retryable: bool = true) -> void:
+	if not is_instance_valid(_action_feedback):
+		return
+	_action_feedback.add_line("Result: %s" % message)
+	_action_feedback.set_result(success, message)
+	if not retryable:
+		_action_feedback.set_retry_enabled(false)
+
+
+func _set_action_buttons_disabled(disabled: bool) -> void:
+	if is_instance_valid(_export_btn):
+		_export_btn.disabled = disabled
+	if is_instance_valid(_import_btn):
+		_import_btn.disabled = disabled
 
 
 func _format_time(seconds: float) -> String:
