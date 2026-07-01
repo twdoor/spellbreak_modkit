@@ -1,7 +1,7 @@
 class_name ModFileWatcher extends RefCounted
 
 ## Background file watcher that detects changes in enabled mods and triggers auto-pack.
-## Uses a polling thread with mtime+size hashing — same algorithm as watch.py.
+## Uses a polling thread with content signatures so same-size saves are detected.
 ##
 ## Usage:
 ##   watcher.setup(cfg, state_manager, packing_service)
@@ -10,6 +10,7 @@ class_name ModFileWatcher extends RefCounted
 
 const POLL_INTERVAL := 1.0  # seconds
 const STOP_CHECK_INTERVAL_MS := 50
+const HASH_CHUNK_SIZE := 1024 * 1024
 const WATCHED_EXTENSIONS := [".uasset", ".uexp", ".ubulk", ".umap"]
 
 signal watch_status_changed(active: bool)
@@ -122,16 +123,14 @@ func _watch_loop() -> void:
 		if enabled_mods.is_empty():
 			continue
 
-		# PackingService runs its own thread; we call it from here and block until done
-		# Since we're already in a thread, just pack directly (synchronous path)
 		_pack_count += 1
 		var n := _pack_count
-		call_deferred("_emit_pack_triggered", n)
 
-		# Wait for any in-progress pack to finish before starting another
+		# PackingService owns its own worker thread, but starting it and emitting UI
+		# signals must happen on the main thread.
 		while _packer.is_packing():
 			OS.delay_msec(200)
-		_packer.call_deferred("pack", enabled_mods)
+		call_deferred("_emit_pack_triggered_and_pack", n, enabled_mods.duplicate(true))
 
 
 func _sleep_until_next_poll() -> bool:
@@ -149,9 +148,16 @@ func _emit_pack_triggered(n: int) -> void:
 	pack_triggered.emit(n)
 
 
+func _emit_pack_triggered_and_pack(n: int, enabled_mods: Array) -> void:
+	_emit_pack_triggered(n)
+	if _packer == null:
+		return
+	_packer.pack(enabled_mods)
+
+
 # ── Snapshot ───────────────────────────────────────────────────────────────────
 
-## Build a hash of mtime+size for all tracked asset files in enabled mods.
+## Build a hash of path, mtime, size, and content for tracked asset files in enabled mods.
 func _snapshot() -> int:
 	var enabled_names := _state.get_enabled_names()
 	if enabled_names.is_empty() or _cfg.mods_dir.is_empty():
@@ -200,14 +206,15 @@ func _hash_dir(path: String, h: int) -> int:
 	dir.list_dir_end()
 	entries.sort()
 
-	for e in entries:
+	for e: String in entries:
 		var full := path.path_join(e)
 		if DirAccess.dir_exists_absolute(full) and not e.begins_with("."):
 			h = _hash_dir(full, h)   # recurse and thread the hash back up
 		elif not DirAccess.dir_exists_absolute(full):
 			var watched := false
+			var lower_name: String = e.to_lower()
 			for ext in WATCHED_EXTENSIONS:
-				if e.ends_with(ext):
+				if lower_name.ends_with(ext):
 					watched = true
 					break
 			if not watched:
@@ -217,6 +224,24 @@ func _hash_dir(path: String, h: int) -> int:
 				var sz := fa.get_length()
 				fa.close()
 				var mt := FileAccess.get_modified_time(full)
-				h ^= hash(full) ^ hash(sz) ^ hash(mt)
+				h ^= hash(full) ^ hash(sz) ^ hash(mt) ^ hash(_file_content_digest(full))
 
 	return h
+
+
+func _file_content_digest(path: String) -> String:
+	var fa := FileAccess.open(path, FileAccess.READ)
+	if not fa:
+		return ""
+	var ctx := HashingContext.new()
+	var error := ctx.start(HashingContext.HASH_MD5)
+	if error != OK:
+		fa.close()
+		return ""
+	while not fa.eof_reached():
+		var chunk := fa.get_buffer(HASH_CHUNK_SIZE)
+		if chunk.is_empty():
+			break
+		ctx.update(chunk)
+	fa.close()
+	return ctx.finish().hex_encode()

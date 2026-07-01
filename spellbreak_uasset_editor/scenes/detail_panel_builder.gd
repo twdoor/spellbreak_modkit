@@ -55,6 +55,8 @@ func _resolve_item(data: Variant) -> DetailItem:
 		var asset := _ctx.get_asset()
 		if asset:
 			var cls_name := asset.get_export_class_name(data)
+			if ParticleEffectDetail.is_particle_export(asset, data):
+				return ParticleEffectDetail.new().init_data(data)
 			if cls_name in UAssetFile.TEXTURE_CLASSES:
 				return TextureDetail.new().init_data(data, cls_name)
 			if cls_name in UAssetFile.SOUND_CLASSES:

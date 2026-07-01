@@ -99,6 +99,8 @@ static func _resolve_ref_type(index: int, asset: UAssetFile) -> String:
 static func _create_editor(prop: UAssetProperty, row: PropertyRow, asset: UAssetFile = null) -> Control:
 	if is_color_struct(prop):
 		return _make_color_editor(prop, row)
+	if is_vector_struct(prop):
+		return _make_vector_editor(prop, row, asset)
 
 	match prop.prop_type:
 		"Int":
@@ -502,6 +504,192 @@ static func _color_label_text(prop: UAssetProperty) -> String:
 	if _color_has_alpha(prop):
 		return "#%s" % color.to_html(true)
 	return "#%s" % color.to_html(false)
+
+
+static func is_vector_struct(prop: UAssetProperty) -> bool:
+	if prop == null:
+		return false
+	var components := _vector_components(prop)
+	if components.is_empty():
+		return false
+	var dict: Variant = _vector_value_dict(prop)
+	if dict is Dictionary:
+		for component in components:
+			if not dict.has(component) or not _is_numeric_value(dict[component]):
+				return false
+		return true
+	if prop.prop_type != "Struct":
+		return false
+	for component in components:
+		var child := prop.find_child(str(component))
+		if child == null or not _is_vector_component(child):
+			return false
+	return true
+
+
+static func _make_vector_editor(prop: UAssetProperty, row: PropertyRow,
+		asset: UAssetFile = null) -> Control:
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
+	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	for component in _vector_components(prop):
+		hbox.add_child(_make_vector_component_editor(prop, row, str(component), asset))
+	return hbox
+
+
+static func _make_vector_component_editor(prop: UAssetProperty, row: PropertyRow,
+		component: String, asset: UAssetFile = null) -> Control:
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", AppTheme.SPACING_TIGHT)
+
+	var label := Label.new()
+	label.text = component
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	AppTheme.style_dim(label)
+	hbox.add_child(label)
+
+	var spin := SpinBox.new()
+	spin.min_value = -999999999.0
+	spin.max_value = 999999999.0
+	spin.allow_lesser = true
+	spin.allow_greater = true
+	spin.step = 0.01
+	spin.value = _vector_component_value(prop, component)
+	spin.custom_minimum_size.x = 92
+	spin.tooltip_text = "%s.%s" % [_vector_type_label(prop), component]
+	if asset and asset.game_profile and not asset.game_profile.constants.is_empty():
+		_attach_constant_helper(spin, asset.game_profile.constants, false)
+	spin.value_changed.connect(func(v: float) -> void:
+		var old_state := prop.capture_state()
+		_apply_vector_component(prop, component, v)
+		var new_state := prop.capture_state()
+		if new_state != old_state:
+			row.value_changed.emit(prop, old_state, new_state)
+	)
+	hbox.add_child(spin)
+	return hbox
+
+
+static func _vector_component_value(prop: UAssetProperty, component: String) -> float:
+	var dict: Variant = _vector_value_dict(prop)
+	if dict is Dictionary and dict.has(component) and dict[component] != null:
+		return _numeric_value_to_float(dict[component])
+	var child := prop.find_child(component)
+	if child != null and child.value != null:
+		return _numeric_value_to_float(child.value)
+	return 0.0
+
+
+static func _apply_vector_component(prop: UAssetProperty, component: String, value: float) -> void:
+	var dict: Variant = _vector_value_dict(prop)
+	if dict is Dictionary:
+		dict[component] = _vector_cast_value(dict.get(component), value)
+		prop.value = dict
+		prop.raw["Value"] = dict
+		return
+
+	var child := prop.find_child(component)
+	if child != null:
+		child.set_value(_vector_cast_value(child.value, value, child.prop_type))
+
+
+static func _vector_cast_value(old_value: Variant, value: float, prop_type: String = "") -> Variant:
+	if prop_type in ["Int", "Byte"] or old_value is int:
+		return int(round(value))
+	if old_value is String and _is_numeric_value(old_value):
+		var text := str(value)
+		if value >= 0.0 and str(old_value).strip_edges().begins_with("+"):
+			text = "+" + text
+		return text
+	return value
+
+
+static func _vector_value_dict(prop: UAssetProperty) -> Variant:
+	var components := _vector_components(prop)
+	if components.is_empty():
+		return null
+	if prop.value is Dictionary and _dict_has_components(prop.value, components):
+		return prop.value
+	var raw_value: Variant = prop.raw.get("Value")
+	if raw_value is Dictionary and _dict_has_components(raw_value, components):
+		return raw_value
+	return null
+
+
+static func _dict_has_components(dict: Dictionary, components: Array) -> bool:
+	for component in components:
+		if not dict.has(component):
+			return false
+	return true
+
+
+static func _vector_components(prop: UAssetProperty) -> Array[String]:
+	var type_name := _vector_type_name(prop)
+	var normalized := type_name.trim_prefix("F")
+	if normalized in ["Vector2D", "Vector2", "IntPoint"]:
+		return ["X", "Y"]
+	if normalized in ["Vector4", "Quat"]:
+		return ["X", "Y", "Z", "W"]
+	if normalized in ["Vector", "Vector3", "IntVector"] \
+			or normalized.begins_with("Vector_NetQuantize"):
+		return ["X", "Y", "Z"]
+	return []
+
+
+static func _vector_type_name(prop: UAssetProperty) -> String:
+	if prop.prop_type == "Struct" and not prop.struct_type.is_empty():
+		return prop.struct_type
+	var raw_type := _vector_raw_type_name(prop.value)
+	if not raw_type.is_empty():
+		return raw_type
+	raw_type = _vector_raw_type_name(prop.raw.get("Value"))
+	if not raw_type.is_empty():
+		return raw_type
+	return prop.prop_type
+
+
+static func _vector_raw_type_name(value: Variant) -> String:
+	if not (value is Dictionary):
+		return ""
+	var type_text := str((value as Dictionary).get("$type", ""))
+	if type_text.contains("FVector4"):
+		return "Vector4"
+	if type_text.contains("FVector2D"):
+		return "Vector2D"
+	if type_text.contains("FVector"):
+		return "Vector"
+	return ""
+
+
+static func _vector_type_label(prop: UAssetProperty) -> String:
+	return _vector_type_name(prop).trim_prefix("F")
+
+
+static func _is_vector_component(prop: UAssetProperty) -> bool:
+	if prop.prop_type not in ["Float", "Int", "Byte"]:
+		return false
+	return _is_numeric_value(prop.value)
+
+
+static func _is_numeric_value(value: Variant) -> bool:
+	if value == null:
+		return true
+	if value is String:
+		var text := str(value).strip_edges()
+		if text.begins_with("+"):
+			text = text.substr(1)
+		return text.is_valid_float()
+	return value is int or value is float
+
+
+static func _numeric_value_to_float(value: Variant) -> float:
+	if value is String:
+		var text := str(value).strip_edges()
+		if text.begins_with("+"):
+			text = text.substr(1)
+		return float(text)
+	return float(value)
 
 
 ## Returns whichever text content field is populated (culture-invariant > source string).

@@ -5,6 +5,7 @@ signal keymap_changed(config: GUIDERemappingConfig)
 signal status_changed(text: String, is_error: bool)
 
 const KEYMAP_PATH := "user://keymaps/editor_keymap.tres"
+const SMOOTH_SCROLL_CONTAINER := preload("res://scenes/smooth_scroll_container.gd")
 
 var _mapping_context: GUIDEMappingContext
 var _working_config: GUIDERemappingConfig
@@ -186,7 +187,7 @@ func _build_ui() -> void:
 	add_theme_constant_override("separation", 0)
 	_rebuild_items()
 
-	var scroll := ScrollContainer.new()
+	var scroll := SMOOTH_SCROLL_CONTAINER.new() as ScrollContainer
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 

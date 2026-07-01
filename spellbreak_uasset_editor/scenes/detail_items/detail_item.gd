@@ -251,7 +251,7 @@ func _add_selectable_property_row(prop: UAssetProperty, siblings: Callable = Cal
 
 ## Recursively render all leaf values from a struct inline.
 func _build_flat_leaves(prop: UAssetProperty) -> void:
-	if PropertyRow.is_color_struct(prop):
+	if PropertyRow.is_color_struct(prop) or PropertyRow.is_vector_struct(prop):
 		_add_selectable_property_row(prop)
 	elif prop.prop_type == "Struct" and not prop.children.is_empty():
 		for child in prop.children:
@@ -269,7 +269,7 @@ func _build_children_sorted(children: Array[UAssetProperty]) -> void:
 	var nav_items: Array[UAssetProperty] = []
 
 	for child in children:
-		if PropertyRow.is_color_struct(child):
+		if PropertyRow.is_color_struct(child) or PropertyRow.is_vector_struct(child):
 			simple_rows.append(child)
 		elif child.prop_type == "Struct" and _is_simple_struct(child):
 			inline_structs.append(child)
@@ -305,7 +305,7 @@ func _build_array_detail(prop: UAssetProperty) -> void:
 		# ── Build visible content ────────────────────────────────────────────
 		var content: Control
 
-		if PropertyRow.is_color_struct(child):
+		if PropertyRow.is_color_struct(child) or PropertyRow.is_vector_struct(child):
 			var row := PropertyRow.create(child, _ctx.get_asset())
 			row.value_changed.connect(_on_row_value_changed)
 			content = row

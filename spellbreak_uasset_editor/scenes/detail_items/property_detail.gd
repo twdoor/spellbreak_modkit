@@ -19,7 +19,7 @@ func _build_impl() -> void:
 			_add_header(prop.prop_name)
 			_add_type_badge("Struct: %s" % prop.struct_type)
 			_add_separator()
-			if PropertyRow.is_color_struct(prop):
+			if PropertyRow.is_color_struct(prop) or PropertyRow.is_vector_struct(prop):
 				_add_selectable_property_row(prop)
 				_add_separator()
 			_build_children_sorted(prop.children)

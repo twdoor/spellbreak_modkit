@@ -85,7 +85,9 @@ static func from_dict(d: Dictionary) -> UAssetProperty:
 				for child_dict in val:
 					if child_dict is Dictionary:
 						p.children.append(UAssetProperty.from_dict(child_dict))
-			p.value = null  # Children hold the data
+				p.value = null  # Children hold the data
+			else:
+				p.value = val
 		
 		"Array":
 			p.array_type = str(d.get("ArrayType", ""))
@@ -175,10 +177,13 @@ func to_dict() -> Dictionary:
 			else:
 				d["Value"] = int(value) if value != null else 0
 		"Struct":
-			var arr: Array = []
-			for child in children:
-				arr.append(child.to_dict())
-			d["Value"] = arr
+			if children.size() > 0:
+				var arr: Array = []
+				for child in children:
+					arr.append(child.to_dict())
+				d["Value"] = arr
+			else:
+				d["Value"] = value
 		"Array":
 			var arr: Array = []
 			for child in children:

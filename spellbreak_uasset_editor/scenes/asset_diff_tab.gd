@@ -3,6 +3,7 @@ extends VBoxContainer
 
 const MAX_VISIBLE_DIFFS := 800
 const VALUE_PREVIEW_LENGTH := 260
+const SMOOTH_SCROLL_CONTAINER := preload("res://scenes/smooth_scroll_container.gd")
 
 var left_asset: UAssetFile
 var right_asset: UAssetFile
@@ -80,7 +81,7 @@ func _build_header() -> void:
 
 
 func _build_list() -> void:
-	var scroll := ScrollContainer.new()
+	var scroll := SMOOTH_SCROLL_CONTAINER.new() as ScrollContainer
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED

@@ -8,6 +8,8 @@ signal close_requested
 signal open_keymap_requested
 signal status_changed(text: String, is_error: bool)
 
+const SMOOTH_SCROLL_CONTAINER := preload("res://scenes/smooth_scroll_container.gd")
+
 var _cfg: ModConfigManager
 var _sources_container: VBoxContainer
 var _base_source_service: BaseSourceService
@@ -57,7 +59,7 @@ func _build_ui() -> void:
 	add_theme_constant_override("separation", 0)
 
 	# Scrollable content area
-	var scroll := ScrollContainer.new()
+	var scroll := SMOOTH_SCROLL_CONTAINER.new() as ScrollContainer
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 

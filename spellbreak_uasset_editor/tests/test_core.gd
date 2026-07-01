@@ -3,6 +3,21 @@ extends SceneTree
 var _failures: Array[String] = []
 
 
+class WatcherTestPacker:
+	extends PackingService
+
+	var pack_calls := 0
+	var last_mods: Array = []
+	var busy := false
+
+	func pack(enabled_mods: Array) -> void:
+		pack_calls += 1
+		last_mods = enabled_mods.duplicate(true)
+
+	func is_packing() -> bool:
+		return busy
+
+
 func _init() -> void:
 	_run()
 	if _failures.is_empty():
@@ -30,6 +45,8 @@ func _run() -> void:
 	_test_asset_diff_engine()
 	_test_asset_diff_tab_layout()
 	_test_linear_color_property_editor()
+	_test_vector_property_editor()
+	_test_particle_effect_detail_builds_module_stack()
 	_test_mesh_preview_materials()
 	_test_glb_export()
 	_test_md5_animation_loader()
@@ -40,6 +57,8 @@ func _run() -> void:
 	_test_texture_companion_recovery()
 	_test_background_job_shutdown()
 	_test_file_watcher_rapid_toggle()
+	_test_file_watcher_detects_same_size_save()
+	_test_file_watcher_deferred_pack_starts_packer()
 	_test_atomic_file_install()
 	_test_mod_manifest()
 	_test_mod_preflight()
@@ -503,6 +522,117 @@ func _test_linear_color_property_editor() -> void:
 	_expect(_approx_float(float(value["G"]), 0.2)
 			and _approx_float(float(raw_value["B"]), 0.3),
 		"linear color picker writes back to raw FLinearColor values")
+
+
+func _test_vector_property_editor() -> void:
+	var prop := UAssetProperty.from_dict({
+		"$type": "UAssetAPI.PropertyTypes.Objects.StructPropertyData, UAssetAPI",
+		"Name": "Location",
+		"StructType": "Vector",
+		"Value": [
+			_make_float_property_raw("X", 1.0),
+			_make_float_property_raw("Y", 2.0),
+			_make_float_property_raw("Z", 3.0),
+		],
+	})
+	_expect(PropertyRow.is_vector_struct(prop),
+		"vector struct property is detected as editable vector")
+
+	var row := PropertyRow.create(prop)
+	var editor := row.editor_control as HBoxContainer
+	_expect(editor != null and editor.get_child_count() == 3 and _vector_spin(editor, 0) is SpinBox,
+		"vector struct uses numeric component editors")
+
+	var changes: Array[Dictionary] = []
+	row.value_changed.connect(func(_prop: UAssetProperty, _old_value: Variant, _new_value: Variant) -> void:
+		changes.append({"old": _old_value, "new": _new_value})
+	)
+	var y_spin := _vector_spin(editor, 1)
+	y_spin.value_changed.emit(12.5)
+	var child_dicts: Array = prop.to_dict()["Value"]
+	_expect(changes.size() == 1, "vector component edit emits a property change")
+	_expect(_approx_float(float(prop.find_child("Y").value), 12.5)
+			and _approx_float(float((child_dicts[1] as Dictionary).get("Value")), 12.5),
+		"vector component edit writes back to child property data")
+	row.free()
+
+	var raw_prop := UAssetProperty.from_dict({
+		"$type": "UAssetAPI.PropertyTypes.Objects.VectorPropertyData, UAssetAPI",
+		"Name": "Velocity",
+		"Value": {
+			"$type": "UAssetAPI.UnrealTypes.FVector, UAssetAPI",
+			"X": 4.0,
+			"Y": "+0",
+			"Z": "+0",
+		},
+	})
+	_expect(PropertyRow.is_vector_struct(raw_prop),
+		"raw FVector property data with numeric strings is detected as editable vector")
+	var raw_row := PropertyRow.create(raw_prop)
+	var raw_editor := raw_row.editor_control as HBoxContainer
+	_vector_spin(raw_editor, 2).value_changed.emit(-7.25)
+	var raw_value := raw_prop.to_dict()["Value"] as Dictionary
+	_expect(_approx_float(float(raw_value["Z"]), -7.25)
+			and _approx_float(float((raw_prop.raw["Value"] as Dictionary)["Z"]), -7.25)
+			and raw_value["Z"] is String,
+		"raw FVector component edit writes back to string-backed dictionary data")
+	raw_row.free()
+
+	var dict_struct := UAssetProperty.from_dict({
+		"$type": "UAssetAPI.PropertyTypes.Objects.StructPropertyData, UAssetAPI",
+		"Name": "Offset",
+		"StructType": "Vector",
+		"Value": {
+			"$type": "UAssetAPI.UnrealTypes.FVector, UAssetAPI",
+			"X": 7.0,
+			"Y": 8.0,
+			"Z": 9.0,
+		},
+	})
+	_expect(PropertyRow.is_vector_struct(dict_struct),
+		"dictionary-backed vector struct is detected as editable vector")
+	var dict_row := PropertyRow.create(dict_struct)
+	var dict_editor := dict_row.editor_control as HBoxContainer
+	_vector_spin(dict_editor, 0).value_changed.emit(42.0)
+	var dict_value := dict_struct.to_dict()["Value"] as Dictionary
+	_expect(_approx_float(float(dict_value["X"]), 42.0),
+		"dictionary-backed struct vector keeps dictionary shape on save")
+	dict_row.free()
+
+
+func _test_particle_effect_detail_builds_module_stack() -> void:
+	var asset := _make_empty_asset("res://particle_test.uasset")
+	asset.imports = [
+		_make_import("ParticleSystem", 0),
+		_make_import("ParticleModuleSize", 0),
+		_make_import("StaticMesh", 0),
+	]
+	var system := _make_export("TestParticleSystem", 0, -1, 0, [], 0)
+	var module := _make_export("ParticleModuleSize_0", 1, -2, 0, [], 0)
+	module.properties = [_make_raw_distribution_vector_property("StartSize")]
+	module.raw["Data"] = [module.properties[0].to_dict()]
+	asset.exports = [system, module]
+
+	_expect(ParticleEffectDetail.is_particle_export(asset, module),
+		"particle module export is detected for VFX detail view")
+	var non_particle := _make_export("StaticMeshWithVec", 2, -3, 0, [
+		_make_raw_distribution_vector_property("BoundsVec")
+	], 0)
+	non_particle.properties[0].struct_type = "Vector"
+	_expect(not ParticleEffectDetail.is_particle_export(asset, non_particle),
+		"plain vector exports do not get routed to the particle detail view")
+
+	var context := _make_clipboard_context(asset)
+	var panel := VBoxContainer.new()
+	var detail := ParticleEffectDetail.new().init_data(module).setup(context)
+	detail.build_detail(panel)
+	_expect(_has_label_text(panel, "Particle/VFX Inspector"),
+		"particle detail builds the inspector header")
+	_expect(_has_label_text(panel, "StartSize [RawDistributionVector]"),
+		"particle detail surfaces raw distribution vectors as readable sections")
+	_expect(_has_label_text(panel, "MinValueVec"),
+		"particle detail renders vector distribution fields inline")
+	panel.free()
 
 
 func _test_mesh_preview_materials() -> void:
@@ -986,6 +1116,58 @@ func _test_file_watcher_rapid_toggle() -> void:
 	FileUtils.remove_dir_recursive(root)
 
 
+func _test_file_watcher_detects_same_size_save() -> void:
+	var root := OS.get_temp_dir().path_join("sb_test_watch_content_%d" % Time.get_ticks_usec())
+	var mods_dir := root.path_join("Mods")
+	var mod_content := mods_dir.path_join("TestMod/g3/Content")
+	DirAccess.make_dir_recursive_absolute(mod_content)
+	var asset_path := mod_content.path_join("Effect.uasset")
+	FileUtils.write_bytes_atomic(asset_path, "AAAA".to_utf8_buffer())
+
+	var config := ModConfigManager.new()
+	config.mods_dir = mods_dir
+	var state := ModStateManager.new().setup(root.path_join(".mod_state.json"))
+	state.set_enabled("TestMod", true)
+	var packer := WatcherTestPacker.new()
+	var watcher := ModFileWatcher.new().setup(config, state, packer)
+
+	var before_digest := watcher._file_content_digest(asset_path)
+	var before_snapshot := watcher._snapshot()
+	FileUtils.write_bytes_atomic(asset_path, "BBBB".to_utf8_buffer())
+	var after_digest := watcher._file_content_digest(asset_path)
+	var after_snapshot := watcher._snapshot()
+
+	_expect(before_digest != after_digest,
+		"file watcher content digest changes for same-size saves")
+	_expect(before_snapshot != after_snapshot,
+		"file watcher snapshot changes for same-size saved asset content")
+	FileUtils.remove_dir_recursive(root)
+
+
+func _test_file_watcher_deferred_pack_starts_packer() -> void:
+	var root := OS.get_temp_dir().path_join("sb_test_watch_pack_%d" % Time.get_ticks_usec())
+	var mods_dir := root.path_join("Mods")
+	var mod_path := mods_dir.path_join("TestMod")
+	DirAccess.make_dir_recursive_absolute(mod_path.path_join("g3/Content"))
+
+	var config := ModConfigManager.new()
+	config.mods_dir = mods_dir
+	var state := ModStateManager.new().setup(root.path_join(".mod_state.json"))
+	var packer := WatcherTestPacker.new()
+	var watcher := ModFileWatcher.new().setup(config, state, packer)
+	var triggered: Array[int] = []
+	watcher.pack_triggered.connect(func(n: int) -> void: triggered.append(n))
+
+	watcher._emit_pack_triggered_and_pack(4, [{"name": "TestMod", "path": mod_path}])
+
+	_expect(triggered == [4], "file watcher emits pack-trigger status before auto-pack")
+	_expect(packer.pack_calls == 1
+			and packer.last_mods.size() == 1
+			and str((packer.last_mods[0] as Dictionary).get("name", "")) == "TestMod",
+		"file watcher deferred callback starts the packer with enabled mods")
+	FileUtils.remove_dir_recursive(root)
+
+
 func _test_atomic_file_install() -> void:
 	var root := OS.get_temp_dir().path_join("sb_test_files_%d" % Time.get_ticks_usec())
 	DirAccess.make_dir_recursive_absolute(root)
@@ -1316,9 +1498,11 @@ func _make_empty_asset(path: String = "") -> UAssetFile:
 func _make_clipboard_context(asset: UAssetFile, detail_stack: Array = []) -> AssetEditorContext:
 	var context := AssetEditorContext.new()
 	context.document = AssetDocument.new(asset)
+	context.selection = SelectionManager.new()
 	context.detail_stack = detail_stack
 	context.rebuild_tree = func() -> void: pass
 	context.show_detail = func(_data: Variant) -> void: pass
+	context.refresh_tree_item = func(_data: Variant) -> void: pass
 	context.select_tree_item = func(_data: Variant) -> void: pass
 	return context
 
@@ -1367,6 +1551,82 @@ func _make_datatable_row_raw(name: String, value: int) -> Dictionary:
 		"IsZero": false,
 		"Value": value,
 	}
+
+
+func _make_float_property_raw(name: String, value: float) -> Dictionary:
+	return {
+		"$type": "UAssetAPI.PropertyTypes.Objects.FloatPropertyData, UAssetAPI",
+		"Name": name,
+		"ArrayIndex": 0,
+		"IsZero": false,
+		"Value": value,
+	}
+
+
+func _make_raw_distribution_vector_property(name: String) -> UAssetProperty:
+	return UAssetProperty.from_dict({
+		"$type": "UAssetAPI.PropertyTypes.Objects.StructPropertyData, UAssetAPI",
+		"Name": name,
+		"StructType": "RawDistributionVector",
+		"Value": [
+			_make_float_property_raw("MaxValue", 35.0),
+			{
+				"$type": "UAssetAPI.PropertyTypes.Objects.ObjectPropertyData, UAssetAPI",
+				"Name": "Distribution",
+				"ArrayIndex": 0,
+				"IsZero": false,
+				"Value": 0,
+			},
+			{
+				"$type": "UAssetAPI.PropertyTypes.Objects.VectorPropertyData, UAssetAPI",
+				"Name": "MinValueVec",
+				"Value": {
+					"$type": "UAssetAPI.UnrealTypes.FVector, UAssetAPI",
+					"X": 20.0,
+					"Y": "+0",
+					"Z": "+0",
+				},
+			},
+			{
+				"$type": "UAssetAPI.PropertyTypes.Objects.VectorPropertyData, UAssetAPI",
+				"Name": "MaxValueVec",
+				"Value": {
+					"$type": "UAssetAPI.UnrealTypes.FVector, UAssetAPI",
+					"X": 35.0,
+					"Y": "+0",
+					"Z": "+0",
+				},
+			},
+			{
+				"$type": "UAssetAPI.PropertyTypes.Objects.ArrayPropertyData, UAssetAPI",
+				"Name": "Table",
+				"ArrayType": "DistributionLookupTable",
+				"Value": [],
+			},
+		],
+	})
+
+
+func _vector_spin(editor: Control, component_index: int) -> SpinBox:
+	if not (editor is HBoxContainer):
+		return null
+	if component_index < 0 or component_index >= editor.get_child_count():
+		return null
+	var component_box := editor.get_child(component_index) as HBoxContainer
+	if component_box == null or component_box.get_child_count() < 2:
+		return null
+	return component_box.get_child(1) as SpinBox
+
+
+func _has_label_text(node: Node, text: String) -> bool:
+	if node is Label and (node as Label).text == text:
+		return true
+	if node is Button and (node as Button).text == text:
+		return true
+	for child in node.get_children():
+		if _has_label_text(child, text):
+			return true
+	return false
 
 
 func _make_import(name: String, outer: int) -> UAssetImport:
