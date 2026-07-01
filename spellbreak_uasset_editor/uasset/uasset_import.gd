@@ -20,7 +20,8 @@ static func from_dict(d: Dictionary, index: int) -> UAssetImport:
 	imp.object_name = str(d.get("ObjectName", ""))
 	imp.class_name_str = str(d.get("ClassName", ""))
 	imp.class_package = str(d.get("ClassPackage", ""))
-	imp.package_name = str(d.get("PackageName", ""))
+	var package_name_value: Variant = d.get("PackageName")
+	imp.package_name = "" if package_name_value == null else str(package_name_value)
 	imp.outer_index = d.get("OuterIndex", 0) if d.get("OuterIndex") != null else 0
 	imp.import_optional = d.get("bImportOptional", false) if d.get("bImportOptional") != null else false
 	return imp

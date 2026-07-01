@@ -20,6 +20,11 @@ func _run() -> void:
 	_test_import_insert_remove()
 	_test_swap_and_snapshot_restore()
 	_test_asset_document_history()
+	_test_clipboard_rejects_unsupported_copy()
+	_test_clipboard_datatable_row_targets_current_table()
+	_test_clipboard_datatable_row_pastes_into_empty_table()
+	_test_clipboard_export_cross_file_remaps_imports()
+	_test_clipboard_export_group_preserves_internal_refs()
 	_test_property_state_restore()
 	_test_byte_enum_property_round_trip()
 	_test_asset_diff_engine()
@@ -243,6 +248,112 @@ func _test_asset_document_history() -> void:
 	document.execute(branch)
 	_expect(state["value"] == 4 and not document.can_redo(), "new edits discard the redo branch")
 	_expect(document.is_dirty(), "discarding the saved branch keeps the document dirty")
+
+
+func _test_clipboard_rejects_unsupported_copy() -> void:
+	var asset := _make_asset()
+	var copied := ClipboardManager.copy(asset.exports[0], asset, [asset.exports[0]])
+	_expect(bool(copied.get("ok", false)), "clipboard accepts a normal export copy")
+
+	var rejected := ClipboardManager.copy([], asset, [])
+	_expect(not bool(rejected.get("ok", true)),
+		"clipboard rejects unsupported copy targets")
+	_expect(ClipboardManager.is_empty(),
+		"clipboard clears stale data after an unsupported copy")
+
+
+func _test_clipboard_datatable_row_targets_current_table() -> void:
+	var source := _make_empty_asset("res://source_table.uasset")
+	var source_rows := [_make_datatable_row_raw("SourceRow", 11)]
+	var source_table := _make_datatable_export("SourceTable", source_rows)
+	source.exports = [source_table]
+
+	var target := _make_empty_asset("res://target_table.uasset")
+	var target_rows := [_make_datatable_row_raw("TargetRow", 22)]
+	var target_table := _make_datatable_export("TargetTable", target_rows)
+	target.exports = [target_table]
+
+	var source_row := UAssetProperty.from_dict(source_rows[0])
+	var copy_result := ClipboardManager.copy({"dt_row": source_row, "expo": source_table}, source, [])
+	_expect(bool(copy_result.get("ok", false)), "clipboard accepts data table row copy")
+
+	var target_row := UAssetProperty.from_dict(target_rows[0])
+	ClipboardManager.paste(_make_clipboard_context(target),
+		{"dt_row": target_row, "expo": target_table}, [], null)
+
+	var copied_target_rows := target_table.get_datatable_rows()
+	_expect(source_table.get_datatable_rows().size() == 1,
+		"data table row paste leaves the source table unchanged")
+	_expect(copied_target_rows.size() == 2
+			and str((copied_target_rows[1] as Dictionary).get("Name")) == "SourceRow_Copy",
+			"data table row paste inserts into the current target table")
+
+
+func _test_clipboard_datatable_row_pastes_into_empty_table() -> void:
+	var source := _make_empty_asset("res://source_empty_table.uasset")
+	var source_rows := [_make_datatable_row_raw("SourceRow", 33)]
+	var source_table := _make_datatable_export("SourceTable", source_rows)
+	source.exports = [source_table]
+
+	var target := _make_empty_asset("res://target_empty_table.uasset")
+	var target_table := _make_datatable_export("TargetTable", [])
+	target.exports = [target_table]
+
+	var source_row := UAssetProperty.from_dict(source_rows[0])
+	var copy_result := ClipboardManager.copy({"dt_row": source_row, "expo": source_table}, source, [])
+	_expect(bool(copy_result.get("ok", false)), "clipboard accepts row copy for empty-table paste")
+
+	ClipboardManager.paste(_make_clipboard_context(target), target_table, [], null)
+	var target_rows := target_table.get_datatable_rows()
+	_expect(target_rows.size() == 1
+			and str((target_rows[0] as Dictionary).get("Name")) == "SourceRow_Copy",
+		"data table row paste works when the target table starts empty")
+
+
+func _test_clipboard_export_cross_file_remaps_imports() -> void:
+	var source := _make_empty_asset("res://source_refs.uasset")
+	source.imports = [_make_import("SourceClass", 0)]
+	source.exports = [_make_export("NeedsImport", 0, -1, 0, [-1], -1)]
+
+	var target := _make_empty_asset("res://target_refs.uasset")
+	target.imports = [_make_import("OtherClass", 0)]
+
+	var copy_result := ClipboardManager.copy(source.exports[0], source, [source.exports[0]])
+	_expect(bool(copy_result.get("ok", false)), "clipboard accepts cross-file export copy")
+	ClipboardManager.paste(_make_clipboard_context(target), null, [], null)
+
+	_expect(target.imports.size() == 2
+			and target.imports[1].object_name == "SourceClass"
+			and target.imports[1].package_name.is_empty()
+			and target.imports[1].to_dict().get("PackageName") == null,
+		"cross-file export paste adds the referenced source import once")
+	_expect(target.exports.size() == 1
+			and target.exports[0].class_index == -2
+			and _object_value(target.exports[0]) == -2,
+		"cross-file export paste rewrites copied import references to the target asset")
+
+
+func _test_clipboard_export_group_preserves_internal_refs() -> void:
+	var source := _make_empty_asset("res://source_group.uasset")
+	source.exports = [
+		_make_export("CopiedA", 0, 0, 0, [], 0),
+		_make_export("CopiedB", 0, 0, 0, [1], 1),
+	]
+
+	var target := _make_empty_asset("res://target_group.uasset")
+	target.exports = [_make_export("Existing", 0, 0, 0, [], 0)]
+
+	var copy_result := ClipboardManager.copy(null, source, source.exports)
+	_expect(bool(copy_result.get("ok", false)), "clipboard accepts grouped export copy")
+	ClipboardManager.paste(_make_clipboard_context(target), null, [], null)
+
+	_expect(target.exports.size() == 3
+			and target.exports[1].object_name == "CopiedA_Copy"
+			and target.exports[2].object_name == "CopiedB_Copy",
+		"grouped export paste inserts copied exports in order")
+	_expect(_object_value(target.exports[2]) == 2
+			and target.exports[2].raw["CreateBeforeCreateDependencies"] == [2],
+		"grouped export paste preserves references between copied exports")
 
 
 func _test_property_state_restore() -> void:
@@ -1191,6 +1302,27 @@ func _make_key_input(key: Key, control: bool = false, shift: bool = false,
 	return input
 
 
+func _make_empty_asset(path: String = "") -> UAssetFile:
+	var asset := UAssetFile.new()
+	asset.raw = {}
+	asset.file_path = path
+	asset.binary_path = path
+	asset.name_map = PackedStringArray()
+	asset.imports = []
+	asset.exports = []
+	return asset
+
+
+func _make_clipboard_context(asset: UAssetFile, detail_stack: Array = []) -> AssetEditorContext:
+	var context := AssetEditorContext.new()
+	context.document = AssetDocument.new(asset)
+	context.detail_stack = detail_stack
+	context.rebuild_tree = func() -> void: pass
+	context.show_detail = func(_data: Variant) -> void: pass
+	context.select_tree_item = func(_data: Variant) -> void: pass
+	return context
+
+
 func _make_asset() -> UAssetFile:
 	var asset := UAssetFile.new()
 	asset.raw = {}
@@ -1206,6 +1338,35 @@ func _make_asset() -> UAssetFile:
 		_make_export("Export3", 1, -3, 0, [1, -3], 1),
 	]
 	return asset
+
+
+func _make_datatable_export(name: String, rows: Array) -> UAssetExport:
+	return UAssetExport.from_dict({
+		"$type": "UAssetAPI.ExportTypes.DataTableExport, UAssetAPI",
+		"ObjectName": name,
+		"OuterIndex": 0,
+		"ClassIndex": 0,
+		"SuperIndex": 0,
+		"TemplateIndex": 0,
+		"SerialSize": 0,
+		"SerialOffset": 0,
+		"CreateBeforeCreateDependencies": [],
+		"CreateBeforeSerializationDependencies": [],
+		"SerializationBeforeCreateDependencies": [],
+		"SerializationBeforeSerializationDependencies": [],
+		"Table": {"Data": rows},
+		"Data": [],
+	})
+
+
+func _make_datatable_row_raw(name: String, value: int) -> Dictionary:
+	return {
+		"$type": "UAssetAPI.PropertyTypes.Objects.IntPropertyData, UAssetAPI",
+		"Name": name,
+		"ArrayIndex": 0,
+		"IsZero": false,
+		"Value": value,
+	}
 
 
 func _make_import(name: String, outer: int) -> UAssetImport:

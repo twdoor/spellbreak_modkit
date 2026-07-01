@@ -695,8 +695,11 @@ func _copy_selection() -> void:
 		return
 	var tab := tab_cont.get_current_tab_control()
 	if tab is UassetFileTab:
-		tab.copy_selection()
-		_show_toast("Copied  " + tab.get_clipboard_label())
+		var result: Dictionary = tab.copy_selection()
+		if bool(result.get("ok", false)):
+			_show_toast("Copied  " + str(result.get("label", tab.get_clipboard_label())))
+		else:
+			_show_toast(str(result.get("message", "Nothing copyable is selected")))
 	elif tab is ModManagerPanel:
 		(tab as ModManagerPanel).copy_selection()
 
@@ -706,8 +709,11 @@ func _cut_selection() -> void:
 		return
 	var tab := tab_cont.get_current_tab_control()
 	if tab is UassetFileTab:
-		tab.cut_selection()
-		_show_toast("Cut  " + tab.get_clipboard_label())
+		var result: Dictionary = tab.cut_selection()
+		if bool(result.get("ok", false)):
+			_show_toast("Cut  " + str(result.get("label", tab.get_clipboard_label())))
+		else:
+			_show_toast(str(result.get("message", "Nothing cuttable is selected")))
 	elif tab is ModManagerPanel:
 		(tab as ModManagerPanel).cut_selection()
 

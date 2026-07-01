@@ -249,8 +249,8 @@ func clear_selection() -> void:
 	_selection.clear()
 
 
-func copy_selection() -> void:
-	ClipboardManager.copy(_current_data, tab_asset, _selection.get_selection())
+func copy_selection() -> Dictionary:
+	return ClipboardManager.copy(_current_data, tab_asset, _selection.get_selection())
 
 
 func get_clipboard_label() -> String:
@@ -270,9 +270,12 @@ func paste_clipboard() -> void:
 		_selection.get_selection(), array_context)
 
 
-func cut_selection() -> void:
-	copy_selection()
+func cut_selection() -> Dictionary:
+	var result := copy_selection()
+	if not bool(result.get("ok", false)):
+		return result
 	delete_selection()
+	return result
 
 
 # ── Export reorder (called by ExportsListDetail) ───────────────────────────────
