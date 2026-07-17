@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.11.0 - 2026-07-17
+
+- Added a Diagnostics/Health tab and clearer operation feedback panels with expandable logs, retry/copy actions, close controls, and shorter auto-dismiss behavior.
+- Improved copy/paste for imports, exports, properties, and cross-file references, including stronger package-index remapping and regression coverage for grouped exports.
+- Added editable `FVector` / vector struct fields, including dictionary-backed vector values used by particle distributions.
+- Added a Particle/VFX Inspector that presents Cascade-style particle exports as readable module stacks while keeping raw tree navigation available.
+- Fixed helper completion popups so they no longer steal focus from text fields while typing.
+- Improved keymap remapping reliability across default and user bindings.
+- Improved texture injection, sound import/export, mesh export, and GLB preview workflows with safer companion handling and clearer failures.
+- Added smooth scrolling to the main detail/settings/diff scroll panels.
+- Fixed file dialogs and external file opening so the app remains usable while checking paths or hovering items.
+- Hardened watcher auto-pack on save, including same-size asset saves and main-thread pack startup.
+
 ## 0.10.0 - 2026-06-30
 
 - Added a Compare File workflow with a default Ctrl+K shortcut, secondary keybind support.
