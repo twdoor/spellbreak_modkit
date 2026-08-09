@@ -9,9 +9,9 @@ Copies spellbreak_uasset_editor/builds/<version>/linux into
 spellbreak_uasset_editor/builds/latest for a stable local desktop launcher path.
 
 If version is omitted, the newest numeric build folder is used.
-Runtime files from builds/latest are preserved. On the first run, pass
---config-from with the old desktop build folder to migrate config.json and
-.mod_state.json.
+Legacy runtime files from builds/latest are preserved for automatic import by
+the application. On the first run, pass --config-from with the old desktop
+build folder to make config.json and .mod_state.json available to that importer.
 EOF
 }
 

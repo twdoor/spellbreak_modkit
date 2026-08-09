@@ -1,5 +1,15 @@
 extends SceneTree
 
+const AppSettingsRuntime = preload(
+	"res://addons/app_settings/app_settings_runtime.gd"
+)
+const SemanticVersion = preload(
+	"res://addons/version_manager/semantic_version.gd"
+)
+const PrepareReleaseDialog = preload(
+	"res://addons/version_manager/prepare_release_dialog.gd"
+)
+
 var _failures: Array[String] = []
 
 
@@ -66,6 +76,8 @@ func _run() -> void:
 	_test_path_safety()
 	_test_process_arguments()
 	_test_update_version_compare()
+	_test_release_manager_project_layout()
+	_test_mod_config_settings_persistence()
 	_test_keymap_config_rebinds_loaded_resources()
 	_test_keymap_migration_user_binding_wins_new_defaults()
 	_test_guide_remap_rebuilds_default_active_mapping()
@@ -142,16 +154,101 @@ func _test_import_insert_remove() -> void:
 
 
 func _test_update_version_compare() -> void:
-	_expect(UpdateChecker.is_newer_version("v0.10.0", "0.9.0"),
-		"update checker treats 0.10.0 as newer than 0.9.0")
-	_expect(UpdateChecker.is_newer_version("release-1.0.0", "0.9.9"),
-		"update checker extracts versions from release tags")
-	_expect(not UpdateChecker.is_newer_version("v0.9.0", "0.9.0"),
-		"update checker ignores matching versions")
-	_expect(not UpdateChecker.is_newer_version("v0.8.9", "0.9.0"),
-		"update checker ignores older releases")
-	_expect(UpdateChecker.normalize_version("v0.10.0") == "0.10.0",
-		"update checker normalizes v-prefixed tags")
+	_expect(SemanticVersion.compare("v0.10.0", "0.9.0") > 0,
+		"version manager treats 0.10.0 as newer than 0.9.0")
+	_expect(SemanticVersion.compare("v0.9.0", "0.9.0") == 0,
+		"version manager treats v-prefixed and plain versions equally")
+	_expect(SemanticVersion.compare("0.9.0-beta.2", "0.9.0") < 0,
+		"version manager orders prereleases before stable versions")
+	_expect(not bool(SemanticVersion.parse("release-1.0.0").valid),
+		"version manager rejects release tags that are not semantic versions")
+
+
+func _test_release_manager_project_layout() -> void:
+	var release_dialog := PrepareReleaseDialog.new()
+	_expect(release_dialog._changelog_path() == "res://../CHANGELOG.md"
+		and FileAccess.file_exists(release_dialog._changelog_path()),
+		"release manager targets the repository changelog")
+	var task_plan: Dictionary = release_dialog._plan_release_tasks(
+		"res://builds/9.9.9",
+		[{
+			"name": "Linux",
+			"platform": "Linux",
+			"architecture": "x86_64",
+			"existing_path": "",
+		}]
+	)
+	var tasks: Array = task_plan.get("tasks", [])
+	_expect(bool(task_plan.get("success", false)) and tasks.size() == 1
+		and str(tasks[0].output_path).ends_with("/builds/9.9.9/linux/sbue.x86_64"),
+		"release manager preserves the existing sbue build layout")
+	release_dialog.free()
+
+
+func _test_mod_config_settings_persistence() -> void:
+	var override_variable := str(ProjectSettings.get_setting(
+		"app_settings/override_environment_variable",
+		"SPELLBREAK_MODKIT_CONFIG_DIR"
+	))
+	var previous_override := OS.get_environment(override_variable)
+	var test_directory := OS.get_temp_dir().path_join(
+		"spellbreak-settings-test-%s-%s" % [OS.get_process_id(), Time.get_ticks_usec()]
+	)
+	OS.set_environment(override_variable, test_directory)
+
+	var settings := AppSettingsRuntime.new()
+	var legacy_directory := test_directory.path_join("legacy")
+	var legacy_config_path := legacy_directory.path_join("config.json")
+	var legacy_state_path := legacy_directory.path_join(".mod_state.json")
+	var legacy_config := {
+		"game_dir": "/test/game",
+		"mods_dir": "/test/mods",
+		"launch_cmd": "test-launch",
+		"sources": [{"name": "Base", "path": "/test/source"}],
+	}
+	_expect(FileUtils.write_bytes_atomic(
+		legacy_config_path,
+		JSON.stringify(legacy_config).to_utf8_buffer()
+	) == OK, "legacy settings fixture saves successfully")
+	_expect(FileUtils.write_bytes_atomic(
+		legacy_state_path,
+		'{"ExampleMod":true}'.to_utf8_buffer()
+	) == OK, "legacy mod-state fixture saves successfully")
+
+	var config := ModConfigManager.new(settings, legacy_config_path)
+	_expect(config.game_dir == "/test/game" and config.mods_dir == "/test/mods",
+		"mod config imports legacy paths through AppSettings")
+	_expect(config.sources.size() == 1 and config.sources[0].name == "Base",
+		"mod config imports structured source settings")
+	_expect(FileAccess.file_exists(legacy_config_path)
+		and FileAccess.file_exists(legacy_state_path),
+		"legacy settings remain available as a backup after import")
+	_expect(FileAccess.file_exists(config.get_state_path()),
+		"legacy mod state is copied into the AppSettings directory")
+	config.launch_cmd = "updated-launch"
+	_expect(config.save_config() == OK, "mod config saves through AppSettings")
+
+	var reloaded_settings := AppSettingsRuntime.new()
+	_expect(reloaded_settings.get_value(
+		ModConfigManager.SETTINGS_SECTION,
+		"launch_cmd",
+		""
+	) == "updated-launch", "AppSettings persists mod config changes")
+
+	settings.free()
+	reloaded_settings.free()
+	_cleanup_settings_test_directory(test_directory)
+	OS.set_environment(override_variable, previous_override)
+
+
+func _cleanup_settings_test_directory(path: String) -> void:
+	if not DirAccess.dir_exists_absolute(path):
+		return
+	for directory_name: String in DirAccess.get_directories_at(path):
+		_cleanup_settings_test_directory(path.path_join(directory_name))
+	for file_name: String in DirAccess.get_files_at(path):
+		DirAccess.remove_absolute(path.path_join(file_name))
+	DirAccess.remove_absolute(path)
 
 
 func _test_keymap_config_rebinds_loaded_resources() -> void:
@@ -604,18 +701,112 @@ func _test_particle_effect_detail_builds_module_stack() -> void:
 	var asset := _make_empty_asset("res://particle_test.uasset")
 	asset.imports = [
 		_make_import("ParticleSystem", 0),
+		_make_import("ParticleSpriteEmitter", 0),
+		_make_import("ParticleLODLevel", 0),
+		_make_import("ParticleModuleRequired", 0),
+		_make_import("ParticleModuleSpawn", 0),
 		_make_import("ParticleModuleSize", 0),
+		_make_import("ParticleModuleTypeDataMesh", 0),
 		_make_import("StaticMesh", 0),
+		_make_import("/Game/VFX/Meshes/TestMesh", 0),
+		_make_import("MaterialInstanceConstant", 0),
+		_make_import("/Game/VFX/Materials/TestMaterial", 0),
+		_make_import("DistributionFloatConstant", 0),
 	]
+	asset.imports[7].object_name = "TestMesh"
+	asset.imports[7].class_name_str = "StaticMesh"
+	asset.imports[7].outer_index = -9
+	asset.imports[9].object_name = "TestMaterial"
+	asset.imports[9].class_name_str = "MaterialInstanceConstant"
+	asset.imports[9].outer_index = -11
+	asset.file_path = "/tmp/game/g3/Content/VFX/Test/Particle.uasset"
+	asset.binary_path = asset.file_path
 	var system := _make_export("TestParticleSystem", 0, -1, 0, [], 0)
-	var module := _make_export("ParticleModuleSize_0", 1, -2, 0, [], 0)
+	system.properties = [_make_object_array_property("Emitters", "Object", [2])]
+	system.raw["Data"] = [system.properties[0].to_dict()]
+	var emitter := _make_export("ParticleSpriteEmitter_0", 1, -2, 0, [], 0)
+	emitter.properties = [
+		_make_object_array_property("LODLevels", "Object", [3, 8]),
+	]
+	emitter.raw["Data"] = [emitter.properties[0].to_dict()]
+	var lod := _make_export("ParticleLODLevel_0", 2, -3, 0, [], 0)
+	lod.properties = [
+		_make_object_property("RequiredModule", 4),
+		_make_object_property("SpawnModule", 5),
+		_make_object_property("TypeDataModule", 7),
+		_make_object_array_property("Modules", "Object", [6]),
+		_make_int_property("PeakActiveParticles", 4),
+	]
+	lod.raw["Data"] = [
+		lod.properties[0].to_dict(),
+		lod.properties[1].to_dict(),
+		lod.properties[2].to_dict(),
+		lod.properties[3].to_dict(),
+		lod.properties[4].to_dict(),
+	]
+	var required := _make_export("ParticleModuleRequired_0", 3, -4, 0, [], 0)
+	required.properties = [
+		_make_object_property("Material", -10),
+		_make_byte_enum_property("ScreenAlignment", "EParticleScreenAlignment", "PSA_Velocity"),
+	]
+	required.raw["Data"] = required.properties.map(func(prop: UAssetProperty) -> Dictionary:
+		return prop.to_dict())
+	var spawn := _make_export("ParticleModuleSpawn_0", 3, -5, 0, [], 0)
+	spawn.properties = [UAssetProperty.from_dict(_make_float_property_raw("Rate", 120.0))]
+	spawn.raw["Data"] = [spawn.properties[0].to_dict()]
+	var module := _make_export("ParticleModuleSize_0", 3, -6, 0, [], 0)
 	module.properties = [_make_raw_distribution_vector_property("StartSize")]
 	module.raw["Data"] = [module.properties[0].to_dict()]
-	asset.exports = [system, module]
+	var type_data := _make_export("ParticleModuleTypeDataMesh_0", 3, -7, 0, [], 0)
+	type_data.properties = [
+		_make_object_property("Mesh", -8),
+		_make_bool_property("bCameraFacing", true),
+	]
+	type_data.raw["Data"] = type_data.properties.map(func(prop: UAssetProperty) -> Dictionary:
+		return prop.to_dict())
+	var lod_alt := _make_export("ParticleLODLevel_1", 2, -3, 0, [], 0)
+	lod_alt.properties = [
+		_make_object_property("RequiredModule", 9),
+		_make_object_property("SpawnModule", 10),
+		_make_object_property("TypeDataModule", 7),
+		_make_object_array_property("Modules", "Object", [11]),
+		_make_int_property("PeakActiveParticles", 9),
+	]
+	lod_alt.raw["Data"] = [
+		lod_alt.properties[0].to_dict(),
+		lod_alt.properties[1].to_dict(),
+		lod_alt.properties[2].to_dict(),
+		lod_alt.properties[3].to_dict(),
+		lod_alt.properties[4].to_dict(),
+	]
+	var required_alt := _make_export("ParticleModuleRequired_1", 8, -4, 0, [], 0)
+	required_alt.properties = [_make_object_property("Material", -10)]
+	required_alt.raw["Data"] = [required_alt.properties[0].to_dict()]
+	var spawn_alt := _make_export("ParticleModuleSpawn_1", 8, -5, 0, [], 0)
+	spawn_alt.properties = [UAssetProperty.from_dict(_make_float_property_raw("Rate", 10.0))]
+	spawn_alt.raw["Data"] = [spawn_alt.properties[0].to_dict()]
+	var module_alt := _make_export("ParticleModuleSize_1", 8, -6, 0, [], 0)
+	module_alt.properties = [_make_raw_distribution_vector_property("StartSize")]
+	module_alt.raw["Data"] = [module_alt.properties[0].to_dict()]
+	var spawn_distribution := _make_export("RequiredDistributionSpawnRate", 10, -12, 0, [], 0)
+	asset.exports = [
+		system,
+		emitter,
+		lod,
+		required,
+		spawn,
+		module,
+		type_data,
+		lod_alt,
+		required_alt,
+		spawn_alt,
+		module_alt,
+		spawn_distribution,
+	]
 
 	_expect(ParticleEffectDetail.is_particle_export(asset, module),
 		"particle module export is detected for VFX detail view")
-	var non_particle := _make_export("StaticMeshWithVec", 2, -3, 0, [
+	var non_particle := _make_export("StaticMeshWithVec", 2, -8, 0, [
 		_make_raw_distribution_vector_property("BoundsVec")
 	], 0)
 	non_particle.properties[0].struct_type = "Vector"
@@ -624,15 +815,52 @@ func _test_particle_effect_detail_builds_module_stack() -> void:
 
 	var context := _make_clipboard_context(asset)
 	var panel := VBoxContainer.new()
-	var detail := ParticleEffectDetail.new().init_data(module).setup(context)
+	var detail := ParticleEffectDetail.new().init_data(lod).setup(context)
 	detail.build_detail(panel)
 	_expect(_has_label_text(panel, "Particle/VFX Inspector"),
 		"particle detail builds the inspector header")
+	_expect(_has_label_text(panel, "VFX PREVIEW"),
+		"particle detail builds the VFX preview section")
+	var preview_particles := _find_first_cpu_particles(panel)
+	_expect(preview_particles != null,
+		"particle detail creates a Godot CPUParticles3D preview emitter")
+	_expect(preview_particles != null and preview_particles.amount == 4,
+		"particle preview respects the emitter PeakActiveParticles count")
+	_expect(preview_particles != null and preview_particles.mesh is SphereMesh,
+		"mesh particle preview uses a 3D mesh placeholder while the real mesh loads")
+	_expect(preview_particles != null
+			and str(preview_particles.get_meta("preview_mesh_path", "")).ends_with(
+				"/g3/Content/VFX/Meshes/TestMesh.uasset"),
+		"mesh particle preview resolves imported mesh package paths")
+	_expect(preview_particles != null
+			and str(preview_particles.get_meta("preview_material_name", "")).contains("TestMaterial"),
+		"mesh particle preview records the referenced material override")
+	_expect(preview_particles != null
+			and str(preview_particles.get_meta("preview_screen_alignment", "")) == "PSA_Velocity",
+		"particle preview records Cascade screen alignment")
+	_expect(preview_particles != null
+			and bool(preview_particles.get_meta("preview_mesh_billboard", false))
+			and bool(preview_particles.get_meta("preview_align_to_velocity", false)),
+		"particle preview maps velocity-aligned mesh cards to Godot billboard flags")
+	_expect(_count_cpu_particles(panel) == 1,
+		"particle preview creates one emitter preview for the selected LOD owner")
+	_expect(_has_label_text(panel, "ParticleSpriteEmitter_0"),
+		"particle detail groups modules under the real particle emitter")
 	_expect(_has_label_text(panel, "StartSize [RawDistributionVector]"),
 		"particle detail surfaces raw distribution vectors as readable sections")
 	_expect(_has_label_text(panel, "MinValueVec"),
 		"particle detail renders vector distribution fields inline")
 	panel.free()
+
+	var distribution_panel := VBoxContainer.new()
+	var distribution_detail := ParticleEffectDetail.new().init_data(spawn_distribution).setup(context)
+	distribution_detail.build_detail(distribution_panel)
+	var distribution_preview := _find_first_cpu_particles(distribution_panel)
+	_expect(distribution_preview != null and distribution_preview.amount == 9,
+		"particle preview resolves distribution exports back to their owning LOD")
+	_expect(_has_label_text(distribution_panel, "LODLevel  ParticleLODLevel_1"),
+		"particle detail shows the LOD stack that owns the selected distribution")
+	distribution_panel.free()
 
 
 func _test_mesh_preview_materials() -> void:
@@ -1563,6 +1791,66 @@ func _make_float_property_raw(name: String, value: float) -> Dictionary:
 	}
 
 
+func _make_int_property(name: String, value: int) -> UAssetProperty:
+	return UAssetProperty.from_dict({
+		"$type": "UAssetAPI.PropertyTypes.Objects.IntPropertyData, UAssetAPI",
+		"Name": name,
+		"ArrayIndex": 0,
+		"IsZero": false,
+		"Value": value,
+	})
+
+
+func _make_bool_property(name: String, value: bool) -> UAssetProperty:
+	return UAssetProperty.from_dict({
+		"$type": "UAssetAPI.PropertyTypes.Objects.BoolPropertyData, UAssetAPI",
+		"Name": name,
+		"ArrayIndex": 0,
+		"IsZero": false,
+		"Value": value,
+	})
+
+
+func _make_byte_enum_property(name: String, enum_type: String, enum_value: String) -> UAssetProperty:
+	return UAssetProperty.from_dict({
+		"$type": "UAssetAPI.PropertyTypes.Objects.BytePropertyData, UAssetAPI",
+		"Name": name,
+		"ArrayIndex": 0,
+		"IsZero": false,
+		"ByteType": "FName",
+		"EnumType": enum_type,
+		"EnumValue": enum_value,
+	})
+
+
+func _make_object_property(name: String, value: int) -> UAssetProperty:
+	return UAssetProperty.from_dict({
+		"$type": "UAssetAPI.PropertyTypes.Objects.ObjectPropertyData, UAssetAPI",
+		"Name": name,
+		"ArrayIndex": 0,
+		"IsZero": false,
+		"Value": value,
+	})
+
+
+func _make_object_array_property(name: String, array_type: String, refs: Array[int]) -> UAssetProperty:
+	var values: Array = []
+	for i in refs.size():
+		values.append({
+			"$type": "UAssetAPI.PropertyTypes.Objects.ObjectPropertyData, UAssetAPI",
+			"Name": "",
+			"ArrayIndex": i,
+			"IsZero": false,
+			"Value": refs[i],
+		})
+	return UAssetProperty.from_dict({
+		"$type": "UAssetAPI.PropertyTypes.Objects.ArrayPropertyData, UAssetAPI",
+		"Name": name,
+		"ArrayType": array_type,
+		"Value": values,
+	})
+
+
 func _make_raw_distribution_vector_property(name: String) -> UAssetProperty:
 	return UAssetProperty.from_dict({
 		"$type": "UAssetAPI.PropertyTypes.Objects.StructPropertyData, UAssetAPI",
@@ -1680,6 +1968,27 @@ func _find_first_mesh_instance(node: Node) -> MeshInstance3D:
 		if found != null:
 			return found
 	return null
+
+
+func _find_first_cpu_particles(node: Node) -> CPUParticles3D:
+	if node == null:
+		return null
+	if node is CPUParticles3D:
+		return node
+	for child in node.get_children():
+		var found := _find_first_cpu_particles(child)
+		if found != null:
+			return found
+	return null
+
+
+func _count_cpu_particles(node: Node) -> int:
+	if node == null:
+		return 0
+	var count := 1 if node is CPUParticles3D else 0
+	for child in node.get_children():
+		count += _count_cpu_particles(child)
+	return count
 
 
 func _expect(condition: bool, message: String) -> void:

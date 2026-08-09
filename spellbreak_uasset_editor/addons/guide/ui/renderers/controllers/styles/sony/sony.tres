@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="GUIDEControllerRenderStyle" load_steps=24 format=3 uid="uid://c46mfn2386oyb"]
+[gd_resource type="Resource" script_class="GUIDEControllerRenderStyle" format=3 uid="uid://c46mfn2386oyb"]
 
 [ext_resource type="Texture2D" uid="uid://cfy1rx4d4wjdh" path="res://addons/guide/ui/renderers/controllers/styles/sony/PS5_Cross.png" id="1_am5kd"]
 [ext_resource type="Texture2D" uid="uid://civpcnwgbu5ky" path="res://addons/guide/ui/renderers/controllers/styles/sony/PS5_Circle.png" id="2_8a27q"]
@@ -17,7 +17,7 @@
 [ext_resource type="Texture2D" uid="uid://bukgaq1m26bw3" path="res://addons/guide/ui/renderers/controllers/styles/sony/PS5_Right_Stick.png" id="15_ntssf"]
 [ext_resource type="Texture2D" uid="uid://c4krmros0va1i" path="res://addons/guide/ui/renderers/controllers/styles/sony/PS5_Right_Stick_Click.png" id="16_0ojkd"]
 [ext_resource type="Texture2D" uid="uid://u6ba23igjbj5" path="res://addons/guide/ui/renderers/controllers/styles/sony/PS5_R2.png" id="17_r1pnn"]
-[ext_resource type="Script" path="res://addons/guide/ui/renderers/controllers/guide_controller_render_style.gd" id="18_dqomh"]
+[ext_resource type="Script" uid="uid://bwamiti0yohno" path="res://addons/guide/ui/renderers/controllers/guide_controller_render_style.gd" id="18_dqomh"]
 [ext_resource type="Texture2D" uid="uid://bkttgyeuecjw" path="res://addons/guide/ui/renderers/controllers/styles/sony/PS5_Options.png" id="19_c1heh"]
 [ext_resource type="Texture2D" uid="uid://bxxkjsl2u83mp" path="res://addons/guide/ui/renderers/controllers/styles/sony/PS5_Touch_Pad.png" id="20_7oww7"]
 [ext_resource type="Texture2D" uid="uid://bu5nlug6uf03w" path="res://addons/guide/ui/renderers/textures/arrow_vertical.svg" id="21_w4qcp"]

@@ -1,22 +1,40 @@
 class_name ModConfigManager extends RefCounted
 
-## Loads and saves config.json from the modkit root directory.
-## Mirrors the exact format used by mod_manager.py:
-##   { "game_dir": "...", "mods_dir": "...", "launch_cmd": "..." }
-##
-## Config file location is auto-detected at startup and cached in _config_path.
+## Adapts the mod manager's typed configuration to the AppSettings service.
+## Older config.json and .mod_state.json files are imported without deleting
+## them, so updating an existing installation preserves its configuration.
 
-const CONFIG_FILENAME  := "config.json"
-const STATE_FILENAME   := ".mod_state.json"
+const CONFIG_FILENAME := "settings.cfg"
+const LEGACY_CONFIG_FILENAME := "config.json"
+const STATE_FILENAME := ".mod_state.json"
+const SETTINGS_SECTION := "mod_manager"
+const MIGRATION_SECTION := "migration"
+const LEGACY_CONFIG_MIGRATION_KEY := "legacy_config_imported"
+const LEGACY_STATE_MIGRATION_KEY := "legacy_mod_state_imported"
+const AppSettingsRuntime = preload(
+	"res://addons/app_settings/app_settings_runtime.gd"
+)
 
-var _config_path: String = ""
-var _state_path: String  = ""
+const _SETTING_KEYS := [
+	"game_dir",
+	"mods_dir",
+	"launch_cmd",
+	"u4pak_dir",
+	"ue4_dds_tools_dir",
+	"umodel_path",
+	"sources",
+]
+
+var _settings
+var _state_path := ""
+var _legacy_config_path_override := ""
+var last_error := ""
 
 var game_dir:   String = ""
 var mods_dir:   String = ""
 var launch_cmd: String = ""
 ## Optional override: absolute path to the u4pak/ directory (the folder containing u4pak.py).
-## Leave empty to use auto-detection (looks for u4pak/ relative to config.json).
+## Leave empty to use the bundled u4pak copy.
 var u4pak_dir:  String = ""
 ## Reference pak sources. Each entry: { "name": String, "path": String }
 ## Used to register the base game pak, reference mods, older versions, etc.
@@ -31,36 +49,51 @@ var _game_profile: GameProfile = null
 signal config_changed
 
 
-func _init() -> void:
-	_config_path = _find_config_path()
-	_state_path  = _config_path.get_base_dir().path_join(STATE_FILENAME)
+func _init(settings_service: Node = null, legacy_config_path := "") -> void:
+	_settings = settings_service if settings_service != null else _resolve_settings_service()
+	_legacy_config_path_override = legacy_config_path
+	_state_path = _settings.get_file_path(STATE_FILENAME)
+	_migrate_legacy_files()
 	load_config()
+
+
+func _resolve_settings_service() -> Node:
+	var main_loop := Engine.get_main_loop()
+	if main_loop is SceneTree:
+		var autoload := (main_loop as SceneTree).root.get_node_or_null("AppSettings")
+		if autoload != null:
+			return autoload
+	return AppSettingsRuntime.new()
 
 
 # ── Path detection ─────────────────────────────────────────────────────────────
 
-## Locate the config file.  In dev mode (Godot editor) search upward from the
-## project directory.  In exported builds, store config next to the executable.
-func _find_config_path() -> String:
-	var project_dir := ProjectSettings.globalize_path("res://").rstrip("/")
-	if project_dir.is_absolute_path():
-		# Dev / editor: walk up looking for the modkit root (contains spellbreak_uasset_editor/)
+## Locate a configuration file created by versions before AppSettings. In dev
+## mode it lived in the modkit root; exported builds kept it by the executable.
+func _find_legacy_config_path() -> String:
+	if not _legacy_config_path_override.is_empty():
+		return _legacy_config_path_override
+	if OS.has_feature("editor"):
+		var project_dir := ProjectSettings.globalize_path("res://").rstrip("/")
 		var dir := project_dir
 		for _i in range(4):
 			if DirAccess.dir_exists_absolute(dir.path_join("spellbreak_uasset_editor")):
-				return dir.path_join(CONFIG_FILENAME)
+				return dir.path_join(LEGACY_CONFIG_FILENAME)
 			var parent := dir.get_base_dir()
 			if parent == dir:
 				break
 			dir = parent
 
-	# Exported build: config lives next to the executable
 	var exe_dir := OS.get_executable_path().get_base_dir()
-	return exe_dir.path_join(CONFIG_FILENAME)
+	return exe_dir.path_join(LEGACY_CONFIG_FILENAME)
 
 
 func get_config_dir() -> String:
-	return _config_path.get_base_dir()
+	return _settings.config_directory_path
+
+
+func get_config_path() -> String:
+	return _settings.settings_file_path
 
 
 func get_u4pak_path() -> String:
@@ -79,48 +112,133 @@ func is_configured() -> bool:
 
 # ── Load / Save ────────────────────────────────────────────────────────────────
 
-func load_config() -> void:
-	if not FileAccess.file_exists(_config_path):
+func load_config() -> Error:
+	last_error = ""
+	var error: Error = _settings.reload()
+	if error != OK:
+		last_error = _settings.last_error
+
+	game_dir = str(_settings.get_value(SETTINGS_SECTION, "game_dir", ""))
+	mods_dir = str(_settings.get_value(SETTINGS_SECTION, "mods_dir", ""))
+	launch_cmd = str(_settings.get_value(SETTINGS_SECTION, "launch_cmd", ""))
+	u4pak_dir = str(_settings.get_value(SETTINGS_SECTION, "u4pak_dir", ""))
+	ue4_dds_tools_dir = str(
+		_settings.get_value(SETTINGS_SECTION, "ue4_dds_tools_dir", "")
+	)
+	umodel_path = str(_settings.get_value(SETTINGS_SECTION, "umodel_path", ""))
+	_game_profile = null  # invalidate cache
+	sources = []
+	var saved_sources: Variant = _settings.get_value(SETTINGS_SECTION, "sources", [])
+	if not saved_sources is Array:
+		return error
+	for entry in saved_sources:
+		if entry is Dictionary:
+			sources.append({
+				"name": str(entry.get("name", "")),
+				"path": str(entry.get("path", "")),
+			})
+	return error
+
+
+func save_config() -> Error:
+	last_error = ""
+	_store_current_values()
+	var error: Error = _settings.save()
+	if error != OK:
+		last_error = _settings.last_error
+		return error
+	config_changed.emit()
+	return OK
+
+
+func _store_current_values() -> void:
+	_settings.set_value(SETTINGS_SECTION, "game_dir", game_dir, false)
+	_settings.set_value(SETTINGS_SECTION, "mods_dir", mods_dir, false)
+	_settings.set_value(SETTINGS_SECTION, "launch_cmd", launch_cmd, false)
+	_settings.set_value(SETTINGS_SECTION, "u4pak_dir", u4pak_dir, false)
+	_settings.set_value(
+		SETTINGS_SECTION,
+		"ue4_dds_tools_dir",
+		ue4_dds_tools_dir,
+		false
+	)
+	_settings.set_value(SETTINGS_SECTION, "umodel_path", umodel_path, false)
+	_settings.set_value(SETTINGS_SECTION, "sources", sources.duplicate(true), false)
+
+
+func _migrate_legacy_files() -> void:
+	var legacy_config_path := _find_legacy_config_path()
+	var legacy_directory := legacy_config_path.get_base_dir()
+	_migrate_legacy_config(legacy_config_path)
+	_migrate_legacy_state(legacy_directory.path_join(STATE_FILENAME))
+
+
+func _migrate_legacy_config(legacy_path: String) -> void:
+	if bool(_settings.get_value(
+		MIGRATION_SECTION,
+		LEGACY_CONFIG_MIGRATION_KEY,
+		false
+	)):
 		return
-	var file := FileAccess.open(_config_path, FileAccess.READ)
-	if not file:
+	for key: String in _SETTING_KEYS:
+		if _settings.has_value(SETTINGS_SECTION, key):
+			return
+	if not FileAccess.file_exists(legacy_path):
 		return
-	var parsed = JSON.parse_string(file.get_as_text())
-	file.close()
+
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(legacy_path))
 	if not parsed is Dictionary:
+		push_warning("ModConfigManager: could not import invalid legacy config: %s" % legacy_path)
 		return
-	game_dir   = str(parsed.get("game_dir",   ""))
-	mods_dir   = str(parsed.get("mods_dir",   ""))
+
+	game_dir = str(parsed.get("game_dir", ""))
+	mods_dir = str(parsed.get("mods_dir", ""))
 	launch_cmd = str(parsed.get("launch_cmd", ""))
-	u4pak_dir  = str(parsed.get("u4pak_dir",  ""))
+	u4pak_dir = str(parsed.get("u4pak_dir", ""))
 	ue4_dds_tools_dir = str(parsed.get("ue4_dds_tools_dir", ""))
 	umodel_path = str(parsed.get("umodel_path", ""))
-	_game_profile = null  # invalidate cache
-	sources    = []
-	for entry in parsed.get("sources", []):
+	sources = []
+	for entry: Variant in parsed.get("sources", []):
 		if entry is Dictionary:
-			sources.append({"name": str(entry.get("name", "")), "path": str(entry.get("path", ""))})
+			sources.append({
+				"name": str(entry.get("name", "")),
+				"path": str(entry.get("path", "")),
+			})
 
-
-func save_config() -> void:
-	var data: Dictionary = {
-		"game_dir": game_dir,
-		"mods_dir": mods_dir,
-		"launch_cmd": launch_cmd,
-	}
-	if not u4pak_dir.is_empty():
-		data["u4pak_dir"] = u4pak_dir
-	if not ue4_dds_tools_dir.is_empty():
-		data["ue4_dds_tools_dir"] = ue4_dds_tools_dir
-	if not umodel_path.is_empty():
-		data["umodel_path"] = umodel_path
-	if not sources.is_empty():
-		data["sources"] = sources
-	var error := FileUtils.write_bytes_atomic(_config_path, JSON.stringify(data, "  ").to_utf8_buffer())
+	_store_current_values()
+	_settings.set_value(
+		MIGRATION_SECTION,
+		LEGACY_CONFIG_MIGRATION_KEY,
+		true,
+		false
+	)
+	var error: Error = _settings.save()
 	if error != OK:
-		push_error("ModConfigManager: cannot write config to %s" % _config_path)
+		push_error("ModConfigManager: could not import legacy config: %s" % _settings.last_error)
+
+
+func _migrate_legacy_state(legacy_path: String) -> void:
+	if bool(_settings.get_value(
+		MIGRATION_SECTION,
+		LEGACY_STATE_MIGRATION_KEY,
+		false
+	)):
 		return
-	config_changed.emit()
+	if FileAccess.file_exists(_state_path) or not FileAccess.file_exists(legacy_path):
+		return
+
+	var error := FileUtils.write_bytes_atomic(
+		_state_path,
+		FileAccess.get_file_as_bytes(legacy_path)
+	)
+	if error != OK:
+		push_error("ModConfigManager: could not import legacy mod state from %s" % legacy_path)
+		return
+	_settings.set_value(
+		MIGRATION_SECTION,
+		LEGACY_STATE_MIGRATION_KEY,
+		true
+	)
 
 
 func get_umodel_path() -> String:

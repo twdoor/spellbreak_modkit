@@ -43,7 +43,7 @@ var _texture_service: TextureService
 var _sound_service: SoundService
 var _mesh_service: MeshService
 var _background_jobs: BackgroundJobRunner
-var _update_checker: UpdateChecker
+var _checking_for_updates := false
 var _keymap_config: GUIDERemappingConfig
 
 const _TOAST_HIDDEN_Y := -8.0   # resting offset_bottom when hidden (just off-screen bottom)
@@ -76,7 +76,7 @@ func _ready() -> void:
 	_build_status_bar()
 	_setup_mod_tab()
 	_build_update_dialog()
-	_setup_update_checker()
+	_setup_version_manager()
 	_open_startup_files.call_deferred()
 
 
@@ -362,28 +362,40 @@ func _build_update_dialog() -> void:
 	add_child(_update_dialog)
 
 
-func _setup_update_checker() -> void:
-	_update_checker = UpdateChecker.new()
-	_update_checker.update_available.connect(_on_update_available)
-	add_child(_update_checker)
+func _setup_version_manager() -> void:
 	call_deferred("_check_for_updates")
 
 
 func _check_for_updates() -> void:
-	if _update_checker:
-		_update_checker.check_now()
+	if _checking_for_updates:
+		return
+	var version_manager := get_node_or_null("/root/VersionManager")
+	if version_manager == null:
+		print_verbose("Update check skipped: VersionManager autoload is unavailable")
+		return
+	_checking_for_updates = true
+	var result: Dictionary = await version_manager.check_for_updates()
+	_checking_for_updates = false
+	if not bool(result.get("success", false)):
+		print_verbose("Update check skipped: %s" % str(result.get("error", "unknown error")))
+		return
+	if bool(result.get("update_available", false)):
+		_on_update_available(result)
 
 
-func _on_update_available(version: String, release_url: String, release_name: String) -> void:
-	_latest_release_url = release_url
-	var title := release_name if not release_name.is_empty() else "Spellbreak Modkit %s" % version
-	_update_dialog.dialog_text = "%s is available.\n\nOpen the GitHub release page?" % title
+func _on_update_available(result: Dictionary) -> void:
+	_latest_release_url = str(result.get("release_url", ""))
+	var version := str(result.get("latest_version", "")).trim_prefix("v").trim_prefix("V")
+	_update_dialog.dialog_text = (
+		"Spellbreak Modkit %s is available.\n\nOpen the GitHub release page?" % version
+	)
 	_update_dialog.popup_centered()
 
 
 func _open_latest_release() -> void:
 	if _latest_release_url.is_empty():
-		_latest_release_url = UpdateChecker.GITHUB_LATEST_RELEASE_PAGE % UpdateChecker.DEFAULT_REPOSITORY
+		_show_toast("The release page URL is unavailable")
+		return
 	var error := OS.shell_open(_latest_release_url)
 	if error != OK:
 		_show_toast("Could not open release page (error %d)" % error)

@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://dxsn1gcs66ay8"]
 
 [ext_resource type="Script" uid="uid://dhx0g0op1h4pv" path="res://scenes/uasset_tab.gd" id="1_258fu"]
-[ext_resource type="Script" path="res://scenes/smooth_scroll_container.gd" id="2_5v8ng"]
+[ext_resource type="Script" uid="uid://nlpwhurtsbly" path="res://scenes/smooth_scroll_container.gd" id="2_5v8ng"]
 
 [node name="UassetTab" type="MarginContainer" unique_id=1132104362 node_paths=PackedStringArray("tree", "detail_panel")]
 anchors_preset = 15

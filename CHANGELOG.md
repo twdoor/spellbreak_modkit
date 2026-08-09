@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Replaced the editor's legacy update checker with the reusable Version Manager plugin, including semantic-version release selection and export-time repository metadata.
+- Moved mod manager preferences to the App Settings plugin's standard per-user configuration directory with atomic saves, backups, an Open Config Folder action, and automatic import of legacy `config.json` and `.mod_state.json` files.
+
 ## 0.11.0 - 2026-07-17
 
 - Added a Diagnostics/Health tab and clearer operation feedback panels with expandable logs, retry/copy actions, close controls, and shorter auto-dismiss behavior.

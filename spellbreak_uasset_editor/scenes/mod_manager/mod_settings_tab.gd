@@ -186,9 +186,13 @@ func _build_ui() -> void:
 				_base_source_status_error and _last_base_source_operation.is_valid())
 	content.add_child(_base_source_feedback)
 
-	# ── Config file path (read-only info) ──
+	# ── Config file path ──
 	content.add_child(_section("Config File"))
-	content.add_child(_hint(_cfg.get_config_dir().path_join("config.json")))
+	content.add_child(_hint(_cfg.get_config_path()))
+	var open_config_btn := Button.new()
+	open_config_btn.text = "Open Config Folder"
+	open_config_btn.pressed.connect(_open_config_folder)
+	content.add_child(open_config_btn)
 
 	# ── Key mappings ──
 	var keymap_header := HBoxContainer.new()
@@ -500,17 +504,37 @@ func _update_footer_state() -> void:
 # ── Actions ───────────────────────────────────────────────────────────────────
 
 func _on_save() -> void:
-	_cfg.save_config()
+	var error := _cfg.save_config()
+	if error != OK:
+		var message := _cfg.last_error
+		if message.is_empty():
+			message = "Could not save settings (error %d)." % error
+		status_changed.emit(message, true)
+		return
 	_initial_snapshot = _snapshot_config()
 	_update_footer_state()
+	status_changed.emit("Settings saved to %s" % _cfg.get_config_path(), false)
 	close_requested.emit()
 
 
 func _on_close_or_revert() -> void:
 	if _is_dirty():
-		_cfg.load_config()
+		var error := _cfg.load_config()
+		if error != OK:
+			status_changed.emit(_cfg.last_error, true)
+			return
 		_initial_snapshot = _snapshot_config()
 	close_requested.emit()
+
+
+func _open_config_folder() -> void:
+	var app_settings := get_node_or_null("/root/AppSettings")
+	if app_settings == null:
+		status_changed.emit("The AppSettings service is unavailable.", true)
+		return
+	var error: Error = app_settings.open_config_directory()
+	if error != OK:
+		status_changed.emit(app_settings.last_error, true)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

@@ -6,7 +6,9 @@ project_dir="$repo_root/spellbreak_uasset_editor"
 godot_bin="${GODOT:-godot}"
 python_bin="${PYTHON:-python3}"
 logs=()
-trap 'rm -f "${logs[@]}"' EXIT
+settings_test_dir="$(mktemp -d)"
+export SPELLBREAK_MODKIT_CONFIG_DIR="$settings_test_dir"
+trap 'rm -f "${logs[@]}"; rm -rf "$settings_test_dir"' EXIT
 
 run_godot_checked() {
 	local log
@@ -25,9 +27,10 @@ run_godot_checked() {
 run_godot_checked --headless --editor --path "$project_dir" --quit
 run_godot_checked --headless --path "$project_dir" --script res://tests/test_core.gd
 run_godot_checked --headless --path "$project_dir" --script res://tests/test_background_jobs.gd
+run_godot_checked --headless --path "$project_dir" --script res://tests/app_settings_test.gd
 
 pak_test_dir="$(mktemp -d)"
-trap 'rm -f "${logs[@]}"; rm -rf "$pak_test_dir"' EXIT
+trap 'rm -f "${logs[@]}"; rm -rf "$settings_test_dir" "$pak_test_dir"' EXIT
 "$python_bin" - <<'PY' "$pak_test_dir/version8-padded.pak"
 import hashlib
 import struct

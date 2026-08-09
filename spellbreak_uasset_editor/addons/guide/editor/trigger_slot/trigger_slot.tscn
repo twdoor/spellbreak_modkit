@@ -1,8 +1,8 @@
-[gd_scene load_steps=2 format=3 uid="uid://tk30wnstb0ku"]
+[gd_scene format=3 uid="uid://tk30wnstb0ku"]
 
-[ext_resource type="Script" path="res://addons/guide/editor/trigger_slot/trigger_slot.gd" id="1_wxafc"]
+[ext_resource type="Script" uid="uid://dk2lv53ohhes2" path="res://addons/guide/editor/trigger_slot/trigger_slot.gd" id="1_wxafc"]
 
-[node name="LineEdit" type="LineEdit"]
+[node name="LineEdit" type="LineEdit" unique_id=1106876089]
 unique_name_in_owner = true
 offset_right = 1920.0
 offset_bottom = 31.0
@@ -12,9 +12,9 @@ tooltip_text = "Delete trigger"
 text = "Name"
 editable = false
 context_menu_enabled = false
-virtual_keyboard_enabled = false
 shortcut_keys_enabled = false
 middle_mouse_paste_enabled = false
 selecting_enabled = false
 drag_and_drop_selection_enabled = false
+virtual_keyboard_enabled = false
 script = ExtResource("1_wxafc")

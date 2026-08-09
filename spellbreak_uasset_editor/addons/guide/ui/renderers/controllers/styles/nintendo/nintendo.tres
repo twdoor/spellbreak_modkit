@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="GUIDEControllerRenderStyle" load_steps=23 format=3 uid="uid://b1ck0lpo6mcpv"]
+[gd_resource type="Resource" script_class="GUIDEControllerRenderStyle" format=3 uid="uid://b1ck0lpo6mcpv"]
 
 [ext_resource type="Texture2D" uid="uid://bptn4jygg3p8q" path="res://addons/guide/ui/renderers/controllers/styles/nintendo/Switch_B.png" id="1_bvwg4"]
 [ext_resource type="Texture2D" uid="uid://cl75ptbm7sfi5" path="res://addons/guide/ui/renderers/controllers/styles/nintendo/Switch_A.png" id="2_p375e"]
@@ -17,7 +17,7 @@
 [ext_resource type="Texture2D" uid="uid://d1jqxuup5llkb" path="res://addons/guide/ui/renderers/controllers/styles/nintendo/Switch_Right_Stick.png" id="15_u8qxc"]
 [ext_resource type="Texture2D" uid="uid://denpxaxemjpg3" path="res://addons/guide/ui/renderers/controllers/styles/nintendo/Switch_Right_Stick_Click.png" id="16_hbspj"]
 [ext_resource type="Texture2D" uid="uid://cccvjq78xw3n4" path="res://addons/guide/ui/renderers/controllers/styles/nintendo/Switch_RT.png" id="17_nqree"]
-[ext_resource type="Script" path="res://addons/guide/ui/renderers/controllers/guide_controller_render_style.gd" id="18_lkwjo"]
+[ext_resource type="Script" uid="uid://bwamiti0yohno" path="res://addons/guide/ui/renderers/controllers/guide_controller_render_style.gd" id="18_lkwjo"]
 [ext_resource type="Texture2D" uid="uid://j3wpcxyxsy2r" path="res://addons/guide/ui/renderers/controllers/styles/nintendo/Switch_Plus.png" id="19_htb2d"]
 [ext_resource type="Texture2D" uid="uid://bu5nlug6uf03w" path="res://addons/guide/ui/renderers/textures/arrow_vertical.svg" id="20_b7gr6"]
 [ext_resource type="Texture2D" uid="uid://bru7lpc778npo" path="res://addons/guide/ui/renderers/controllers/styles/nintendo/Switch_Y.png" id="21_kooww"]

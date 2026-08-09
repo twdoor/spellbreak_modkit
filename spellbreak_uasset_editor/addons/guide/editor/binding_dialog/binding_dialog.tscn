@@ -1,8 +1,8 @@
-[gd_scene load_steps=5 format=3 uid="uid://dic27bm4pfw3q"]
+[gd_scene format=3 uid="uid://dic27bm4pfw3q"]
 
-[ext_resource type="Script" path="res://addons/guide/editor/binding_dialog/binding_dialog.gd" id="1_tknjd"]
+[ext_resource type="Script" uid="uid://dfuj0dl8ob6r6" path="res://addons/guide/editor/binding_dialog/binding_dialog.gd" id="1_tknjd"]
 [ext_resource type="PackedScene" uid="uid://dsv7s6tfmnsrs" path="res://addons/guide/editor/input_display/input_display.tscn" id="2_83ieu"]
-[ext_resource type="Script" path="res://addons/guide/remapping/guide_input_detector.gd" id="3_c6q6r"]
+[ext_resource type="Script" uid="uid://db27ccgomq455" path="res://addons/guide/remapping/guide_input_detector.gd" id="3_c6q6r"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_3e874"]
 content_margin_left = 4.0
@@ -17,7 +17,8 @@ border_width_right = 2
 border_width_bottom = 2
 corner_detail = 1
 
-[node name="BindingDialog" type="Window"]
+[node name="BindingDialog" type="Window" unique_id=2125804172]
+oversampling_override = 1.0
 title = "Input Configuration"
 initial_position = 4
 size = Vector2i(1200, 600)
@@ -25,7 +26,7 @@ popup_window = true
 min_size = Vector2i(1200, 600)
 script = ExtResource("1_tknjd")
 
-[node name="MarginContainer" type="MarginContainer" parent="."]
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=1747621210]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -33,75 +34,75 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/margin_bottom = 5
 
-[node name="BGPanel" type="Panel" parent="MarginContainer"]
+[node name="BGPanel" type="Panel" parent="MarginContainer" unique_id=2055389311]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_3e874")
 
-[node name="MarginContainer" type="MarginContainer" parent="MarginContainer"]
+[node name="MarginContainer" type="MarginContainer" parent="MarginContainer" unique_id=1580433931]
 layout_mode = 2
 theme_override_constants/margin_left = 5
 theme_override_constants/margin_top = 5
 theme_override_constants/margin_right = 5
 theme_override_constants/margin_bottom = 5
 
-[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/MarginContainer"]
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/MarginContainer" unique_id=1914462865]
 layout_mode = 2
 
-[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/MarginContainer/HBoxContainer"]
+[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/MarginContainer/HBoxContainer" unique_id=136995320]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="LeftPanel" type="Panel" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer"]
+[node name="LeftPanel" type="Panel" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer" unique_id=389777517]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer"]
+[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer" unique_id=1311044160]
 layout_mode = 2
 theme_override_constants/margin_left = 5
 theme_override_constants/margin_top = 5
 theme_override_constants/margin_right = 5
 theme_override_constants/margin_bottom = 5
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer" unique_id=57692171]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 10
 
-[node name="Label" type="Label" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer"]
+[node name="Label" type="Label" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer" unique_id=1316967135]
 layout_mode = 2
 text = "Detect Input"
 horizontal_alignment = 1
 
-[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer"]
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer" unique_id=277269316]
 layout_mode = 2
 
-[node name="DetectBoolButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="DetectBoolButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1327650734]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Boolean"
 
-[node name="Detect1DButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="Detect1DButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1237024916]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "1D"
 
-[node name="Detect2DButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="Detect2DButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer/HBoxContainer" unique_id=568128130]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "2D"
 
-[node name="Detect3DButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="Detect3DButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer/HBoxContainer" unique_id=744832639]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "3D"
 
-[node name="InstructionsLabel" type="Label" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer"]
+[node name="InstructionsLabel" type="Label" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer" unique_id=2106548525]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 6
@@ -110,46 +111,46 @@ horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 2
 
-[node name="InputDisplay" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer" instance=ExtResource("2_83ieu")]
+[node name="InputDisplay" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer" unique_id=1338188763 instance=ExtResource("2_83ieu")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 6
 
-[node name="AcceptDetectionButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer"]
+[node name="AcceptDetectionButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer/MarginContainer/VBoxContainer" unique_id=902509569]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 text = "Accept"
 
-[node name="MarginContainer2" type="MarginContainer" parent="MarginContainer/MarginContainer/HBoxContainer"]
+[node name="MarginContainer2" type="MarginContainer" parent="MarginContainer/MarginContainer/HBoxContainer" unique_id=898516657]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="RightPanel" type="Panel" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2"]
+[node name="RightPanel" type="Panel" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2" unique_id=1455156664]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2"]
+[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2" unique_id=1346477223]
 layout_mode = 2
 theme_override_constants/margin_left = 5
 theme_override_constants/margin_top = 5
 theme_override_constants/margin_right = 5
 theme_override_constants/margin_bottom = 5
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer" unique_id=508819294]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 10
 
-[node name="Label" type="Label" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer"]
+[node name="Label" type="Label" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer" unique_id=111436615]
 layout_mode = 2
 text = "Select Input"
 horizontal_alignment = 1
 
-[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer"]
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer" unique_id=1984660859]
 layout_mode = 2
 
-[node name="SelectBoolButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="SelectBoolButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer/HBoxContainer" unique_id=735005404]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
@@ -157,7 +158,7 @@ size_flags_horizontal = 3
 toggle_mode = true
 text = "Boolean"
 
-[node name="Select1DButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="Select1DButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1085854898]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
@@ -165,7 +166,7 @@ size_flags_horizontal = 3
 toggle_mode = true
 text = "1D"
 
-[node name="Select2DButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="Select2DButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1309403434]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
@@ -173,7 +174,7 @@ size_flags_horizontal = 3
 toggle_mode = true
 text = "2D"
 
-[node name="Select3DButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="Select3DButton" type="Button" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1333120487]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
@@ -181,24 +182,24 @@ size_flags_horizontal = 3
 toggle_mode = true
 text = "3D"
 
-[node name="NoneAvailable" type="Label" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer"]
+[node name="NoneAvailable" type="Label" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer" unique_id=1225678120]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 6
 size_flags_vertical = 6
 text = "No matching inputs available."
 
-[node name="SomeAvailable" type="ScrollContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer"]
+[node name="SomeAvailable" type="ScrollContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer" unique_id=1078226625]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="AvailableTypes" type="VBoxContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer/SomeAvailable"]
+[node name="AvailableTypes" type="VBoxContainer" parent="MarginContainer/MarginContainer/HBoxContainer/MarginContainer2/MarginContainer/VBoxContainer/SomeAvailable" unique_id=746439141]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="InputDetector" type="Node" parent="."]
+[node name="InputDetector" type="Node" parent="." unique_id=2088071613]
 unique_name_in_owner = true
 script = ExtResource("3_c6q6r")
 

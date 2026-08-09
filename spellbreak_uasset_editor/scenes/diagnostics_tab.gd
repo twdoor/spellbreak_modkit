@@ -164,8 +164,7 @@ func _configuration_checks() -> Array[Dictionary]:
 		return checks
 
 	checks.append(_path_check("Configuration", "Config folder", _cfg.get_config_dir(), true, true))
-	checks.append(_file_check("Configuration", "Config file",
-		_cfg.get_config_dir().path_join(ModConfigManager.CONFIG_FILENAME), false))
+	checks.append(_file_check("Configuration", "Config file", _cfg.get_config_path(), false))
 
 	var launch_cmd := _cfg.launch_cmd.strip_edges()
 	if launch_cmd.is_empty():

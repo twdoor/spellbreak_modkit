@@ -62,4 +62,3 @@ file_mode = 1
 display_mode = 1
 access = 2
 filters = PackedStringArray("*.uasset ; Unreal Asset (binary)", "*.json ; UAssetAPI JSON")
-use_native_dialog = false

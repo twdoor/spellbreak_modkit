@@ -62,7 +62,13 @@ Launch the app, click **Settings**, and fill in:
 - **umodel path** — optional, path to the umodel binary for 3D mesh and animation preview
 - **Sources** — extracted asset directories for reference. Use **Generate from Pak** to select a game `.pak`, choose an output folder, unpack it, and add the extracted folder as a source.
 
-Settings are saved to `config.json` next to the executable.
+Settings are saved atomically to `settings.cfg` in the operating system's
+per-user configuration directory (`~/.config/spellbreak-modkit` on Linux,
+`%APPDATA%\spellbreak-modkit` on Windows, and
+`~/Library/Application Support/spellbreak-modkit` on macOS). The Settings tab
+can open the exact folder. Existing `config.json` and `.mod_state.json` files
+next to an older build are imported automatically and left untouched as a
+backup.
 
 ---
 
