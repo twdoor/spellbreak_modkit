@@ -241,8 +241,8 @@ func _run_texture_export(uasset_path: String, output_path: String) -> void:
 	tex_service.export_png(uasset_path, output_path)
 
 
-func _on_export_finished(success: bool, message: String) -> void:
-	_finish_feedback(success, message)
+func _on_export_finished(result: OperationResult) -> void:
+	_finish_feedback(result.ok, result.message)
 	_set_action_buttons_disabled(false)
 
 
@@ -287,16 +287,16 @@ func _run_texture_import(uasset_path: String, png_path: String, output_dir: Stri
 	tex_service.inject_png(uasset_path, png_path, output_dir)
 
 
-func _on_import_finished(success: bool, message: String) -> void:
-	_finish_feedback(success, message)
+func _on_import_finished(result: OperationResult) -> void:
+	_finish_feedback(result.ok, result.message)
 	_set_action_buttons_disabled(false)
 	# Reload preview after successful import
-	if success:
+	if result.ok:
 		if _ctx.reload_asset.is_valid():
 			var reloaded := bool(_ctx.reload_asset.call())
 			if not reloaded:
 				_finish_feedback(false,
-					message + " Reload failed; close and reopen before saving.", false)
+					result.message + " Reload failed; close and reopen before saving.", false)
 
 
 func _retry_last_operation() -> void:

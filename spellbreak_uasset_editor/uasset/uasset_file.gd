@@ -28,7 +28,7 @@ var raw: Dictionary
 
 ## Spellbreak profile data for the property editor.
 ## Set by main.gd after loading, before creating the editor tab.
-var game_profile: GameProfile = null
+var game_profile: SpellbreakProfile = null
 
 ## File info
 var file_path: String
@@ -52,86 +52,9 @@ var package_flags: String = ""
 var is_unversioned: bool = false
 var folder_name: String = ""
 
-## Signals for UI binding
-signal file_loaded(path: String)
-signal file_saved(path: String)
-signal property_changed(export_idx: int, prop_name: String)
-
-
 ## Path to the UAssetConverter .NET DLL.
-## Search order:
-##   1. Next to the executable (exported build — manually placed)
-##   2. User data dir (extracted from .pck on a previous run)
-##   3. converter/ subfolder in project source tree (editor / dev)
-##   4. ../uasset_converter/publish/ (legacy Modkit layout)
-##   5. Extract from res://converter/ into user data dir (exported, first run)
-static var _converter_dll: String = ""
-
-## All files that must travel with UAssetConverter.dll
-const _CONVERTER_FILES := [
-	"UAssetConverter.dll",
-	"UAssetConverter.deps.json",
-	"UAssetConverter.runtimeconfig.json",
-	"UAssetAPI.dll",
-	"Newtonsoft.Json.dll",
-	"ZstdSharp.dll",
-]
-
 static func _get_converter_dll() -> String:
-	if not _converter_dll.is_empty():
-		return _converter_dll
-
-	const DLL := "UAssetConverter.dll"
-	var exe_dir := OS.get_executable_path().get_base_dir()
-	var user_dir := OS.get_user_data_dir()
-	var project_dir := ProjectSettings.globalize_path("res://")
-
-	# 1. Next to the executable (user manually placed or post-export copy)
-	if FileAccess.file_exists(exe_dir.path_join(DLL)):
-		_converter_dll = exe_dir.path_join(DLL)
-		return _converter_dll
-
-	# 2. Already extracted to user data on a previous run
-	if FileAccess.file_exists(user_dir.path_join(DLL)):
-		_converter_dll = user_dir.path_join(DLL)
-		return _converter_dll
-
-	# 3. Project source converter/ folder (Godot editor / dev)
-	# Only use project_dir when it's an absolute path — in exported builds globalize_path("res://")
-	# returns "" which produces a relative path that OS.execute() can't resolve.
-	if project_dir.is_absolute_path():
-		if FileAccess.file_exists(project_dir.path_join("converter").path_join(DLL)):
-			_converter_dll = project_dir.path_join("converter").path_join(DLL)
-			return _converter_dll
-
-		# 4. Legacy sibling uasset_converter/publish/ layout
-		if FileAccess.file_exists(project_dir.path_join("../uasset_converter/publish").path_join(DLL)):
-			_converter_dll = project_dir.path_join("../uasset_converter/publish").path_join(DLL)
-			return _converter_dll
-
-	# 5. Packed inside res://converter/ (exported build, first run) — extract to user data
-	if FileAccess.file_exists("res://converter/" + DLL):
-		_extract_converter_to_user_dir(user_dir)
-		if FileAccess.file_exists(user_dir.path_join(DLL)):
-			_converter_dll = user_dir.path_join(DLL)
-			return _converter_dll
-
-	# Nothing found — return exe-relative path so error messages are meaningful
-	_converter_dll = exe_dir.path_join(DLL)
-	return _converter_dll
-
-
-static func _extract_converter_to_user_dir(user_dir: String) -> void:
-	DirAccess.make_dir_recursive_absolute(user_dir)
-	for fname in _CONVERTER_FILES:
-		var src: String = "res://converter/" + fname
-		var dst: String = user_dir.path_join(fname)
-		if not FileAccess.file_exists(src):
-			continue
-		var data := FileAccess.get_file_as_bytes(src)
-		if data.size() == 0:
-			continue
-		FileUtils.write_bytes_atomic(dst, data)
+	return ToolchainRegistry.converter_dll()
 
 
 ## Load a UAssetAPI JSON or binary .uasset file and parse it into objects.
@@ -233,7 +156,6 @@ static func _from_dict(data: Dictionary, path: String) -> UAssetFile:
 				asset.exports.append(UAssetExport.from_dict(exp_dict))
 	
 	asset._ensure_default_properties()
-	asset.file_loaded.emit(path)
 	return asset
 
 
@@ -443,6 +365,19 @@ func save_file(path: String = "") -> Error:
 		for extension in ["uasset", "uexp", "ubulk", "uptnl"]:
 			var source: String = stage_stem + "." + extension
 			var companion_target: String = out_uasset.get_basename() + "." + extension
+			# UAssetAPI regenerates serialized exports, but external bulk payloads
+			# are intentionally not embedded in its JSON representation. Preserve
+			# those immutable payloads as part of the same atomic package install.
+			if not FileAccess.file_exists(source) and extension in ["ubulk", "uptnl"]:
+				var original_companion: String = binary_path.get_basename() + "." + extension
+				if FileAccess.file_exists(original_companion):
+					var preserve_error := FileUtils.copy_file(original_companion, source)
+					if preserve_error != OK:
+						_remove_staged_asset_files(stage_stem)
+						push_error("UAssetFile: Could not stage .%s companion (error %d)" % [
+							extension, preserve_error,
+						])
+						return preserve_error
 			if FileAccess.file_exists(source):
 				staged_files.append({
 					"source": source,
@@ -461,7 +396,6 @@ func save_file(path: String = "") -> Error:
 			return install_error
 		binary_path = out_uasset
 		file_path = out_uasset
-		file_saved.emit(out_uasset)
 		return OK
 
 	# JSON save path
@@ -471,8 +405,99 @@ func save_file(path: String = "") -> Error:
 		return write_error
 
 	file_path = target
-	file_saved.emit(target)
 	return OK
+
+
+## Build an independent copy of this binary asset for a new package path.
+## The source and destination filename stems define the identity replacement.
+## Every serialized content string is updated, except UAssetAPI $type descriptors.
+func prepare_reuse_copy(destination_path: String) -> OperationResult:
+	if binary_path.is_empty() or binary_path.get_extension().to_lower() != "uasset":
+		return OperationResult.failed("Reuse As requires an open binary .uasset file")
+	if destination_path.get_extension().to_lower() != "uasset":
+		return OperationResult.failed("The destination must be a .uasset file")
+	if FileUtils.same_path(binary_path, destination_path):
+		return OperationResult.failed("Choose a different asset file from the source")
+
+	var source_name := binary_path.get_file().get_basename()
+	var destination_name := destination_path.get_file().get_basename()
+	if source_name.is_empty() or destination_name.is_empty():
+		return OperationResult.failed("The source and destination need valid asset names")
+	if source_name == destination_name:
+		return OperationResult.failed("The reused asset needs a different filename")
+
+	var renamed_name_entries := 0
+	for name in name_map:
+		if source_name in name:
+			renamed_name_entries += 1
+	if renamed_name_entries == 0:
+		return OperationResult.failed(
+				"The NameMap does not contain the source asset name '%s'" % source_name)
+
+	var serialized := _to_dict()
+	var stats := {"replacements": 0}
+	serialized = _replace_reuse_identity(serialized, source_name, destination_name, stats)
+	var copy := _from_dict(serialized, binary_path)
+	copy.binary_path = binary_path
+	copy.file_path = binary_path
+	copy.game_profile = game_profile
+	return OperationResult.succeeded(
+			"Prepared %s from %s" % [destination_name, source_name], copy, {
+				"source_name": source_name,
+				"destination_name": destination_name,
+				"renamed_name_entries": renamed_name_entries,
+				"replacement_count": int(stats["replacements"]),
+			})
+
+
+## Save a reused copy without changing this source object. The regular binary
+## save transaction regenerates every required companion and restores existing
+## destination files if conversion or installation fails.
+func save_reuse_copy(destination_path: String) -> OperationResult:
+	var prepared := prepare_reuse_copy(destination_path)
+	if not prepared.ok:
+		return prepared
+	var copy := prepared.value as UAssetFile
+	var save_error := copy.save_file(destination_path)
+	if save_error != OK:
+		return OperationResult.failed(
+				"Could not create reused asset (error %d)" % save_error,
+				prepared.metadata)
+	return OperationResult.succeeded(
+			"Created %s" % destination_path.get_file(), copy, prepared.metadata)
+
+
+static func _replace_reuse_identity(value: Variant, source_name: String,
+		destination_name: String, stats: Dictionary) -> Variant:
+	if value is String:
+		var text := value as String
+		var occurrences := text.count(source_name)
+		if occurrences > 0:
+			stats["replacements"] = int(stats.get("replacements", 0)) + occurrences
+			return text.replace(source_name, destination_name)
+		return text
+	if value is Dictionary:
+		var dictionary := value as Dictionary
+		for key in dictionary.keys():
+			# These strings identify serializer classes, not objects in the package.
+			if str(key) == "$type":
+				continue
+			dictionary[key] = _replace_reuse_identity(
+					dictionary[key], source_name, destination_name, stats)
+		return dictionary
+	if value is Array:
+		var array := value as Array
+		for index in array.size():
+			array[index] = _replace_reuse_identity(
+					array[index], source_name, destination_name, stats)
+		return array
+	if value is PackedStringArray:
+		var strings := value as PackedStringArray
+		for index in strings.size():
+			strings[index] = _replace_reuse_identity(
+					strings[index], source_name, destination_name, stats)
+		return strings
+	return value
 
 
 static func _remove_staged_asset_files(stage_stem: String) -> void:
@@ -791,7 +816,6 @@ func set_value(prop_name: String, new_value) -> bool:
 	var prop := find_property(prop_name)
 	if prop:
 		prop.value = new_value
-		property_changed.emit(0, prop_name)
 		return true
 	return false
 

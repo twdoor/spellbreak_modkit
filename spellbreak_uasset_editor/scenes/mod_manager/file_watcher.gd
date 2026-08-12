@@ -11,6 +11,7 @@ class_name ModFileWatcher extends RefCounted
 const POLL_INTERVAL := 1.0  # seconds
 const STOP_CHECK_INTERVAL_MS := 50
 const HASH_CHUNK_SIZE := 1024 * 1024
+const FINGERPRINT_CHUNK_SIZE := 64 * 1024
 const WATCHED_EXTENSIONS := [".uasset", ".uexp", ".ubulk", ".umap"]
 
 signal watch_status_changed(active: bool)
@@ -24,6 +25,7 @@ var _thread:     Thread  = null
 var _active:     bool    = false
 var _active_mtx: Mutex   = Mutex.new()
 var _pack_count: int     = 0
+var _file_signatures: Dictionary = {}
 
 
 func setup(cfg: ModConfigManager, state: ModStateManager, packer: PackingService) -> ModFileWatcher:
@@ -63,6 +65,7 @@ func start() -> void:
 		return
 	_active = true
 	_pack_count = 0
+	_file_signatures.clear()
 	_active_mtx.unlock()
 
 	_thread = Thread.new()
@@ -119,7 +122,8 @@ func _watch_loop() -> void:
 		if enabled_names.is_empty():
 			continue
 		var all_mods := ModDiscovery.scan(_cfg.mods_dir, _cfg.get_game_profile().content_root)
-		var enabled_mods := all_mods.filter(func(m): return m["name"] in enabled_names)
+		var enabled_mods := all_mods.filter(
+				func(m: ModInfo): return m.name in enabled_names)
 		if enabled_mods.is_empty():
 			continue
 
@@ -128,9 +132,10 @@ func _watch_loop() -> void:
 
 		# PackingService owns its own worker thread, but starting it and emitting UI
 		# signals must happen on the main thread.
-		while _packer.is_packing():
+		while _is_active() and _packer.is_packing():
 			OS.delay_msec(200)
-		call_deferred("_emit_pack_triggered_and_pack", n, enabled_mods.duplicate(true))
+		if _is_active():
+			call_deferred("_emit_pack_triggered_and_pack", n, enabled_mods.duplicate())
 
 
 func _sleep_until_next_poll() -> bool:
@@ -164,6 +169,7 @@ func _snapshot() -> int:
 		return 0
 
 	var h: int = 0
+	var seen_files: Dictionary = {}
 
 	# Collect directories in sorted order for determinism
 	var dir := DirAccess.open(_cfg.mods_dir)
@@ -173,7 +179,8 @@ func _snapshot() -> int:
 	var entry := dir.get_next()
 	var names: Array = []
 	while not entry.is_empty():
-		if dir.current_is_dir() and not entry.begins_with(".") and entry in enabled_names:
+		if dir.current_is_dir() and not dir.is_link(entry) \
+				and not entry.begins_with(".") and entry in enabled_names:
 			names.append(entry)
 		entry = dir.get_next()
 	dir.list_dir_end()
@@ -187,13 +194,17 @@ func _snapshot() -> int:
 			continue
 		if not DirAccess.dir_exists_absolute(mod_content):
 			continue
-		h = _hash_dir(mod_content, h)  # accumulate returned hash — ints are pass-by-value in GDScript
+		h = _hash_dir(mod_content, h, seen_files)
+
+	for cached_path in _file_signatures.keys():
+		if cached_path not in seen_files:
+			_file_signatures.erase(cached_path)
 
 	return h
 
 
 # Returns the updated hash after folding in every tracked file under path.
-func _hash_dir(path: String, h: int) -> int:
+func _hash_dir(path: String, h: int, seen_files: Dictionary) -> int:
 	var dir := DirAccess.open(path)
 	if not dir:
 		return h
@@ -201,15 +212,19 @@ func _hash_dir(path: String, h: int) -> int:
 	dir.list_dir_begin()
 	var entry := dir.get_next()
 	while not entry.is_empty():
-		entries.append(entry)
+		entries.append({"name": entry, "is_link": dir.is_link(entry)})
 		entry = dir.get_next()
 	dir.list_dir_end()
-	entries.sort()
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a["name"]) < str(b["name"]))
 
-	for e: String in entries:
+	for item: Dictionary in entries:
+		if bool(item["is_link"]):
+			continue
+		var e := str(item["name"])
 		var full := path.path_join(e)
 		if DirAccess.dir_exists_absolute(full) and not e.begins_with("."):
-			h = _hash_dir(full, h)   # recurse and thread the hash back up
+			h = _hash_dir(full, h, seen_files)
 		elif not DirAccess.dir_exists_absolute(full):
 			var watched := false
 			var lower_name: String = e.to_lower()
@@ -219,14 +234,55 @@ func _hash_dir(path: String, h: int) -> int:
 					break
 			if not watched:
 				continue
-			var fa := FileAccess.open(full, FileAccess.READ)
-			if fa:
-				var sz := fa.get_length()
-				fa.close()
-				var mt := FileAccess.get_modified_time(full)
-				h ^= hash(full) ^ hash(sz) ^ hash(mt) ^ hash(_file_content_digest(full))
+			seen_files[full] = true
+			var signature := _file_signature(full)
+			h ^= hash(full) ^ hash(signature.get("size", 0)) \
+					^ hash(signature.get("mtime", 0)) ^ hash(signature.get("digest", ""))
 
 	return h
+
+
+func _file_signature(path: String) -> Dictionary:
+	var fa := FileAccess.open(path, FileAccess.READ)
+	if not fa:
+		return {}
+	var size := fa.get_length()
+	fa.close()
+	var mtime := FileAccess.get_modified_time(path)
+	var fingerprint := _file_fingerprint(path, size)
+	var previous: Dictionary = _file_signatures.get(path, {})
+	var digest := str(previous.get("digest", ""))
+	if previous.is_empty() or int(previous.get("size", -1)) != size \
+			or int(previous.get("mtime", -1)) != mtime \
+			or str(previous.get("fingerprint", "")) != fingerprint:
+		digest = _file_content_digest(path)
+	var signature := {
+		"size": size,
+		"mtime": mtime,
+		"fingerprint": fingerprint,
+		"digest": digest,
+	}
+	_file_signatures[path] = signature
+	return signature
+
+
+func _file_fingerprint(path: String, size: int) -> String:
+	var fa := FileAccess.open(path, FileAccess.READ)
+	if not fa:
+		return ""
+	var ctx := HashingContext.new()
+	if ctx.start(HashingContext.HASH_MD5) != OK:
+		fa.close()
+		return ""
+	var offsets: Array[int] = [0]
+	if size > FINGERPRINT_CHUNK_SIZE:
+		offsets.append(maxi(0, (size >> 1) - (FINGERPRINT_CHUNK_SIZE >> 1)))
+		offsets.append(maxi(0, size - FINGERPRINT_CHUNK_SIZE))
+	for offset in offsets:
+		fa.seek(offset)
+		ctx.update(fa.get_buffer(mini(FINGERPRINT_CHUNK_SIZE, size - offset)))
+	fa.close()
+	return ctx.finish().hex_encode()
 
 
 func _file_content_digest(path: String) -> String:

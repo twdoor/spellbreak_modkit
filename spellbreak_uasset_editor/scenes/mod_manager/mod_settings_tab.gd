@@ -188,11 +188,17 @@ func _build_ui() -> void:
 
 	# ── Config file path ──
 	content.add_child(_section("Config File"))
-	content.add_child(_hint(_cfg.get_config_path()))
+	var config_row := HBoxContainer.new()
+	config_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	config_row.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
+	var config_path_hint := _hint(_cfg.get_config_path())
+	config_path_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	config_row.add_child(config_path_hint)
 	var open_config_btn := Button.new()
 	open_config_btn.text = "Open Config Folder"
 	open_config_btn.pressed.connect(_open_config_folder)
-	content.add_child(open_config_btn)
+	config_row.add_child(open_config_btn)
+	content.add_child(config_row)
 
 	# ── Key mappings ──
 	var keymap_header := HBoxContainer.new()
@@ -206,7 +212,7 @@ func _build_ui() -> void:
 	keymap_btn.pressed.connect(func() -> void: open_keymap_requested.emit())
 	keymap_header.add_child(keymap_btn)
 	content.add_child(keymap_header)
-	content.add_child(_hint("Customize editor shortcuts using GUIDE mappings."))
+	content.add_child(_hint("Customize editor shortcuts using native Godot input actions."))
 
 	add_child(HSeparator.new())
 
@@ -376,21 +382,21 @@ func _on_base_source_generate_started() -> void:
 		_base_source_btn.disabled = true
 
 
-func _on_base_source_generate_finished(success: bool, message: String,
-		source_name: String, source_path: String) -> void:
+func _on_base_source_generate_finished(result: OperationResult) -> void:
 	if is_instance_valid(_base_source_btn):
 		_base_source_btn.disabled = false
-	if success:
-		_add_generated_source(source_name, source_path)
-		var success_message := "%s. Source added; save settings to keep it." % message
+	if result.ok:
+		_add_generated_source(str(result.metadata.get("source_name", "Base Game")),
+				str(result.metadata.get("source_path", result.value)))
+		var success_message := "%s. Source added; save settings to keep it." % result.message
 		_append_base_source_log("OK: %s" % success_message)
 		_set_base_source_status(success_message, false, AppTheme.StatusKind.SUCCESS)
 	else:
-		_append_base_source_log("ERROR: %s" % message)
-		_set_base_source_status(message, true, AppTheme.StatusKind.ERROR)
+		_append_base_source_log("ERROR: %s" % result.message)
+		_set_base_source_status(result.message, true, AppTheme.StatusKind.ERROR)
 	if is_instance_valid(_base_source_feedback):
 		_base_source_feedback.set_retry_enabled(
-				not success and _last_base_source_operation.is_valid())
+				not result.ok and _last_base_source_operation.is_valid())
 
 
 func _add_generated_source(source_name: String, source_path: String) -> void:

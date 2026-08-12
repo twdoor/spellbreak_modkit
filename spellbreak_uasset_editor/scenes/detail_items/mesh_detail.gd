@@ -244,7 +244,7 @@ func _load_mesh_async(mesh_service: MeshService) -> void:
 			AppTheme.StatusKind.ERROR)
 		return
 	_extract_job_id = _ctx.background_jobs.run(
-		func() -> Array: return mesh_service.get_preview_mesh(uasset_path),
+		func() -> OperationResult: return mesh_service.get_preview_mesh(uasset_path),
 		_on_mesh_job_finished)
 	if _extract_job_id < 0:
 		_set_status_label(_loading_label, "Could not start mesh extraction job",
@@ -253,8 +253,8 @@ func _load_mesh_async(mesh_service: MeshService) -> void:
 			_refresh_btn.disabled = false
 
 
-func _on_mesh_job_finished(result: Array) -> void:
-	_on_mesh_extracted(str(result[0]), str(result[1]))
+func _on_mesh_job_finished(result: OperationResult) -> void:
+	_on_mesh_extracted(str(result.value) if result.ok else "", result.message)
 
 
 func _on_mesh_extracted(gltf_path: String, error: String) -> void:
@@ -627,14 +627,14 @@ func _load_animation_asset_async(path: String) -> void:
 	_anim_selector.clear()
 	_set_anim_status("Extracting animation...", false, AppTheme.StatusKind.WORKING)
 	_animation_job_id = _ctx.background_jobs.run(
-		func() -> Array: return mesh_service.get_preview_animations(path),
-		func(result: Array) -> void: _on_animation_job_finished(path, result))
+		func() -> OperationResult: return mesh_service.get_preview_animations(path),
+		func(result: OperationResult) -> void: _on_animation_job_finished(path, result))
 
 
-func _on_animation_job_finished(source_path: String, result: Array) -> void:
+func _on_animation_job_finished(source_path: String, result: OperationResult) -> void:
 	_animation_job_id = -1
-	var paths: Array = result[0] if result.size() > 0 and result[0] is Array else []
-	var error := str(result[1]) if result.size() > 1 else ""
+	var paths: Array = result.value if result.ok and result.value is Array else []
+	var error := result.message
 	if paths.is_empty():
 		if _auto_animation_active:
 			_try_next_auto_animation(error)
@@ -1020,8 +1020,8 @@ func _run_mesh_export(uasset_path: String, output_dir: String) -> void:
 	mesh_service.export_glb(uasset_path, output_dir)
 
 
-func _on_export_finished(success: bool, message: String) -> void:
-	_finish_feedback(success, message)
+func _on_export_finished(result: OperationResult) -> void:
+	_finish_feedback(result.ok, result.message)
 	if is_instance_valid(_export_btn):
 		_export_btn.disabled = false
 

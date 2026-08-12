@@ -1,4 +1,4 @@
-class_name MeshService extends RefCounted
+class_name MeshService extends BackgroundOperationService
 
 ## Wraps umodel (UE Viewer) to export UE4 mesh assets to glTF for preview.
 ## Pattern mirrors TextureService: synchronous helpers called from worker threads,
@@ -8,10 +8,9 @@ class_name MeshService extends RefCounted
 ##   Preview: uasset → glTF (umodel -export -gltf) → GLTFDocument in Godot
 ##   Export:  umodel glTF → Godot glTF round-trip → Blender-friendly GLB
 
-signal operation_finished(success: bool, message: String)
+signal operation_finished(result: OperationResult)
 
 var _cfg: ModConfigManager
-var _operation := SingleBackgroundOperation.new()
 
 const CACHE_DIR := "sb_mesh_cache"
 const CACHE_VERSION := 2
@@ -22,15 +21,6 @@ const ANIMATION_SCAN_DEPTH := 4
 func setup(cfg: ModConfigManager) -> MeshService:
 	_cfg = cfg
 	return self
-
-
-func is_busy() -> bool:
-	return _operation.is_busy()
-
-
-## Block until the worker thread has fully exited. Call from _exit_tree().
-func wait_to_finish() -> void:
-	_operation.wait_to_finish()
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -44,32 +34,24 @@ func is_configured() -> bool:
 
 ## Synchronous mesh export: extract glTF to cache dir.
 ## Intended to be called from a worker thread (blocks on subprocess).
-## Returns [gltf_path: String, error: String]. gltf_path is empty on failure.
-func get_preview_mesh(uasset_path: String) -> Array:
+func get_preview_mesh(uasset_path: String) -> OperationResult:
 	# Check cache first
 	var cached := get_cached_mesh(uasset_path)
 	if not cached.is_empty():
-		return [cached, ""]
+		return OperationResult.succeeded("Using cached mesh.", cached)
 
 	var cache_dir := _get_cache_dir().path_join(_cache_key(uasset_path))
-	var result := _do_export_gltf(uasset_path, cache_dir)
-	if not result[0]:
-		return ["", result[1]]
-	return [result[2], ""]
+	return _do_export_gltf(uasset_path, cache_dir)
 
 
 ## Synchronous animation export: extract MD5Anim to cache dir.
-## Returns [paths: Array[String], error: String].
-func get_preview_animations(uasset_path: String) -> Array:
+func get_preview_animations(uasset_path: String) -> OperationResult:
 	var cached := get_cached_animations(uasset_path)
 	if not cached.is_empty():
-		return [cached, ""]
+		return OperationResult.succeeded("Using cached animations.", cached)
 
 	var cache_dir := _get_cache_dir().path_join(_animation_cache_key(uasset_path))
-	var result := _do_export_md5anim(uasset_path, cache_dir)
-	if not result[0]:
-		return [[], result[1]]
-	return [result[2], ""]
+	return _do_export_md5anim(uasset_path, cache_dir)
 
 
 ## Find likely AnimSequence assets near a SkeletalMesh and configured sources.
@@ -173,36 +155,34 @@ func get_cached_animations(uasset_path: String) -> Array[String]:
 
 
 func _start_operation(task: Callable) -> void:
-	var error := _operation.start(task, _on_operation_done)
+	var error := _start_background(task, _on_operation_done)
 	if error == ERR_ALREADY_IN_USE:
 		return
 	if error != OK:
-		operation_finished.emit(false, "Could not start mesh operation (error %d)" % error)
+		operation_finished.emit(OperationResult.failed(
+				"Could not start mesh operation (error %d)" % error))
 
 
-func _on_operation_done(result: Variant) -> void:
-	if not result is Array or result.size() < 2:
-		operation_finished.emit(false, "Mesh operation returned an invalid result")
-		return
-	operation_finished.emit(bool(result[0]), str(result[1]))
+func _on_operation_done(result: OperationResult) -> void:
+	operation_finished.emit(result)
 
 
 # ── Core operation ───────────────────────────────────────────────────────────
 
 
 ## Export uasset → glTF via umodel.
-## Returns [success: bool, message: String, gltf_path: String].
-func _do_export_gltf(uasset_path: String, output_dir: String) -> Array:
+func _do_export_gltf(uasset_path: String, output_dir: String) -> OperationResult:
 	var umodel := _cfg.get_umodel_path()
 	if umodel.is_empty() or not FileAccess.file_exists(umodel):
-		return [false, "umodel not configured", ""]
+		return OperationResult.failed("umodel not configured")
 
 	if not FileAccess.file_exists(uasset_path):
-		return [false, "File not found: %s" % uasset_path, ""]
+		return OperationResult.failed("File not found: %s" % uasset_path)
 
 	var output_dir_error := DirAccess.make_dir_recursive_absolute(output_dir)
 	if output_dir_error != OK:
-		return [false, "Could not create export folder (error %d)" % output_dir_error, ""]
+		return OperationResult.failed(
+				"Could not create export folder (error %d)" % output_dir_error)
 
 	# umodel command: export as glTF using Spellbreak's UE version flag.
 	var game_flag := _cfg.get_game_profile().umodel_game_flag
@@ -213,52 +193,54 @@ func _do_export_gltf(uasset_path: String, output_dir: String) -> Array:
 
 	if code != 0:
 		var err_text := ProcessUtils.output_text(output)
-		return [false, "umodel export failed (exit %d): %s" % [code, err_text], ""]
+		return OperationResult.failed(
+				"umodel export failed (exit %d): %s" % [code, err_text])
 
 	# Find the exported glTF file (umodel may place it in a subdirectory)
 	var gltf_path := _find_file_recursive(output_dir, "gltf")
 	if gltf_path.is_empty():
 		gltf_path = _find_file_recursive(output_dir, "glb")
 	if gltf_path.is_empty():
-		return [false, "No glTF file produced by umodel", ""]
+		return OperationResult.failed("No glTF file produced by umodel")
 
-	return [true, "Exported to %s" % gltf_path.get_file(), gltf_path]
+	return OperationResult.succeeded("Exported to %s" % gltf_path.get_file(), gltf_path)
 
 
 ## User-facing mesh export: write a normalized .glb that Blender and other
 ## stricter importers accept more reliably than umodel's raw glTF.
-## Returns [success: bool, message: String, glb_path: String].
-func _do_export_glb(uasset_path: String, output_dir: String) -> Array:
+func _do_export_glb(uasset_path: String, output_dir: String) -> OperationResult:
 	var tmp_result := FileUtils.make_temp_dir("sb_mesh_export")
 	if not bool(tmp_result.get("ok", false)):
-		return [false, str(tmp_result.get("error", "Could not create temp directory")), ""]
+		return OperationResult.failed(
+				str(tmp_result.get("error", "Could not create temp directory")))
 	var staging_dir := str(tmp_result["path"])
 	var raw_result := _do_export_gltf(uasset_path, staging_dir)
-	if not raw_result[0]:
+	if not raw_result.ok:
 		FileUtils.remove_dir_recursive(staging_dir)
 		return raw_result
 
-	var converted := _write_glb_from_gltf(str(raw_result[2]), output_dir)
+	var converted := _write_glb_from_gltf(str(raw_result.value), output_dir)
 	FileUtils.remove_dir_recursive(staging_dir)
 	return converted
 
 
-func _write_glb_from_gltf(gltf_path: String, output_dir: String) -> Array:
+func _write_glb_from_gltf(gltf_path: String, output_dir: String) -> OperationResult:
 	if not FileAccess.file_exists(gltf_path):
-		return [false, "glTF file not found: %s" % gltf_path, ""]
+		return OperationResult.failed("glTF file not found: %s" % gltf_path)
 	var mkdir_error := DirAccess.make_dir_recursive_absolute(output_dir)
 	if mkdir_error != OK:
-		return [false, "Could not create export folder (error %d)" % mkdir_error, ""]
+		return OperationResult.failed(
+				"Could not create export folder (error %d)" % mkdir_error)
 
 	var input_doc := GLTFDocument.new()
 	var input_state := GLTFState.new()
 	var error := input_doc.append_from_file(gltf_path, input_state, 0, gltf_path.get_base_dir())
 	if error != OK:
-		return [false, "Could not read exported glTF (error %d)" % error, ""]
+		return OperationResult.failed("Could not read exported glTF (error %d)" % error)
 
 	var scene := input_doc.generate_scene(input_state)
 	if scene == null:
-		return [false, "Could not build scene from exported glTF", ""]
+		return OperationResult.failed("Could not build scene from exported glTF")
 
 	var material_result := MeshPreviewMaterialLoader.apply_to_scene(
 		scene, get_preview_resource_root(gltf_path))
@@ -268,34 +250,35 @@ func _write_glb_from_gltf(gltf_path: String, output_dir: String) -> Array:
 	error = output_doc.append_from_scene(scene, output_state)
 	scene.free()
 	if error != OK:
-		return [false, "Could not prepare Blender-compatible GLB (error %d)" % error, ""]
+		return OperationResult.failed(
+				"Could not prepare Blender-compatible GLB (error %d)" % error)
 
 	var glb_path := output_dir.path_join("%s.glb" % gltf_path.get_file().get_basename())
 	error = output_doc.write_to_filesystem(output_state, glb_path)
 	if error != OK:
-		return [false, "Could not write GLB (error %d)" % error, ""]
+		return OperationResult.failed("Could not write GLB (error %d)" % error)
 	var applied_count := int(material_result.get("applied", 0))
 	var texture_count := int(material_result.get("texture_count", 0))
 	var message := "Exported GLB: %s" % glb_path.get_file()
 	if applied_count > 0:
 		message += " (%d textured material(s), %d texture(s))" % [
 			applied_count, texture_count]
-	return [true, message, glb_path]
+	return OperationResult.succeeded(message, glb_path)
 
 
 ## Export an animation package to MD5Anim via umodel.
-## Returns [success: bool, message: String, paths: Array[String]].
-func _do_export_md5anim(uasset_path: String, output_dir: String) -> Array:
+func _do_export_md5anim(uasset_path: String, output_dir: String) -> OperationResult:
 	var umodel := _cfg.get_umodel_path()
 	if umodel.is_empty() or not FileAccess.file_exists(umodel):
-		return [false, "umodel not configured", []]
+		return OperationResult.failed("umodel not configured")
 
 	if not FileAccess.file_exists(uasset_path):
-		return [false, "File not found: %s" % uasset_path, []]
+		return OperationResult.failed("File not found: %s" % uasset_path)
 
 	var output_dir_error := DirAccess.make_dir_recursive_absolute(output_dir)
 	if output_dir_error != OK:
-		return [false, "Could not create animation export folder (error %d)" % output_dir_error, []]
+		return OperationResult.failed(
+				"Could not create animation export folder (error %d)" % output_dir_error)
 
 	var game_flag := _cfg.get_game_profile().umodel_game_flag
 	var output: Array = []
@@ -305,12 +288,14 @@ func _do_export_md5anim(uasset_path: String, output_dir: String) -> Array:
 
 	if code != 0:
 		var err_text := ProcessUtils.output_text(output)
-		return [false, "umodel animation export failed (exit %d): %s" % [code, err_text], []]
+		return OperationResult.failed(
+				"umodel animation export failed (exit %d): %s" % [code, err_text])
 
 	var md5_files := _find_files_recursive(output_dir, "md5anim")
 	if md5_files.is_empty():
-		return [false, "No MD5Anim file produced by umodel", []]
-	return [true, "Exported %d animation(s)" % md5_files.size(), md5_files]
+		return OperationResult.failed("No MD5Anim file produced by umodel")
+	return OperationResult.succeeded(
+			"Exported %d animation(s)" % md5_files.size(), md5_files)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

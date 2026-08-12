@@ -10,7 +10,7 @@ A visual `.uasset` editor and mod manager for **Spellbreak Community Edition**, 
 
 The main project is `spellbreak_uasset_editor/`, a Godot 4 desktop app with a
 built-in mod manager, a full `.uasset` editor, and Spellbreak-specific profile data.
-Repository-level scripts and CI run the regression suite.
+Repository-level scripts run the regression suite locally.
 
 Everything is bundled inside the single binary:
 - [UAssetAPI](https://github.com/atenfyr/UAssetAPI) converter (pre-compiled .NET DLLs)
@@ -66,9 +66,7 @@ Settings are saved atomically to `settings.cfg` in the operating system's
 per-user configuration directory (`~/.config/spellbreak-modkit` on Linux,
 `%APPDATA%\spellbreak-modkit` on Windows, and
 `~/Library/Application Support/spellbreak-modkit` on macOS). The Settings tab
-can open the exact folder. Existing `config.json` and `.mod_state.json` files
-next to an older build are imported automatically and left untouched as a
-backup.
+can open the exact folder.
 
 ---
 
@@ -137,11 +135,18 @@ Open `.uasset` or `.json` files via `Ctrl+Space`, drag-and-drop, or double-click
 |----------|--------|
 | `Ctrl+Space` | Open file |
 | `Ctrl+S` | Save |
+| `Ctrl+Shift+S` | Reuse the current binary asset under another asset name |
 | `Ctrl+Q` | Close tab |
 | `Ctrl+C / V / X` | Copy / Paste / Cut |
 | `Del / Ctrl+D` | Delete selected item |
 | `Ctrl+Z` | Undo |
 | `Ctrl+A / F` | Previous / Next tab |
+
+Use **Reuse As...** on an open binary asset to choose a new or existing
+`.uasset` destination. The editor clones the complete package, regenerates its
+required companion files, and replaces the old asset identity throughout the
+NameMap, object names, generated-class names, and package paths. The source
+asset remains unchanged.
 | `Esc` | Clear selection / cancel edit |
 
 **What you can edit:**
@@ -230,7 +235,7 @@ spellbreak-modkit/
 ├── README.md
 ├── LICENSE
 ├── scripts/test.sh                 Parser check and regression test entry point
-├── .github/workflows/ci.yml        GitHub Actions test workflow
+├── dist/                           Local exports (ignored, outside Godot project)
 └── spellbreak_uasset_editor/       Godot 4 app
     ├── main.gd / main.tscn         Entry point, tab bar, status bar
     ├── app_theme.gd                Centralized UI theme constants & helpers
@@ -245,11 +250,12 @@ spellbreak-modkit/
     │   ├── uasset_export.gd
     │   ├── uasset_import.gd
     │   ├── uasset_property.gd
-    │   ├── game_profile.gd         Spellbreak profile loader
-    │   ├── ue4_enums.gd            Legacy wrapper (delegates to profile)
-    │   └── spellbreak_tags.gd      Legacy wrapper (delegates to profile)
+    │   └── spellbreak_profile.gd   Fixed Spellbreak profile loader
     ├── scenes/
     │   ├── process_utils.gd        Cross-platform subprocess helpers
+    │   ├── toolchain_registry.gd   Bundled tool resolution and extraction
+    │   ├── operation_result.gd     Named service-operation result
+    │   ├── background_operation_service.gd Shared worker lifecycle
     │   ├── asset_document.gd       Asset ownership, save point, undo/redo history
     │   ├── asset_edit_command.gd   Reversible editor mutation
     │   ├── asset_editor_context.gd Typed detail-view dependencies and actions
@@ -286,9 +292,9 @@ spellbreak-modkit/
     │       ├── file_watcher.gd
     │       ├── file_utils.gd
     │       └── packing_service.gd
-    ├── guide/                      GUIDE action resources (remappable keybinds)
+    ├── scenes/keymap_settings_tab.gd Native InputMap keybind editor
     ├── tests/test_core.gd          Core regression tests
-    └── addons/                     GUIDE input framework
+    └── addons/                     App Settings and Version Manager plugins
 ```
 
 ## Development
@@ -311,4 +317,3 @@ replacement, subprocess argument handling, and pak creation/failure recovery.
 - [UE4-DDS-Tools](https://github.com/matyalatte/UE4-DDS-Tools) by matyalatte — UE4 texture extraction/injection (bundled)
 - [Texconv-Custom-DLL](https://github.com/matyalatte/Texconv-Custom-DLL) by matyalatte — Cross-platform texture format converter (bundled as libtexconv)
 - [umodel / UE Viewer](https://www.gildor.org/en/projects/umodel) by Gildor — UE4 mesh viewer/exporter (optional, user-installed)
-- [G.U.I.D.E](https://github.com/godotneers/G.U.I.D.E) by Jan Thomä — Input mapping framework (bundled)

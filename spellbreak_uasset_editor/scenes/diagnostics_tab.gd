@@ -178,7 +178,7 @@ func _configuration_checks() -> Array[Dictionary]:
 
 func _filesystem_checks() -> Array[Dictionary]:
 	var checks: Array[Dictionary] = []
-	var profile := _cfg.get_game_profile() if _cfg != null else GameProfile.new()
+	var profile := _cfg.get_game_profile() if _cfg != null else SpellbreakProfile.shared()
 	var game_dir := _cfg.game_dir if _cfg != null else ""
 	var mods_dir := _cfg.mods_dir if _cfg != null else ""
 
@@ -229,7 +229,7 @@ func _tool_checks() -> Array[Dictionary]:
 
 func _profile_checks() -> Array[Dictionary]:
 	var checks: Array[Dictionary] = []
-	var profile := _cfg.get_game_profile() if _cfg != null else GameProfile.new()
+	var profile := _cfg.get_game_profile() if _cfg != null else SpellbreakProfile.shared()
 	checks.append(_check("Spellbreak Profile", "Profile", CheckStatus.PASS,
 		profile.display_name, profile.profile_id))
 	checks.append(_check("Spellbreak Profile", "UE version", CheckStatus.PASS,

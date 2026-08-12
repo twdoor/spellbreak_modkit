@@ -9,6 +9,9 @@ const SemanticVersion = preload(
 const PrepareReleaseDialog = preload(
 	"res://addons/version_manager/prepare_release_dialog.gd"
 )
+const VersionManagerRuntime = preload(
+	"res://addons/version_manager/version_manager_runtime.gd"
+)
 
 var _failures: Array[String] = []
 
@@ -70,17 +73,21 @@ func _run() -> void:
 	_test_file_watcher_detects_same_size_save()
 	_test_file_watcher_deferred_pack_starts_packer()
 	_test_atomic_file_install()
+	_test_mod_discovery_models_and_symlinks()
 	_test_mod_manifest()
 	_test_mod_preflight()
+	_test_asset_reuse_copy()
 	_test_uasset_save_validation()
 	_test_path_safety()
 	_test_process_arguments()
 	_test_update_version_compare()
+	_test_self_update_metadata()
 	_test_release_manager_project_layout()
 	_test_mod_config_settings_persistence()
-	_test_keymap_config_rebinds_loaded_resources()
-	_test_keymap_migration_user_binding_wins_new_defaults()
-	_test_guide_remap_rebuilds_default_active_mapping()
+	_test_native_keymap_configuration()
+	_test_base_file_explorer_search()
+	_test_explorer_add_to_mod_path()
+	_test_source_package_companion_discovery()
 	_test_base_source_generation()
 	_test_packing_transaction()
 
@@ -162,6 +169,142 @@ func _test_update_version_compare() -> void:
 		"version manager orders prereleases before stable versions")
 	_expect(not bool(SemanticVersion.parse("release-1.0.0").valid),
 		"version manager rejects release tags that are not semantic versions")
+	_expect(VersionManagerRuntime._release_version({"tag_name": "0.11"}) == "0.11.0",
+		"version manager supports the repository's historical two-part release tags")
+	_expect(VersionManagerRuntime._uses_prerelease_channel("0.12.0-beta.1", false),
+		"prerelease builds automatically remain on the prerelease update channel")
+	_expect(not VersionManagerRuntime._uses_prerelease_channel("0.12.0", false),
+		"stable builds do not opt into prerelease updates by default")
+
+
+func _test_self_update_metadata() -> void:
+	var assets := [
+		{"name": "sbue.AppImage", "browser_download_url": "https://github.com/appimage"},
+		{"name": "sbue.x86_64", "browser_download_url": "https://github.com/raw-linux"},
+		{"name": "sbue.exe", "browser_download_url": "https://github.com/windows-exe"},
+		{"name": "linux.zip", "browser_download_url": "https://github.com/linux"},
+		{"name": "win.zip", "browser_download_url": "https://github.com/win"},
+		{"name": "SHA256SUMS", "browser_download_url": "https://github.com/checksums"},
+	]
+	_expect(str(VersionManagerRuntime._select_release_asset(
+		assets, "Linux", "x86_64", "sbue.AppImage").get("name", "")) == "sbue.AppImage",
+		"self updater selects a direct AppImage for AppImage installations")
+	_expect(str(VersionManagerRuntime._select_release_asset(
+		assets, "Linux", "x86_64", "sbue.x86_64").get("name", "")) == "sbue.x86_64",
+		"self updater selects a direct executable for raw Linux installations")
+	_expect(str(VersionManagerRuntime._select_release_asset(
+		assets, "Windows", "x86_64").get("name", "")) == "sbue.exe",
+		"self updater selects the direct Windows executable")
+	_expect(str(VersionManagerRuntime._select_checksum_asset(
+		assets).get("name", "")) == "SHA256SUMS",
+		"self updater locates the release checksum asset")
+	var legacy_assets := [
+		{"name": "linux.zip", "browser_download_url": "https://github.com/linux"},
+		{"name": "win.zip", "browser_download_url": "https://github.com/win"},
+	]
+	_expect(str(VersionManagerRuntime._select_release_asset(
+		legacy_assets, "Linux", "x86_64").get("name", "")) == "linux.zip",
+		"self updater retains compatibility with Linux ZIP releases")
+	_expect(VersionManagerRuntime._select_release_asset(assets, "macOS").is_empty(),
+		"self updater rejects platforms without a published build")
+	_expect(VersionManagerRuntime._select_release_asset(
+		assets, "Linux", "arm64").is_empty(),
+		"self updater rejects architectures without a published build")
+
+	var linux_files := PackedStringArray(["linux/", "linux/sbue.sh", "linux/sbue.x86_64"])
+	var windows_files := PackedStringArray(["win/", "win/sbue.exe"])
+	_expect(VersionManagerRuntime._select_executable_entry(
+		linux_files, "Linux", "renamed.x86_64") == "linux/sbue.x86_64",
+		"self updater locates the sole Linux executable in the release archive")
+	_expect(VersionManagerRuntime._select_executable_entry(
+		windows_files, "Windows", "sbue.exe") == "win/sbue.exe",
+		"self updater locates the Windows executable in the release archive")
+	_expect("BackupPath" in VersionManagerRuntime._installer_script("Windows")
+		and "chmod +x" in VersionManagerRuntime._installer_script("Linux"),
+		"self updater generates backup-aware platform installer scripts")
+
+	var root := OS.get_temp_dir().path_join(
+		"sb_test_self_update_%d" % Time.get_ticks_usec())
+	DirAccess.make_dir_recursive_absolute(root)
+	var archive_path := root.path_join("linux.zip")
+	var packer := ZIPPacker.new()
+	var pack_error := packer.open(archive_path)
+	if pack_error == OK:
+		packer.start_file("linux/sbue.x86_64")
+		packer.write_file("new executable".to_utf8_buffer())
+		packer.close_file()
+		packer.close()
+	_expect(pack_error == OK, "self updater test creates a release archive")
+	var archive_file := FileAccess.open(archive_path, FileAccess.READ)
+	var archive_size := archive_file.get_length() if archive_file != null else 0
+	if archive_file != null:
+		archive_file.close()
+	var runtime := VersionManagerRuntime.new()
+	var archive_asset := {
+		"size": archive_size,
+		"digest": "sha256:" + FileAccess.get_sha256(archive_path),
+	}
+	_expect(runtime._verify_download(archive_path, archive_asset).is_empty(),
+		"self updater verifies release size and SHA-256 digest")
+	var checksum_text := "%s  linux/linux.zip\n" % FileAccess.get_sha256(archive_path)
+	var checksum_asset := {"name": "linux.zip", "size": archive_size}
+	_expect(runtime._verify_download(
+		archive_path, checksum_asset, checksum_text).is_empty(),
+		"self updater verifies releases through SHA256SUMS when API digests are absent")
+	var staged_path := root.path_join("staged-sbue.x86_64")
+	var extracted: Dictionary = runtime._extract_update_executable(
+		archive_path, staged_path, "sbue.x86_64", "Linux")
+	_expect(bool(extracted.get("success", false))
+		and FileAccess.get_file_as_string(staged_path) == "new executable",
+		"self updater extracts the verified platform executable into staging")
+	var appimage_path := root.path_join("sbue.AppImage")
+	var appimage_file := FileAccess.open(appimage_path, FileAccess.WRITE)
+	if appimage_file != null:
+		appimage_file.store_string("direct appimage")
+		appimage_file.close()
+	var staged_appimage := root.path_join("staged-sbue.AppImage")
+	var staged_direct: Dictionary = runtime._stage_update_asset(
+		appimage_path, staged_appimage, "sbue.AppImage", "sbue.AppImage", "Linux")
+	_expect(bool(staged_direct.get("success", false))
+		and FileAccess.get_file_as_string(staged_appimage) == "direct appimage",
+		"self updater stages a direct AppImage without requiring a ZIP archive")
+	if OS.get_name() == "Linux":
+		var previous_appimage := OS.get_environment("APPIMAGE")
+		OS.set_environment("APPIMAGE", appimage_path)
+		_expect(runtime._update_target_path() == appimage_path,
+			"self updater targets the outer AppImage instead of its mounted executable")
+		OS.set_environment("APPIMAGE", previous_appimage)
+
+		var install_script_path := root.path_join("install-update.sh")
+		var install_script := FileAccess.open(install_script_path, FileAccess.WRITE)
+		if install_script != null:
+			install_script.store_string(VersionManagerRuntime._installer_script("Linux"))
+			install_script.close()
+		var install_target := root.path_join("installed.AppImage")
+		var install_staged := root.path_join("next.AppImage")
+		var old_file := FileAccess.open(install_target, FileAccess.WRITE)
+		if old_file != null:
+			old_file.store_string("old executable")
+			old_file.close()
+		var next_file := FileAccess.open(install_staged, FileAccess.WRITE)
+		if next_file != null:
+			next_file.store_string("#!/bin/sh\nexit 0\n")
+			next_file.close()
+		var install_output: Array = []
+		var install_exit := OS.execute("/bin/sh", PackedStringArray([
+			install_script_path,
+			install_target,
+			install_staged,
+			install_target + ".previous",
+			"999999999",
+		]), install_output, true)
+		_expect(install_exit == 0
+			and FileAccess.get_file_as_string(install_target).begins_with("#!/bin/sh")
+			and FileAccess.get_file_as_string(
+				install_target + ".previous") == "old executable",
+			"self updater helper backs up, replaces, and launches a Linux executable")
+	runtime.free()
+	FileUtils.remove_dir_recursive(root)
 
 
 func _test_release_manager_project_layout() -> void:
@@ -170,18 +313,50 @@ func _test_release_manager_project_layout() -> void:
 		and FileAccess.file_exists(release_dialog._changelog_path()),
 		"release manager targets the repository changelog")
 	var task_plan: Dictionary = release_dialog._plan_release_tasks(
-		"res://builds/9.9.9",
+		"res://../dist/9.9.9",
 		[{
 			"name": "Linux",
 			"platform": "Linux",
 			"architecture": "x86_64",
+			"generates_appimage": true,
 			"existing_path": "",
 		}]
 	)
 	var tasks: Array = task_plan.get("tasks", [])
 	_expect(bool(task_plan.get("success", false)) and tasks.size() == 1
-		and str(tasks[0].output_path).ends_with("/builds/9.9.9/linux/sbue.x86_64"),
+		and str(tasks[0].output_path).ends_with("/dist/9.9.9/linux/sbue.x86_64"),
 		"release manager preserves the existing sbue build layout")
+	var additional_outputs: PackedStringArray = tasks[0].get(
+		"additional_outputs", PackedStringArray()) if not tasks.is_empty() \
+		else PackedStringArray()
+	_expect(additional_outputs.size() == 1
+		and additional_outputs[0].ends_with("/dist/9.9.9/linux/sbue.AppImage"),
+		"release manager requires the AppImage generated by the Linux preset")
+	var checksum_root := OS.get_temp_dir().path_join(
+		"sb_test_release_checksums_%d" % Time.get_ticks_usec())
+	var checksum_linux_dir := checksum_root.path_join("linux")
+	DirAccess.make_dir_recursive_absolute(checksum_linux_dir)
+	var raw_path := checksum_linux_dir.path_join("sbue.x86_64")
+	var appimage_path := checksum_linux_dir.path_join("sbue.AppImage")
+	for file_data: Array in [[raw_path, "raw"], [appimage_path, "appimage"]]:
+		var artifact := FileAccess.open(str(file_data[0]), FileAccess.WRITE)
+		if artifact != null:
+			artifact.store_string(str(file_data[1]))
+			artifact.close()
+	var checksum_error := release_dialog._write_release_checksums(
+		[{
+			"output_path": raw_path,
+			"additional_outputs": PackedStringArray([appimage_path]),
+		}],
+		checksum_root
+	)
+	var checksums := FileAccess.get_file_as_string(
+		checksum_root.path_join("SHA256SUMS"))
+	_expect(checksum_error.is_empty()
+		and "linux/sbue.x86_64" in checksums
+		and "linux/sbue.AppImage" in checksums,
+		"release manager writes checksums for direct update artifacts")
+	FileUtils.remove_dir_recursive(checksum_root)
 	release_dialog.free()
 
 
@@ -197,38 +372,21 @@ func _test_mod_config_settings_persistence() -> void:
 	OS.set_environment(override_variable, test_directory)
 
 	var settings := AppSettingsRuntime.new()
-	var legacy_directory := test_directory.path_join("legacy")
-	var legacy_config_path := legacy_directory.path_join("config.json")
-	var legacy_state_path := legacy_directory.path_join(".mod_state.json")
-	var legacy_config := {
-		"game_dir": "/test/game",
-		"mods_dir": "/test/mods",
-		"launch_cmd": "test-launch",
-		"sources": [{"name": "Base", "path": "/test/source"}],
-	}
-	_expect(FileUtils.write_bytes_atomic(
-		legacy_config_path,
-		JSON.stringify(legacy_config).to_utf8_buffer()
-	) == OK, "legacy settings fixture saves successfully")
-	_expect(FileUtils.write_bytes_atomic(
-		legacy_state_path,
-		'{"ExampleMod":true}'.to_utf8_buffer()
-	) == OK, "legacy mod-state fixture saves successfully")
-
-	var config := ModConfigManager.new(settings, legacy_config_path)
-	_expect(config.game_dir == "/test/game" and config.mods_dir == "/test/mods",
-		"mod config imports legacy paths through AppSettings")
-	_expect(config.sources.size() == 1 and config.sources[0].name == "Base",
-		"mod config imports structured source settings")
-	_expect(FileAccess.file_exists(legacy_config_path)
-		and FileAccess.file_exists(legacy_state_path),
-		"legacy settings remain available as a backup after import")
-	_expect(FileAccess.file_exists(config.get_state_path()),
-		"legacy mod state is copied into the AppSettings directory")
+	var config := ModConfigManager.new(settings)
+	config.game_dir = "/test/game"
+	config.mods_dir = "/test/mods"
 	config.launch_cmd = "updated-launch"
+	config.sources = [{"name": "Base", "path": "/test/source"}]
 	_expect(config.save_config() == OK, "mod config saves through AppSettings")
 
 	var reloaded_settings := AppSettingsRuntime.new()
+	var reloaded_config := ModConfigManager.new(reloaded_settings)
+	_expect(reloaded_config.game_dir == "/test/game"
+		and reloaded_config.mods_dir == "/test/mods",
+		"mod config reloads typed paths through AppSettings")
+	_expect(reloaded_config.sources.size() == 1
+		and reloaded_config.sources[0].name == "Base",
+		"mod config reloads structured source settings")
 	_expect(reloaded_settings.get_value(
 		ModConfigManager.SETTINGS_SECTION,
 		"launch_cmd",
@@ -251,69 +409,165 @@ func _cleanup_settings_test_directory(path: String) -> void:
 	DirAccess.remove_absolute(path)
 
 
-func _test_keymap_config_rebinds_loaded_resources() -> void:
-	var current_mapping := _load_test_mapping_context()
-	var loaded_mapping := _load_test_mapping_context()
-	var loaded_open := _find_test_action(loaded_mapping, "res://guide/open.tres")
-	var current_open := _find_test_action(current_mapping, "res://guide/open.tres")
-	var input := _make_key_input(KEY_L, true)
+func _test_native_keymap_configuration() -> void:
+	var defaults := KeymapSettingsTab.default_config()
+	var default_open := KeymapSettingsTab.event_from_data(
+			(defaults[str(KeymapSettingsTab.ACTION_OPEN)] as Array)[0]) as InputEventKey
+	_expect(default_open != null and default_open.keycode == KEY_SPACE
+			and default_open.ctrl_pressed,
+		"native keymap keeps the default open-file shortcut")
 
-	var saved_config := GUIDERemappingConfig.new()
-	saved_config._bind(loaded_mapping, loaded_open, input, 0)
+	var modifier := InputEventKey.new()
+	modifier.keycode = KEY_CTRL
+	modifier.ctrl_pressed = true
+	modifier.pressed = true
+	var combo := InputEventKey.new()
+	combo.keycode = KEY_P
+	combo.ctrl_pressed = true
+	combo.pressed = true
+	var keymap_tab := KeymapSettingsTab.new()
+	_expect(not keymap_tab._is_bindable_event(modifier)
+			and keymap_tab._is_bindable_event(combo),
+		"native keymap waits for the non-modifier key in a key combination")
+	keymap_tab.free()
 
-	var normalized := KeymapSettingsTab.normalize_config_for_mapping(saved_config, current_mapping)
-	var rebound := normalized._get_bound_input_or_null(current_mapping, current_open, 0)
-	_expect(rebound != null and rebound.is_same_as(input),
-		"keymap migration rebinds saved resource keys to the active mapping")
+	var custom := InputEventKey.new()
+	custom.keycode = KEY_K
+	custom.ctrl_pressed = true
+	var rebound := KeymapSettingsTab.set_binding(
+			defaults, KeymapSettingsTab.ACTION_OPEN, 0, custom)
+	var open_event := KeymapSettingsTab.event_from_data(
+			(rebound[str(KeymapSettingsTab.ACTION_OPEN)] as Array)[0])
+	var compare_event := KeymapSettingsTab.event_from_data(
+			(rebound[str(KeymapSettingsTab.ACTION_COMPARE)] as Array)[0])
+	_expect(open_event != null and open_event.is_match(custom),
+		"native keymap applies a custom binding")
+	_expect(compare_event == null,
+		"native keymap clears a colliding binding")
+
+	KeymapSettingsTab.apply_config(rebound)
+	var active_events := InputMap.action_get_events(KeymapSettingsTab.ACTION_OPEN)
+	_expect(active_events.size() == 1 and active_events[0].is_match(custom),
+		"native keymap installs bindings into Godot InputMap")
+	var encoded: Variant = KeymapSettingsTab.event_to_data(custom)
+	var decoded := KeymapSettingsTab.event_from_data(encoded)
+	_expect(decoded != null and decoded.is_match(custom),
+		"native keymap serializes input events without GUIDE resources")
+	KeymapSettingsTab.apply_config(defaults)
 
 
-func _test_keymap_migration_user_binding_wins_new_defaults() -> void:
-	var mapping := _load_test_mapping_context()
-	var open_action := _find_test_action(mapping, "res://guide/open.tres")
-	var compare_action := _find_test_action(mapping, "res://guide/compare.tres")
-	var input := _make_key_input(KEY_K, true)
+func _test_base_file_explorer_search() -> void:
+	var terms := BaseFileExplorerTab._query_terms("  Player  fire ")
+	_expect(terms == PackedStringArray(["player", "fire"]),
+		"base file explorer normalizes multi-term searches")
+	_expect(BaseFileExplorerTab._path_matches_terms(
+		"g3/Content/Players/Fire/GE_Burn.uasset", terms),
+		"base file explorer matches every search term against the relative path")
+	_expect(not BaseFileExplorerTab._path_matches_terms(
+		"g3/Content/Players/Ice/GE_Freeze.uasset", terms),
+		"base file explorer rejects partial multi-term matches")
+	_expect(BaseFileExplorerTab._relative_path(
+		"/source/g3/Content/Test.uasset", "/source")
+		== "g3/Content/Test.uasset",
+		"base file explorer stores searchable source-relative paths")
+	var tests_path := ProjectSettings.globalize_path("res://tests")
+	var scan := BaseFileExplorerTab._scan_sources([{
+		"name": "Tests",
+		"path": tests_path,
+	}])
+	var found_core_test := false
+	for entry: Dictionary in scan.get("entries", []):
+		if str(entry.get("relative_path", "")) == "test_core.gd":
+			found_core_test = true
+			break
+	_expect(found_core_test and (scan.get("errors", []) as Array).is_empty(),
+		"base file explorer recursively indexes a configured source")
 
-	var saved_config := GUIDERemappingConfig.new()
-	saved_config._bind(mapping, open_action, input, 0)
 
-	var normalized := KeymapSettingsTab.normalize_config_for_mapping(saved_config, mapping)
-	var open_input := normalized._get_bound_input_or_null(mapping, open_action, 0)
-	_expect(open_input != null and open_input.is_same_as(input),
-		"keymap migration preserves the user's explicit binding")
-	_expect(normalized._has(mapping, compare_action, 0)
-			and normalized._get_bound_input_or_null(mapping, compare_action, 0) == null,
-		"keymap migration clears a new default shortcut that collides with a saved user binding")
+func _test_explorer_add_to_mod_path() -> void:
+	_expect(ModManagerPanel._source_relative_path(
+		"/source/g3/Content/Spells/Fire.uasset", "/source")
+		== "g3/Content/Spells/Fire.uasset",
+		"explorer add-to-mod preserves the configured source-relative path")
+	_expect(ModManagerPanel._source_relative_path(
+		"/another/Fire.uasset", "/source").is_empty(),
+		"explorer add-to-mod rejects files outside the configured source")
 
 
-func _test_guide_remap_rebuilds_default_active_mapping() -> void:
-	var guide_script: Script = load("res://addons/guide/guide.gd")
-	var reset_script: Script = load("res://addons/guide/guide_reset.gd")
-	var guide = guide_script.new()
-	guide._input_state = GUIDEInputState.new()
-	guide._input_state._reset()
-	guide._reset_node = reset_script.new()
-	guide._reset_node.guide = guide
+func _test_source_package_companion_discovery() -> void:
+	var root := OS.get_temp_dir().path_join(
+		"sb_test_source_companions_%d" % Time.get_ticks_usec())
+	DirAccess.make_dir_recursive_absolute(root)
+	var uasset := root.path_join("Fire.uasset")
+	var uexp := root.path_join("Fire.uexp")
+	var ubulk := root.path_join("Fire.ubulk")
+	var unrelated := root.path_join("Ice.uexp")
+	var notes := root.path_join("Fire.txt")
+	for path in [uasset, uexp, ubulk, unrelated, notes]:
+		FileUtils.write_bytes_atomic(path, path.get_file().to_utf8_buffer())
 
-	var mapping := _load_test_mapping_context()
-	var open_action := _find_test_action(mapping, "res://guide/open.tres")
-	var save_action := _find_test_action(mapping, "res://guide/save.tres")
-	var open_default := _default_input_for_action(mapping, open_action, 0)
+	var from_header := ModManagerPanel._expand_package_files(
+		PackedStringArray([uasset]))
+	_expect(from_header.size() == 3
+		and uasset in from_header and uexp in from_header and ubulk in from_header,
+		"source add automatically discovers existing Unreal package companions")
+	_expect(unrelated not in from_header and notes not in from_header,
+		"source add does not include other basenames or loose files")
 
-	guide.enable_mapping_context(mapping)
+	var from_companion := ModManagerPanel._expand_package_files(
+		PackedStringArray([uexp, uasset]))
+	_expect(from_companion.size() == 3 and uasset in from_companion,
+		"source add discovers the package header and deduplicates manual selections")
+	var loose := ModManagerPanel._expand_package_files(PackedStringArray([notes]))
+	_expect(loose == PackedStringArray([notes]),
+		"source add leaves non-package file selections unchanged")
+	FileUtils.remove_dir_recursive(root)
 
-	var remap := GUIDERemappingConfig.new()
-	remap._bind(mapping, open_action, null, 0)
-	remap._bind(mapping, save_action, open_default, 0)
-	guide.set_remapping_config(remap)
 
-	var active_open := _active_input_for_action(guide, open_action, 0)
-	var active_save := _active_input_for_action(guide, save_action, 0)
-	_expect(active_open == null,
-		"GUIDE remapping can explicitly unbind the first default action slot")
-	_expect(active_save != null and active_save.is_same_as(open_default),
-		"GUIDE remapping applies a new binding over an existing default action mapping")
+func _test_asset_reuse_copy() -> void:
+	var asset := _make_asset()
+	asset.file_path = "/tmp/GE_Tough.uasset"
+	asset.binary_path = asset.file_path
+	asset.name_map = PackedStringArray([
+		"GE_Tough",
+		"GE_Tough_C",
+		"Default__GE_Tough_C",
+		"/Game/Effects/GE_Tough",
+		"UnrelatedName",
+	])
+	asset.raw = {
+		"PackageGuid": "{11111111-2222-3333-4444-555555555555}",
+		"Custom": {
+			"$type": "GE_Tough.SerializerType",
+			"AssetPath": "/Game/Effects/GE_Tough.GE_Tough_C",
+		},
+	}
+	asset.exports[0].object_name = "GE_Tough_C"
+	asset.imports[0].package_name = "/Game/Effects/GE_Tough"
 
-	guide.free()
+	var result := asset.prepare_reuse_copy("/tmp/GE_StoneSkin.uasset")
+	var copy := result.value as UAssetFile
+	_expect(result.ok and copy != null,
+		"asset reuse prepares an independent in-memory package")
+	_expect(copy.name_map == PackedStringArray([
+		"GE_StoneSkin",
+		"GE_StoneSkin_C",
+		"Default__GE_StoneSkin_C",
+		"/Game/Effects/GE_StoneSkin",
+		"UnrelatedName",
+	]), "asset reuse renames base, generated-class, default-object, and path names")
+	_expect(copy.exports[0].object_name == "GE_StoneSkin_C"
+			and copy.imports[0].package_name == "/Game/Effects/GE_StoneSkin"
+			and copy.raw["Custom"]["AssetPath"]
+				== "/Game/Effects/GE_StoneSkin.GE_StoneSkin_C",
+		"asset reuse updates serialized object metadata and references")
+	_expect(copy.raw["Custom"]["$type"] == "GE_Tough.SerializerType",
+		"asset reuse preserves UAssetAPI serializer type descriptors")
+	_expect(copy.package_guid == "{11111111-2222-3333-4444-555555555555}"
+			and asset.name_map[0] == "GE_Tough",
+		"asset reuse retains the package GUID without changing the source asset")
+	_expect(not asset.prepare_reuse_copy(asset.binary_path).ok,
+		"asset reuse refuses to replace its own source package")
 
 
 func _test_swap_and_snapshot_restore() -> void:
@@ -926,12 +1180,12 @@ func _test_glb_export() -> void:
 
 	var service := MeshService.new()
 	var result := service._write_glb_from_gltf(source_path, out_dir)
-	var glb_path := str(result[2])
+	var glb_path := str(result.value)
 	var bytes := FileAccess.get_file_as_bytes(glb_path) if FileAccess.file_exists(glb_path) else PackedByteArray()
-	_expect(bool(result[0]) and glb_path.ends_with(".glb") and bytes.size() >= 4
+	_expect(result.ok and glb_path.ends_with(".glb") and bytes.size() >= 4
 			and bytes.slice(0, 4).get_string_from_ascii() == "glTF",
 		"mesh export writes a Blender-compatible GLB")
-	_expect(str(result[1]).contains("textured material"),
+	_expect(result.message.contains("textured material"),
 		"mesh GLB export reports embedded textured materials")
 
 	var read_doc := GLTFDocument.new()
@@ -1386,22 +1640,25 @@ func _test_file_watcher_deferred_pack_starts_packer() -> void:
 	var triggered: Array[int] = []
 	watcher.pack_triggered.connect(func(n: int) -> void: triggered.append(n))
 
-	watcher._emit_pack_triggered_and_pack(4, [{"name": "TestMod", "path": mod_path}])
+	watcher._emit_pack_triggered_and_pack(4, [ModInfo.new("TestMod", mod_path)])
 
 	_expect(triggered == [4], "file watcher emits pack-trigger status before auto-pack")
 	_expect(packer.pack_calls == 1
 			and packer.last_mods.size() == 1
-			and str((packer.last_mods[0] as Dictionary).get("name", "")) == "TestMod",
+			and (packer.last_mods[0] as ModInfo).name == "TestMod",
 		"file watcher deferred callback starts the packer with enabled mods")
 	FileUtils.remove_dir_recursive(root)
 
 
 func _test_atomic_file_install() -> void:
 	var root := OS.get_temp_dir().path_join("sb_test_files_%d" % Time.get_ticks_usec())
-	DirAccess.make_dir_recursive_absolute(root)
-	var target := root.path_join("target.bin")
-	var staged := root.path_join("staged.bin")
-	var obsolete := root.path_join("obsolete.bin")
+	var target_dir := root.path_join("destination")
+	var staging_dir := root.path_join("independent-staging")
+	DirAccess.make_dir_recursive_absolute(target_dir)
+	DirAccess.make_dir_recursive_absolute(staging_dir)
+	var target := target_dir.path_join("target.bin")
+	var staged := staging_dir.path_join("staged.bin")
+	var obsolete := target_dir.path_join("obsolete.bin")
 	FileUtils.write_bytes_atomic(target, "old".to_utf8_buffer())
 	FileUtils.write_bytes_atomic(staged, "new".to_utf8_buffer())
 	FileUtils.write_bytes_atomic(obsolete, "stale".to_utf8_buffer())
@@ -1412,7 +1669,7 @@ func _test_atomic_file_install() -> void:
 	_expect(not FileAccess.file_exists(staged), "atomic file install consumes staged file")
 	_expect(not FileAccess.file_exists(obsolete), "atomic file install removes obsolete companions")
 
-	staged = root.path_join("staged-again.bin")
+	staged = staging_dir.path_join("staged-again.bin")
 	FileUtils.write_bytes_atomic(staged, "newer".to_utf8_buffer())
 	var result := FileUtils.install_staged_files_with_result(
 		[{"source": staged, "target": target}], [], true, "restore")
@@ -1447,7 +1704,7 @@ func _test_mod_manifest() -> void:
 	var config := ModConfigManager.new()
 	config.mods_dir = root.path_join("Mods")
 	config.sources = [{"name": "Source", "path": source_root}]
-	var mod := {"name": "TestMod", "path": mod_path}
+	var mod := ModInfo.new("TestMod", mod_path)
 	var error := ModManifest.record_copied_files(mod, source_root, [source_file], config)
 	_expect(error == OK and FileAccess.file_exists(ModManifest.manifest_path(mod)),
 		"mod manifest is written after copied files are recorded")
@@ -1470,6 +1727,41 @@ func _test_mod_manifest() -> void:
 	FileUtils.remove_dir_recursive(root)
 
 
+func _test_mod_discovery_models_and_symlinks() -> void:
+	var root := OS.get_temp_dir().path_join(
+			"sb_test_discovery_%d" % Time.get_ticks_usec())
+	var mods_dir := root.path_join("Mods")
+	var mod_path := mods_dir.path_join("TypedMod")
+	var asset_path := mod_path.path_join("g3/Content/Real.uasset")
+	var outside_path := root.path_join("Outside/g3/Content/Outside.uasset")
+	FileUtils.write_bytes_atomic(asset_path, "asset".to_utf8_buffer())
+	FileUtils.write_bytes_atomic(outside_path, "outside".to_utf8_buffer())
+
+	var discovered := ModDiscovery.scan(mods_dir)
+	_expect(discovered.size() == 1 and discovered[0] is ModInfo
+			and discovered[0].name == "TypedMod",
+		"mod discovery returns typed mod metadata")
+	var files := ModDiscovery.list_mod_file_entries(mod_path)
+	_expect(files.size() == 1 and files[0] is ModFileEntry
+			and files[0].relative_path == "g3/Content/Real.uasset",
+		"mod discovery returns typed file entries")
+
+	var root_dir := DirAccess.open(root)
+	if root_dir != null:
+		var mod_link := mods_dir.path_join("LinkedMod")
+		var outside_mod := outside_path.get_base_dir().get_base_dir().get_base_dir()
+		var mod_link_error := root_dir.create_link(outside_mod, mod_link)
+		if mod_link_error == OK:
+			_expect(ModDiscovery.scan(mods_dir).size() == 1,
+					"mod discovery rejects symlinked mod workspaces")
+		var file_link := mod_path.path_join("g3/Content/Linked.uasset")
+		var file_link_error := root_dir.create_link(outside_path, file_link)
+		if file_link_error == OK:
+			_expect(ModDiscovery.list_mod_file_entries(mod_path).size() == 1,
+					"mod discovery rejects symlinked files")
+	FileUtils.remove_dir_recursive(root)
+
+
 func _test_mod_preflight() -> void:
 	var root := OS.get_temp_dir().path_join("sb_test_preflight_%d" % Time.get_ticks_usec())
 	var mod_path := root.path_join("Mods/TestMod")
@@ -1484,7 +1776,7 @@ func _test_mod_preflight() -> void:
 
 	var config := ModConfigManager.new()
 	config.mods_dir = root.path_join("Mods")
-	var issues := ModPreflight.validate_mod_for_pack({"name": "TestMod", "path": mod_path}, config)
+	var issues := ModPreflight.validate_mod_for_pack(ModInfo.new("TestMod", mod_path), config)
 	_expect(ModPreflight.error_count(issues) >= 1,
 		"mod preflight reports orphan package companion as an error")
 	_expect(ModPreflight.warning_count(issues) >= 1,
@@ -1569,11 +1861,13 @@ func _test_base_source_generation() -> void:
 	config.u4pak_dir = tool_dir
 	var service := BaseSourceService.new().setup(config)
 	var result := service._do_generate(pak_path, output_dir)
-	_expect(result[0], "base source generation succeeds with u4pak unpack")
+	_expect(result.ok, "base source generation succeeds with u4pak unpack")
 	_expect(DirAccess.dir_exists_absolute(output_dir.path_join("g3/Content")),
 		"base source generation creates the configured content root")
-	_expect(result[2] == "Base Game (Game)", "base source generation returns a useful source name")
-	_expect(result[3] == output_dir, "base source generation returns the output folder as source path")
+	_expect(result.metadata.get("source_name") == "Base Game (Game)",
+		"base source generation returns a useful source name")
+	_expect(result.metadata.get("source_path") == output_dir,
+		"base source generation returns the output folder as source path")
 
 	var fallback_dir := root.path_join("fallback_source")
 	FileUtils.write_bytes_atomic(tool_dir.path_join("u4pak.py"), (
@@ -1596,7 +1890,7 @@ func _test_base_source_generation() -> void:
 			+ "raise SystemExit(9)\n"
 	).to_utf8_buffer())
 	var fallback_result := service._do_generate(pak_path, fallback_dir)
-	_expect(fallback_result[0],
+	_expect(fallback_result.ok,
 		"base source generation retries pak parsing with profile archive flags")
 	_expect(FileAccess.file_exists(fallback_dir.path_join("g3/Content/FallbackAsset.uasset")),
 		"base source generation reuses fallback flags for unpack")
@@ -1609,7 +1903,7 @@ func _test_base_source_generation() -> void:
 			+ "raise SystemExit(0)\n"
 	).to_utf8_buffer())
 	var unsafe_result := service._do_generate(pak_path, root.path_join("unsafe_source"))
-	_expect(not unsafe_result[0], "base source generation rejects unsafe pak paths")
+	_expect(not unsafe_result.ok, "base source generation rejects unsafe pak paths")
 
 	FileUtils.remove_dir_recursive(root)
 
@@ -1629,19 +1923,20 @@ func _test_packing_transaction() -> void:
 	config.mods_dir = root.path_join("mods")
 	config.u4pak_dir = ProjectSettings.globalize_path("res://u4pak")
 	var packer := PackingService.new().setup(config)
-	var result := packer._do_pack([{"name": "TestMod", "path": mod_dir}])
+	var mod := ModInfo.new("TestMod", mod_dir)
+	var result := packer._do_pack([mod])
 	var pak_path := paks_dir.path_join("zzz_mods_P.pak")
-	_expect(result[0] and FileAccess.file_exists(pak_path), "u4pak integration produces a pak")
+	_expect(result.ok and FileAccess.file_exists(pak_path), "u4pak integration produces a pak")
 	FileUtils.write_bytes_atomic(paks_dir.path_join("Game.sig"), "sig-template".to_utf8_buffer())
 
 	FileUtils.write_bytes_atomic(mod_dir.path_join("g3/Content/example.bin"), "payload2".to_utf8_buffer())
-	var second_result := packer._do_pack([{"name": "TestMod", "path": mod_dir}])
-	_expect(second_result[0] and "Backup" in str(second_result[1]),
+	var second_result := packer._do_pack([mod])
+	_expect(second_result.ok and "Backup" in second_result.message,
 		"repacking an existing installed pak reports retained backup paths")
 
 	var export_path := root.path_join("exports/TestMod.pak")
-	var export_result := packer._do_pack_to_path([{"name": "TestMod", "path": mod_dir}], export_path)
-	_expect(export_result[0]
+	var export_result := packer._do_pack_to_path([mod], export_path)
+	_expect(export_result.ok
 			and FileAccess.file_exists(export_path)
 			and FileAccess.file_exists(export_path.get_basename() + ".sig"),
 		"middle-click mod export writes chosen pak and sibling sig")
@@ -1655,61 +1950,12 @@ func _test_packing_transaction() -> void:
 		FileUtils.write_bytes_atomic(failing_tool_dir.path_join("u4pak.py"),
 			"raise SystemExit(7)\n".to_utf8_buffer())
 		config.u4pak_dir = failing_tool_dir
-		var failed_result := packer._do_pack([{"name": "TestMod", "path": mod_dir}])
-		_expect(not failed_result[0], "packing reports subprocess failure")
+		var failed_result := packer._do_pack([mod])
+		_expect(not failed_result.ok, "packing reports subprocess failure")
 		_expect(FileAccess.get_file_as_bytes(pak_path) == previous,
 			"failed packing preserves the previously installed pak")
 
 	FileUtils.remove_dir_recursive(root)
-
-
-func _load_test_mapping_context() -> GUIDEMappingContext:
-	var mapping := ResourceLoader.load("res://guide/mapping.tres", "",
-		ResourceLoader.CACHE_MODE_IGNORE) as GUIDEMappingContext
-	mapping.display_name = "Editor"
-	for action_mapping: GUIDEActionMapping in mapping.mappings:
-		var action := action_mapping.action
-		action.name = action.resource_path.get_file().get_basename()
-		action.display_name = action.name.capitalize()
-		action.display_category = "Test"
-		action.is_remappable = not action.resource_path.ends_with("/shift.tres") \
-			and not action.resource_path.ends_with("/ctrl.tres")
-	return mapping
-
-
-func _find_test_action(mapping: GUIDEMappingContext, resource_path: String) -> GUIDEAction:
-	for action_mapping: GUIDEActionMapping in mapping.mappings:
-		if action_mapping.action.resource_path == resource_path:
-			return action_mapping.action
-	_expect(false, "test mapping action exists: " + resource_path)
-	return null
-
-
-func _default_input_for_action(mapping: GUIDEMappingContext, action: GUIDEAction,
-		index: int) -> GUIDEInput:
-	for action_mapping: GUIDEActionMapping in mapping.mappings:
-		if action_mapping.action == action and action_mapping.input_mappings.size() > index:
-			return action_mapping.input_mappings[index].input
-	_expect(false, "test mapping default input exists")
-	return null
-
-
-func _active_input_for_action(guide, action: GUIDEAction, index: int) -> GUIDEInput:
-	for action_mapping: GUIDEActionMapping in guide._active_action_mappings:
-		if action_mapping.action == action and action_mapping.input_mappings.size() > index:
-			return action_mapping.input_mappings[index].input
-	return null
-
-
-func _make_key_input(key: Key, control: bool = false, shift: bool = false,
-		alt: bool = false, meta: bool = false) -> GUIDEInputKey:
-	var input := GUIDEInputKey.new()
-	input.key = key
-	input.control = control
-	input.shift = shift
-	input.alt = alt
-	input.meta = meta
-	return input
 
 
 func _make_empty_asset(path: String = "") -> UAssetFile:

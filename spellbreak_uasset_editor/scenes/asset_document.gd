@@ -3,10 +3,7 @@ class_name AssetDocument extends RefCounted
 ## Owns one editable asset and its command history. Dirty state is derived from
 ## the current history position instead of being toggled independently by UI.
 
-signal asset_replaced(asset: UAssetFile)
-signal content_changed
 signal dirty_changed(is_dirty: bool)
-signal history_changed(can_undo: bool, can_redo: bool)
 
 const MAX_HISTORY := 100
 
@@ -27,10 +24,7 @@ func replace_asset(new_asset: UAssetFile) -> void:
 	_cursor = 0
 	_saved_cursor = 0
 	_last_dirty = false
-	asset_replaced.emit(asset)
-	content_changed.emit()
 	dirty_changed.emit(false)
-	history_changed.emit(false, false)
 
 
 func execute(command: AssetEditCommand) -> bool:
@@ -115,9 +109,7 @@ func _trim_history() -> void:
 
 
 func _emit_state_changed() -> void:
-	content_changed.emit()
 	_emit_dirty_if_changed()
-	history_changed.emit(can_undo(), can_redo())
 
 
 func _emit_dirty_if_changed() -> void:

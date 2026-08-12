@@ -17,7 +17,7 @@ var _watcher: ModFileWatcher
 var _new_mod_from_pak_service: BaseSourceService
 
 # ── State ──────────────────────────────────────────────────────────────────────
-var _mods:           Array      = []  # from ModDiscovery.scan()
+var _mods:           Array[ModInfo] = []
 var _collapsed_mods: Dictionary = {}  # mod_name -> bool  (default true = collapsed)
 var _collapsed_dirs: Dictionary = {}  # "mod_name::rel_dir" -> bool (true = collapsed)
 var _log_lines:      Array      = []
@@ -33,6 +33,7 @@ const _TEXT_FILE_EXTENSIONS := [
 const _TEXT_FILE_NAMES := [
 	"readme", "license", "changelog", "credits", "config", "settings"
 ]
+const _PACKAGE_FILE_EXTENSIONS := ["uasset", "umap", "uexp", "ubulk", "uptnl"]
 
 # File clipboard — independent of the uasset ClipboardManager
 var _file_clipboard:    Array = []   # [{mod, rel_path, full_path}, ...]
@@ -213,135 +214,11 @@ func _open_external_file(path: String) -> void:
 	if not FileAccess.file_exists(full_path):
 		_set_status("File not found: %s" % full_path.get_file(), true)
 		return
-	var result: int = ERR_CANT_OPEN
-	if _is_text_file_path(full_path):
-		result = _open_text_file(full_path)
-	if result < 0:
-		result = _open_file_with_system_app(full_path)
-	if result < 0 and OS.shell_open(full_path) != OK:
+	var result := ExternalFileLauncher.open(full_path, _is_text_file_path(full_path))
+	if result != OK:
 		_set_status("Could not open file: %s" % full_path.get_file(), true)
 		return
 	_set_status("Opening %s" % full_path.get_file())
-
-
-func _open_text_file(path: String) -> int:
-	var result := _open_editor_from_environment(path)
-	if result >= 0:
-		return result
-	match OS.get_name():
-		"Windows":
-			return _create_process_if_found(["notepad.exe", "notepad"], [path])
-		"macOS":
-			return _create_process_if_found(["open", "/usr/bin/open"], ["-t", path])
-		_:
-			result = _create_process_if_found([
-				"zeditor", "zed", "code", "codium", "subl",
-				"gedit", "kate", "kwrite", "mousepad", "xed", "pluma", "geany"
-			], [path])
-			if result >= 0:
-				return result
-			return _open_terminal_editor(path)
-
-
-func _open_editor_from_environment(path: String) -> int:
-	for env_name in ["VISUAL", "EDITOR"]:
-		var command := OS.get_environment(env_name).strip_edges()
-		if command.is_empty():
-			continue
-		var result := _open_editor_command(command, path)
-		if result >= 0:
-			return result
-	return ERR_FILE_NOT_FOUND
-
-
-func _open_editor_command(command: String, path: String) -> int:
-	var parts := ProcessUtils.parse_command_line(command)
-	if parts.is_empty():
-		return ERR_INVALID_PARAMETER
-	var executable := ProcessUtils.find_executable([parts[0]])
-	if executable.is_empty():
-		return ERR_FILE_NOT_FOUND
-	var args := PackedStringArray()
-	for i in range(1, parts.size()):
-		args.append(parts[i])
-	args.append(path)
-	if _is_terminal_editor(executable):
-		return _open_terminal_command(executable, args)
-	return OS.create_process(executable, args)
-
-
-func _open_terminal_editor(path: String) -> int:
-	var editor := ProcessUtils.find_executable(["nvim", "vim", "nano", "vi"])
-	if editor.is_empty():
-		return ERR_FILE_NOT_FOUND
-	return _open_terminal_command(editor, PackedStringArray([path]))
-
-
-func _open_terminal_command(command: String, args: PackedStringArray) -> int:
-	var terminal := ProcessUtils.find_executable(["xdg-terminal-exec", "/usr/bin/xdg-terminal-exec"])
-	if not terminal.is_empty():
-		var xdg_terminal_args := PackedStringArray([command])
-		xdg_terminal_args.append_array(args)
-		return OS.create_process(terminal, xdg_terminal_args)
-
-	terminal = ProcessUtils.find_executable(["ghostty", "alacritty", "kitty", "foot"])
-	if terminal.is_empty():
-		return ERR_FILE_NOT_FOUND
-	var terminal_args := PackedStringArray(["-e", command])
-	terminal_args.append_array(args)
-	return OS.create_process(terminal, terminal_args)
-
-
-func _is_terminal_editor(executable: String) -> bool:
-	var editor_name := executable.get_file().get_basename().to_lower()
-	return editor_name in ["nvim", "vim", "nano", "vi", "emacsclient", "emacs"]
-
-
-func _open_file_with_system_app(path: String) -> int:
-	match OS.get_name():
-		"Windows":
-			return _open_windows_file(path)
-		"macOS":
-			return _create_process_if_found(["open", "/usr/bin/open"], [path])
-		_:
-			return _open_unix_file(path)
-
-
-func _open_windows_file(path: String) -> int:
-	var powershell := ProcessUtils.find_executable(["powershell.exe", "pwsh.exe"])
-	if not powershell.is_empty():
-		return OS.create_process(powershell, PackedStringArray([
-			"-NoProfile",
-			"-WindowStyle", "Hidden",
-			"-ExecutionPolicy", "Bypass",
-			"-Command", "Start-Process -FilePath $args[0]",
-			path
-		]))
-	var cmd := ProcessUtils.find_executable(["cmd.exe", "cmd"])
-	if cmd.is_empty():
-		return ERR_FILE_NOT_FOUND
-	return OS.create_process(cmd, PackedStringArray(["/C", "start", "", path]))
-
-
-func _open_unix_file(path: String) -> int:
-	var result := _create_process_if_found(
-		["xdg-open", "/usr/bin/xdg-open", "/bin/xdg-open"],
-		[path]
-	)
-	if result >= 0:
-		return result
-	result = _create_process_if_found(["gio", "/usr/bin/gio"], ["open", path])
-	if result >= 0:
-		return result
-	result = _create_process_if_found(["kde-open5", "kde-open", "gnome-open"], [path])
-	return result
-
-
-func _create_process_if_found(candidates: Array[String], args: Array) -> int:
-	var executable := ProcessUtils.find_executable(candidates)
-	if executable.is_empty():
-		return ERR_FILE_NOT_FOUND
-	return OS.create_process(executable, PackedStringArray(args))
 
 
 # ── Mod list ───────────────────────────────────────────────────────────────────
@@ -349,7 +226,7 @@ func _create_process_if_found(candidates: Array[String], args: Array) -> int:
 func _refresh_mods() -> void:
 	var content_root := _cfg.get_game_profile().content_root
 	_mods = ModDiscovery.scan(_cfg.mods_dir, content_root)
-	var names := _mods.map(func(m): return m["name"] as String)
+	var names := _mods.map(func(m: ModInfo): return m.name)
 	_state.prune(names)
 	_rebuild_mod_list()
 	_set_status("%d mod(s) found" % _mods.size())
@@ -370,7 +247,7 @@ func _rebuild_mod_list() -> void:
 		item.set_selectable(0, false)
 		return
 
-	for mod in _mods:
+	for mod: ModInfo in _mods:
 		_build_mod_item(root, mod)
 
 
@@ -382,7 +259,7 @@ func _save_collapse_state() -> void:
 	while mod_item:
 		var mod_meta: Dictionary = mod_item.get_metadata(0)
 		if mod_meta.get("type") == "mod":
-			_collapsed_mods[(mod_meta["mod"] as Dictionary)["name"] as String] = mod_item.collapsed
+			_collapsed_mods[(mod_meta["mod"] as ModInfo).name] = mod_item.collapsed
 		var folder_item := mod_item.get_first_child()
 		while folder_item:
 			var meta: Dictionary = folder_item.get_metadata(0)
@@ -392,8 +269,8 @@ func _save_collapse_state() -> void:
 		mod_item = mod_item.get_next()
 
 
-func _build_mod_item(root: TreeItem, mod: Dictionary) -> void:
-	var mod_name: String = mod["name"]
+func _build_mod_item(root: TreeItem, mod: ModInfo) -> void:
+	var mod_name := mod.name
 	var enabled:  bool   = _state.is_enabled(mod_name)
 
 	var item := _mod_tree.create_item(root)
@@ -402,8 +279,8 @@ func _build_mod_item(root: TreeItem, mod: Dictionary) -> void:
 	item.set_custom_color(0, AppTheme.MOD_ENABLED if enabled else AppTheme.MOD_DISABLED)
 	item.set_icon(0, _icon("GuiVisibilityVisible" if enabled else "GuiVisibilityHidden"))
 	item.set_tooltip_text(0, "%d files · %s\n%s  (right-click to toggle, middle-click to export as .pak)" % [
-		mod["file_count"],
-		ModDiscovery.fmt_size(mod["size_bytes"]),
+		mod.file_count,
+		ModDiscovery.fmt_size(mod.size_bytes),
 		"Enabled" if enabled else "Disabled",
 	])
 	item.set_metadata(0, {"type": "mod", "mod": mod})
@@ -418,15 +295,16 @@ func _build_mod_item(root: TreeItem, mod: Dictionary) -> void:
 	_build_mod_files(item, mod)
 
 
-func _build_mod_files(mod_item: TreeItem, mod: Dictionary) -> void:
-	var mod_name: String = mod["name"]
+func _build_mod_files(mod_item: TreeItem, mod: ModInfo) -> void:
+	var mod_name := mod.name
 	var content_root := _cfg.get_game_profile().content_root
-	var files := ModDiscovery.list_mod_files(mod["path"], content_root)
+	var files := ModDiscovery.list_mod_file_entries(mod.path, content_root)
 
 	# Group files by relative directory, preserving discovery order.
 	var dir_order: Array    = []
 	var groups:    Dictionary = {}
-	for rel_path: String in files:
+	for file_entry: ModFileEntry in files:
+		var rel_path := file_entry.relative_path
 		var d: String = rel_path.get_base_dir()
 		if d not in groups:
 			groups[d] = []
@@ -448,7 +326,7 @@ func _build_mod_files(mod_item: TreeItem, mod: Dictionary) -> void:
 		dir_item.collapsed = _collapsed_dirs.get(dir_key, false)
 
 		for rel_path: String in (groups[dir] as Array):
-			var full_path: String = (mod["path"] as String).path_join(rel_path)
+			var full_path: String = mod.path.path_join(rel_path)
 			var is_uasset := rel_path.ends_with(".uasset")
 
 			var file_item := _mod_tree.create_item(dir_item)
@@ -507,7 +385,7 @@ func _on_tree_item_mouse_selected(_position: Vector2, mouse_button_index: int) -
 			# Toggle collapse in-place — no rebuild needed.
 			item.collapsed = not item.collapsed
 		MOUSE_BUTTON_RIGHT:
-			_state.toggle((meta["mod"] as Dictionary)["name"] as String)
+			_state.toggle((meta["mod"] as ModInfo).name)
 			# Defer: Tree blocks clear()/create_item() while inside a signal callback.
 			_rebuild_mod_list.call_deferred()
 
@@ -525,7 +403,7 @@ func _on_mod_tree_gui_input(event: InputEvent) -> void:
 	if mod == null:
 		return
 	_mod_tree.accept_event()
-	_open_export_mod_dialog(mod as Dictionary)
+	_open_export_mod_dialog(mod as ModInfo)
 
 
 ## Button clicks: Add (mod items), open/delete (file items).
@@ -536,13 +414,13 @@ func _on_tree_button_clicked(item: TreeItem, _column: int, id: int, mouse_button
 	match meta.get("type"):
 		"mod":
 			if id == _BTN_ADD:
-				_on_add_files_pressed(meta["mod"] as Dictionary)
+				_on_add_files_pressed(meta["mod"] as ModInfo)
 		"file":
 			if id == _BTN_OPEN_EXTERNAL:
 				_open_external_file(meta["full_path"] as String)
 			elif id == _BTN_DEL:
 				# Defer: _rebuild_mod_list calls clear() — blocked inside a Tree signal.
-				var mod_ref: Dictionary = meta["mod"]
+				var mod_ref := meta["mod"] as ModInfo
 				var path_ref: String    = meta["full_path"]
 				(func() -> void: _remove_mod_file(mod_ref, path_ref)).call_deferred()
 
@@ -565,7 +443,7 @@ func _get_selected_files() -> Array:
 	return result
 
 
-## Collect all selected mod-level items as mod dicts (deduplicated).
+## Collect all selected mod-level items as typed metadata (deduplicated).
 func _get_selected_mods() -> Array:
 	var result: Array = []
 	var seen: Dictionary = {}
@@ -573,7 +451,7 @@ func _get_selected_mods() -> Array:
 	while item:
 		var meta: Dictionary = item.get_metadata(0)
 		if meta.get("type") == "mod":
-			var mod_name: String = (meta["mod"] as Dictionary)["name"]
+			var mod_name := (meta["mod"] as ModInfo).name
 			if mod_name not in seen:
 				seen[mod_name] = true
 				result.append(meta["mod"])
@@ -646,8 +524,8 @@ func paste_clipboard() -> void:
 	if target == null:
 		_set_status("Select a mod to paste into", true)
 		return
-	var target_mod := target as Dictionary
-	var dst_root: String = target_mod["path"]
+	var target_mod := target as ModInfo
+	var dst_root := target_mod.path
 
 	var copied := 0
 	var failed := 0
@@ -675,16 +553,16 @@ func paste_clipboard() -> void:
 	if _clipboard_is_cut:
 		for entry: Dictionary in successful_moves:
 			var delete_error := _delete_file_raw(
-				entry["mod"] as Dictionary, entry["full_path"] as String)
+				entry["mod"] as ModInfo, entry["full_path"] as String)
 			if delete_error != OK:
 				failed += 1
 				remaining_clipboard.append(entry)
 			else:
-				ModManifest.write_workspace_manifest(entry["mod"] as Dictionary, _cfg)
+				ModManifest.write_workspace_manifest(entry["mod"], _cfg)
 		_file_clipboard = remaining_clipboard
 		_clipboard_is_cut = not _file_clipboard.is_empty()
 
-	var msg := "Pasted %d file(s) into %s" % [copied, target_mod["name"]]
+	var msg := "Pasted %d file(s) into %s" % [copied, target_mod.name]
 	if copied > 0 and ModManifest.write_workspace_manifest(target_mod, _cfg) != OK:
 		msg += " (manifest update failed)"
 	if failed > 0:
@@ -703,8 +581,8 @@ func delete_selection() -> void:
 	# If entire mods are selected, confirm before deleting.
 	if not mods.is_empty():
 		var names: PackedStringArray = []
-		for m: Dictionary in mods:
-			names.append(m["name"] as String)
+		for m: ModInfo in mods:
+			names.append(m.name)
 		var dialog := ConfirmationDialog.new()
 		dialog.title = "Delete Mod(s)"
 		dialog.dialog_text = "Permanently delete %d mod(s)?\n\n%s" % [
@@ -713,16 +591,16 @@ func delete_selection() -> void:
 		AppTheme.apply_theme(dialog)
 		add_child(dialog)
 		dialog.confirmed.connect(func() -> void:
-			for m: Dictionary in mods:
-				FileUtils.remove_dir_recursive(m["path"] as String)
+			for m: ModInfo in mods:
+				FileUtils.remove_dir_recursive(m.path)
 			# Also delete any selected files that aren't part of a deleted mod.
 			var deleted_mod_paths: Dictionary = {}
-			for m: Dictionary in mods:
-				deleted_mod_paths[m["path"] as String] = true
+			for m: ModInfo in mods:
+				deleted_mod_paths[m.path] = true
 			for entry: Dictionary in files:
-				var mod_path: String = (entry["mod"] as Dictionary)["path"]
+				var mod_path := (entry["mod"] as ModInfo).path
 				if mod_path not in deleted_mod_paths:
-					var owner_mod := entry["mod"] as Dictionary
+					var owner_mod := entry["mod"] as ModInfo
 					if _delete_file_raw(owner_mod, entry["full_path"] as String) == OK:
 						ModManifest.write_workspace_manifest(owner_mod, _cfg)
 			_set_status("Deleted %d mod(s)" % mods.size()
@@ -736,7 +614,7 @@ func delete_selection() -> void:
 
 	# Files only — no confirmation needed.
 	for entry: Dictionary in files:
-		var mod := entry["mod"] as Dictionary
+		var mod := entry["mod"] as ModInfo
 		if _delete_file_raw(mod, entry["full_path"] as String) == OK:
 			ModManifest.write_workspace_manifest(mod, _cfg)
 	_set_status("Deleted %d file(s)" % files.size())
@@ -753,15 +631,15 @@ func create_file() -> void:
 	if mod == null:
 		_set_status("Select a mod first", true)
 		return
-	_on_add_files_pressed(mod as Dictionary, _get_selected_source_dir())
+	_on_add_files_pressed(mod as ModInfo, _get_selected_source_dir())
 
 
 # ── File management ────────────────────────────────────────────────────────────
 
 ## Delete a file and prune empty parent dirs up to the mod root.
 ## Returns OK or an error code. Does NOT emit status or refresh — callers do that.
-func _delete_file_raw(mod: Dictionary, full_path: String) -> Error:
-	var mod_path: String = mod["path"]
+func _delete_file_raw(mod: ModInfo, full_path: String) -> Error:
+	var mod_path := mod.path
 	if not FileUtils.is_path_within(full_path, mod_path) or FileUtils.same_path(full_path, mod_path):
 		return ERR_INVALID_PARAMETER
 	var err := DirAccess.remove_absolute(full_path)
@@ -781,19 +659,135 @@ func _delete_file_raw(mod: Dictionary, full_path: String) -> Error:
 
 
 ## Delete one file via the tree ✕ button: reports status and refreshes.
-func _remove_mod_file(mod: Dictionary, full_path: String) -> void:
+func _remove_mod_file(mod: ModInfo, full_path: String) -> void:
 	var err := _delete_file_raw(mod, full_path)
 	if err != OK:
 		_set_status("Failed to remove: %s" % full_path.get_file(), true)
 		return
 	ModManifest.write_workspace_manifest(mod, _cfg)
-	_set_status("Removed %s from %s" % [full_path.get_file(), mod["name"]])
+	_set_status("Removed %s from %s" % [full_path.get_file(), mod.name])
 	_refresh_mods()
 
 
 # ── Add Files from source ──────────────────────────────────────────────────────
 
-func _on_add_files_pressed(mod: Dictionary, preferred_rel_dir: String = "") -> void:
+## Open a target picker for one file selected in the Base Files explorer.
+## The actual copy is delegated to the same path-preserving workflow used by
+## the regular multi-file source dialog.
+func add_source_file_to_mod(source_path: String, source_root: String) -> void:
+	source_path = source_path.strip_edges()
+	source_root = source_root.strip_edges().rstrip("/")
+	if not FileAccess.file_exists(source_path):
+		_set_status("Source file not found: %s" % source_path, true)
+		return
+	if not DirAccess.dir_exists_absolute(source_root) \
+			or not FileUtils.is_path_within(source_path, source_root):
+		_set_status("File is outside its configured source: %s" % source_path, true)
+		return
+	var relative_path := _source_relative_path(source_path, source_root)
+	if relative_path.is_empty():
+		_set_status("Could not resolve the file's source-relative path", true)
+		return
+
+	# Pick up mod folders created outside the app since the last manager refresh.
+	var content_root := _cfg.get_game_profile().content_root
+	_mods = ModDiscovery.scan(_cfg.mods_dir, content_root)
+	_rebuild_mod_list()
+	if _mods.is_empty():
+		_set_status("No mods found — create a mod before adding files", true)
+		return
+	_show_source_file_mod_picker(source_path, source_root, relative_path)
+
+
+func _show_source_file_mod_picker(source_path: String, source_root: String,
+		relative_path: String) -> void:
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "Add File to Mod"
+	dialog.ok_button_text = "Add File"
+	dialog.cancel_button_text = "Cancel"
+	dialog.min_size = Vector2i(580, 380)
+	AppTheme.apply_theme(dialog)
+	add_child(dialog)
+
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
+
+	var file_label := Label.new()
+	file_label.text = "Source file"
+	AppTheme.style_section(file_label)
+	content.add_child(file_label)
+
+	var relative_label := Label.new()
+	relative_label.text = relative_path
+	relative_label.tooltip_text = source_path
+	relative_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	content.add_child(relative_label)
+
+	if _is_package_file(source_path):
+		var companion_hint := Label.new()
+		companion_hint.text = (
+			"Existing package companions (.uasset/.umap, .uexp, .ubulk, .uptnl) "
+			+ "with the same name will be included automatically."
+		)
+		companion_hint.autowrap_mode = TextServer.AUTOWRAP_WORD
+		AppTheme.style_muted(companion_hint)
+		content.add_child(companion_hint)
+
+	var prompt := Label.new()
+	prompt.text = "Choose a target mod"
+	AppTheme.style_section(prompt)
+	content.add_child(prompt)
+
+	var mod_list := ItemList.new()
+	mod_list.custom_minimum_size = Vector2(0, 180)
+	mod_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mod_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mod_list.allow_reselect = true
+	for mod: ModInfo in _mods:
+		var index := mod_list.item_count
+		mod_list.add_item(mod.name)
+		mod_list.set_item_metadata(index, mod)
+		mod_list.set_item_tooltip(index, mod.path)
+	content.add_child(mod_list)
+
+	var destination_label := AppTheme.make_status_label("", AppTheme.StatusKind.IDLE,
+		AppTheme.FONT_SMALL)
+	content.add_child(destination_label)
+	dialog.add_child(content)
+
+	var update_destination := func(index: int) -> void:
+		if index < 0 or index >= mod_list.item_count:
+			return
+		var mod := mod_list.get_item_metadata(index) as ModInfo
+		if mod == null:
+			return
+		var destination := mod.path.path_join(relative_path)
+		var suffix := "  (existing file will be replaced)" \
+			if FileAccess.file_exists(destination) else ""
+		AppTheme.set_status_label(destination_label,
+			"Destination: %s%s" % [destination, suffix],
+			AppTheme.StatusKind.WARNING if not suffix.is_empty() else AppTheme.StatusKind.IDLE)
+
+	var add_selected := func() -> void:
+		var selected := mod_list.get_selected_items()
+		if selected.is_empty():
+			return
+		var mod := mod_list.get_item_metadata(selected[0]) as ModInfo
+		if mod == null:
+			return
+		_copy_files_to_mod(mod, source_root, PackedStringArray([source_path]))
+		dialog.queue_free()
+
+	mod_list.item_selected.connect(update_destination)
+	mod_list.item_activated.connect(func(_index: int) -> void: add_selected.call())
+	dialog.confirmed.connect(add_selected)
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.popup_centered(Vector2i(580, 420))
+	mod_list.select(0)
+	update_destination.call(0)
+	mod_list.grab_focus.call_deferred()
+
+func _on_add_files_pressed(mod: ModInfo, preferred_rel_dir: String = "") -> void:
 	var sources: Array = _cfg.sources.filter(
 		func(s: Dictionary) -> bool: return not (s["path"] as String).is_empty()
 	)
@@ -806,8 +800,9 @@ func _on_add_files_pressed(mod: Dictionary, preferred_rel_dir: String = "") -> v
 		_show_source_picker(mod, sources, preferred_rel_dir)
 
 
-## Modal source picker. Keeps the source choice visible and gives invalid paths room to explain themselves.
-func _show_source_picker(mod: Dictionary, sources: Array, preferred_rel_dir: String = "") -> void:
+## Separate source-picker window. Keeps the source choice visible while allowing the
+## user to move and resize it like the file browser that follows.
+func _show_source_picker(mod: ModInfo, sources: Array, preferred_rel_dir: String = "") -> void:
 	var first_valid := -1
 	for i in sources.size():
 		var src: Dictionary = sources[i]
@@ -819,9 +814,19 @@ func _show_source_picker(mod: Dictionary, sources: Array, preferred_rel_dir: Str
 		_set_status("No configured source folders were found", true)
 		return
 
-	var popup := PopupPanel.new()
-	popup.name = "AddFilesFromSourcePopup"
-	popup.min_size = Vector2i(560, 360)
+	var window := Window.new()
+	window.name = "AddFilesFromSourceWindow"
+	window.title = "Add Files from Source"
+	window.visible = false
+	window.min_size = Vector2i(560, 360)
+	window.size = Vector2i(680, 460)
+	window.transient = false
+	window.exclusive = false
+	window.always_on_top = false
+	window.close_requested.connect(window.queue_free)
+
+	var background := PanelContainer.new()
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", AppTheme.SPACING_ROW * 2)
@@ -833,27 +838,9 @@ func _show_source_picker(mod: Dictionary, sources: Array, preferred_rel_dir: Str
 	content.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
 	margin.add_child(content)
 
-	var header := HBoxContainer.new()
-	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
-	var title_label := Label.new()
-	title_label.text = "Add Files from Source"
-	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	AppTheme.style_header(title_label)
-	header.add_child(title_label)
-	var close_btn := Button.new()
-	close_btn.text = "X"
-	close_btn.tooltip_text = "Close"
-	close_btn.custom_minimum_size = Vector2(28, 28)
-	close_btn.size_flags_horizontal = Control.SIZE_SHRINK_END
-	close_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	AppTheme.style_muted_btn(close_btn)
-	close_btn.pressed.connect(func() -> void: popup.queue_free())
-	header.add_child(close_btn)
-	content.add_child(header)
-
 	var target_label := Label.new()
-	target_label.text = "Target mod: %s" % (mod["name"] as String)
+	target_label.text = "Target mod: %s" % mod.name
+	AppTheme.style_header(target_label)
 	content.add_child(target_label)
 
 	var destination_label := Label.new()
@@ -901,7 +888,7 @@ func _show_source_picker(mod: Dictionary, sources: Array, preferred_rel_dir: Str
 		if source_index < 0 or source_index >= sources.size():
 			return
 		var source: Dictionary = sources[source_index]
-		popup.queue_free()
+		window.queue_free()
 		_open_add_files_dialog(mod, source, preferred_rel_dir)
 
 	var open_selected := func() -> void:
@@ -927,7 +914,7 @@ func _show_source_picker(mod: Dictionary, sources: Array, preferred_rel_dir: Str
 	var cancel_btn := Button.new()
 	cancel_btn.text = "Cancel"
 	AppTheme.style_muted_btn(cancel_btn)
-	cancel_btn.pressed.connect(func() -> void: popup.queue_free())
+	cancel_btn.pressed.connect(func() -> void: window.queue_free())
 	footer.add_child(cancel_btn)
 
 	var browse_btn := Button.new()
@@ -937,16 +924,13 @@ func _show_source_picker(mod: Dictionary, sources: Array, preferred_rel_dir: Str
 	footer.add_child(browse_btn)
 	content.add_child(footer)
 
-	popup.popup_hide.connect(func() -> void:
-		if is_instance_valid(popup) and not popup.is_queued_for_deletion():
-			popup.queue_free()
-	)
-	popup.add_child(margin)
-	AppTheme.apply_theme(popup)
-	add_child(popup)
+	background.add_child(margin)
+	window.add_child(background)
+	AppTheme.apply_theme(window)
+	add_child(window)
 	source_list.select(first_valid)
 	update_details.call(first_valid)
-	popup.popup_centered(Vector2i(600, 380))
+	window.popup_centered(Vector2i(680, 460))
 	source_list.grab_focus.call_deferred()
 
 
@@ -980,13 +964,14 @@ func _resolve_source_initial_dir(source_path: String, preferred_rel_dir: String)
 
 
 ## Open a multi-file browser rooted at source["path"]; copy selections into mod.
-func _open_add_files_dialog(mod: Dictionary, source: Dictionary, preferred_rel_dir: String = "") -> void:
+func _open_add_files_dialog(mod: ModInfo, source: Dictionary, preferred_rel_dir: String = "") -> void:
 	var source_path := _source_path(source)
 	if not DirAccess.dir_exists_absolute(source_path):
 		_set_status("Source folder not found: %s" % source_path, true)
 		return
 	var initial_dir := _resolve_source_initial_dir(source_path, preferred_rel_dir)
 	var dialog := FileDialog.new()
+	dialog.title = "Add Files from Source — package companions are included automatically"
 	dialog.file_mode       = FileDialog.FILE_MODE_OPEN_FILES
 	dialog.access          = FileDialog.ACCESS_FILESYSTEM
 	AppTheme.configure_file_dialog(dialog)
@@ -999,19 +984,22 @@ func _open_add_files_dialog(mod: Dictionary, source: Dictionary, preferred_rel_d
 	dialog.popup_centered(Vector2i(900, 650))
 
 
-## Mirror each selected file's path (relative to source_root) into mod["path"].
-func _copy_files_to_mod(mod: Dictionary, source_root: String, file_paths: PackedStringArray) -> void:
-	var mod_path: String = mod["path"]
+## Mirror each selected file's path (relative to source_root) into the mod workspace.
+func _copy_files_to_mod(mod: ModInfo, source_root: String, file_paths: PackedStringArray) -> void:
+	var mod_path := mod.path
 	var copied := 0
 	var failed := 0
 	var copied_sources: Array = []
-	for src_file in file_paths:
+	var files_to_copy := _expand_package_files(file_paths)
+	for src_file in files_to_copy:
 		if not FileUtils.is_path_within(src_file, source_root):
 			_set_status("File is outside source root — skipped: %s" % src_file.get_file(), true)
 			failed += 1
 			continue
-		var rel := src_file.replace("\\", "/").substr(
-			source_root.replace("\\", "/").rstrip("/").length()).lstrip("/")
+		var rel := _source_relative_path(src_file, source_root)
+		if rel.is_empty():
+			failed += 1
+			continue
 		var dst := mod_path.path_join(rel)
 		if not FileUtils.is_path_within(dst, mod_path):
 			failed += 1
@@ -1023,13 +1011,61 @@ func _copy_files_to_mod(mod: Dictionary, source_root: String, file_paths: Packed
 			_set_status("Could not write: %s" % dst.get_file(), true)
 			failed += 1
 	if copied > 0:
-		var msg := "Copied %d file(s) to %s" % [copied, mod["name"]]
+		var msg := "Copied %d file(s) to %s" % [copied, mod.name]
 		if ModManifest.record_copied_files(mod, source_root, copied_sources, _cfg) != OK:
 			msg += " (manifest update failed)"
 		if failed > 0:
 			msg += " (%d failed)" % failed
-		_set_status(msg)
 		_refresh_mods()
+		_set_status(msg)
+
+
+static func _source_relative_path(source_path: String, source_root: String) -> String:
+	var normalized_path := source_path.replace("\\", "/").simplify_path()
+	var normalized_root := source_root.replace("\\", "/").simplify_path().rstrip("/")
+	if normalized_path == normalized_root \
+			or not normalized_path.begins_with(normalized_root + "/"):
+		return ""
+	return normalized_path.substr(normalized_root.length() + 1)
+
+
+## Expand selected Unreal package files to all existing same-basename package
+## members. This lets either the file dialog or explorer select just one member
+## without producing an incomplete mod package.
+static func _expand_package_files(file_paths: PackedStringArray) -> PackedStringArray:
+	var expanded := PackedStringArray()
+	var seen: Dictionary = {}
+	for selected_path in file_paths:
+		_append_unique_path(expanded, seen, selected_path)
+		if not _is_package_file(selected_path):
+			continue
+		var selected_base := selected_path.get_file().get_basename().to_lower()
+		var directory_path := selected_path.get_base_dir()
+		if not DirAccess.dir_exists_absolute(directory_path):
+			continue
+		var sibling_names := DirAccess.get_files_at(directory_path)
+		sibling_names.sort()
+		for sibling_name in sibling_names:
+			if sibling_name.get_basename().to_lower() != selected_base:
+				continue
+			if sibling_name.get_extension().to_lower() not in _PACKAGE_FILE_EXTENSIONS:
+				continue
+			_append_unique_path(expanded, seen, directory_path.path_join(sibling_name))
+	return expanded
+
+
+static func _append_unique_path(paths: PackedStringArray, seen: Dictionary,
+		path: String) -> void:
+	var normalized := path.replace("\\", "/").simplify_path()
+	var key := normalized.to_lower() if OS.get_name() == "Windows" else normalized
+	if seen.has(key):
+		return
+	seen[key] = true
+	paths.append(path)
+
+
+static func _is_package_file(path: String) -> bool:
+	return path.get_extension().to_lower() in _PACKAGE_FILE_EXTENSIONS
 
 
 # ── New Mod ────────────────────────────────────────────────────────────────────
@@ -1111,7 +1147,7 @@ func _create_empty_mod(mod_name: String) -> Error:
 	var create_error := DirAccess.make_dir_recursive_absolute(mod_path.path_join(cr + "/Content"))
 	if create_error != OK:
 		return create_error
-	return ModManifest.write_workspace_manifest({"name": mod_name, "path": mod_path}, _cfg)
+	return ModManifest.write_workspace_manifest(ModInfo.new(mod_name, mod_path), _cfg)
 
 
 func _open_new_mod_pak_dialog(mod_name: String) -> void:
@@ -1150,32 +1186,32 @@ func _on_new_mod_from_pak_started() -> void:
 	pass
 
 
-func _on_new_mod_from_pak_finished(success: bool, message: String,
-		_source_name: String, source_path: String) -> void:
+func _on_new_mod_from_pak_finished(result: OperationResult) -> void:
 	var mod_name := _pending_new_mod_from_pak
 	var mod_path := _pending_new_mod_from_pak_path
 	_pending_new_mod_from_pak = ""
 	_pending_new_mod_from_pak_path = ""
-	if success:
+	if result.ok:
 		var manifest_error := ModManifest.write_workspace_manifest(
-				{"name": mod_name, "path": mod_path}, _cfg)
+				ModInfo.new(mod_name, mod_path), _cfg)
 		var status := "Created mod from pak: %s" % mod_name
 		if manifest_error != OK:
 			status += " (manifest update failed)"
 		_set_status(status)
 		_refresh_mods()
 		return
+	var source_path := str(result.metadata.get("source_path", result.value))
 	var cleanup_path := source_path if not source_path.is_empty() else mod_path
 	if not cleanup_path.is_empty() and FileUtils.is_path_within(cleanup_path, _cfg.mods_dir):
 		FileUtils.remove_dir_recursive(cleanup_path)
-	_set_status(message, true)
+	_set_status(result.message, true)
 
 
 # ── Actions ────────────────────────────────────────────────────────────────────
 
 func _on_pack_pressed() -> void:
 	var enabled_names := _state.get_enabled_names()
-	var enabled_mods := _mods.filter(func(m): return m["name"] in enabled_names)
+	var enabled_mods := _mods.filter(func(m: ModInfo): return m.name in enabled_names)
 	_pack_mods(enabled_mods, "No mods enabled - right-click a mod to enable")
 
 
@@ -1198,7 +1234,7 @@ func _pack_mods(mods: Array, empty_message: String) -> void:
 	_packer.pack(mods)
 
 
-func _open_export_mod_dialog(mod: Dictionary) -> void:
+func _open_export_mod_dialog(mod: ModInfo) -> void:
 	if not _cfg.is_configured():
 		_set_status("Configure paths in Settings first", true)
 		return
@@ -1211,7 +1247,7 @@ func _open_export_mod_dialog(mod: Dictionary) -> void:
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
 	dialog.filters = PackedStringArray(["*.pak ; Unreal Pak"])
 	AppTheme.configure_file_dialog(dialog)
-	dialog.current_file = "%s.pak" % _safe_export_basename(mod["name"] as String)
+	dialog.current_file = "%s.pak" % _safe_export_basename(mod.name)
 	var paks_dir := _cfg.get_paks_dir()
 	if DirAccess.dir_exists_absolute(paks_dir):
 		dialog.current_dir = paks_dir
@@ -1225,8 +1261,8 @@ func _open_export_mod_dialog(mod: Dictionary) -> void:
 	dialog.popup_centered(Vector2i(900, 650))
 
 
-func _export_mod_to_path(mod: Dictionary, pak_path: String) -> void:
-	var mod_name := mod["name"] as String
+func _export_mod_to_path(mod: ModInfo, pak_path: String) -> void:
+	var mod_name := mod.name
 	_last_pack_operation = func() -> void: _export_mod_to_path(mod, pak_path)
 	_show_operation_feedback("Exporting %s..." % mod_name)
 	_append_log("Exporting %s..." % mod_name)
@@ -1346,13 +1382,14 @@ func _on_pack_started() -> void:
 	_set_status("Packing...")
 
 
-func _on_pack_finished(success: bool, message: String) -> void:
+func _on_pack_finished(result: OperationResult) -> void:
 	_pack_btn.disabled = false
-	_append_log(("OK: " if success else "ERROR: ") + message)
+	_append_log(("OK: " if result.ok else "ERROR: ") + result.message)
 	if is_instance_valid(_operation_feedback):
-		_operation_feedback.set_result(success, message)
-		_operation_feedback.set_retry_enabled(not success and _last_pack_operation.is_valid())
-	_set_status(message, not success)
+		_operation_feedback.set_result(result.ok, result.message)
+		_operation_feedback.set_retry_enabled(
+				not result.ok and _last_pack_operation.is_valid())
+	_set_status(result.message, not result.ok)
 
 
 func _on_watch_status_changed(active: bool) -> void:
@@ -1387,17 +1424,29 @@ func _on_config_changed() -> void:
 
 
 func _update_manifests_for_mods(mods: Array) -> void:
-	for mod: Dictionary in mods:
+	for mod_value in mods:
+		var mod := mod_value as ModInfo
+		if mod == null:
+			_append_log("Manifest skipped invalid mod metadata")
+			continue
 		var error := ModManifest.write_workspace_manifest(mod, _cfg)
 		if error == OK:
 			_append_log("Manifest: %s" % ModManifest.manifest_path(mod))
 		else:
-			_append_log("Manifest failed for %s (error %d)" % [mod.get("name", "mod"), error])
+			_append_log("Manifest failed for %s (error %d)" % [mod.name, error])
 
 
 func _run_build_preflight(mods: Array) -> bool:
 	var issues: Array[Dictionary] = []
-	for mod: Dictionary in mods:
+	for mod_value in mods:
+		var mod := mod_value as ModInfo
+		if mod == null:
+			issues.append({
+				"severity": ModPreflight.Severity.ERROR,
+				"mod": "mod",
+				"message": "Invalid mod metadata",
+			})
+			continue
 		issues.append_array(ModPreflight.validate_mod_for_pack(mod, _cfg))
 	var errors := ModPreflight.error_count(issues)
 	var warnings := ModPreflight.warning_count(issues)

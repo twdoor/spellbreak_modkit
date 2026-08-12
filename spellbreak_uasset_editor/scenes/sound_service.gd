@@ -1,4 +1,4 @@
-class_name SoundService extends RefCounted
+class_name SoundService extends BackgroundOperationService
 
 ## Extracts audio data from UE4 SoundWave .uasset files by locating OGG Vorbis
 ## data in the companion .uexp / .ubulk files.  No external tools required —
@@ -7,10 +7,9 @@ class_name SoundService extends RefCounted
 ## Pattern mirrors TextureService: synchronous helpers called from worker threads,
 ## results marshalled back to the main thread via call_deferred().
 
-signal operation_finished(success: bool, message: String)
+signal operation_finished(result: OperationResult)
 
 var _cfg: ModConfigManager
-var _operation := SingleBackgroundOperation.new()
 
 ## OGG Vorbis magic bytes: "OggS"
 static var OGG_MAGIC := PackedByteArray([0x4F, 0x67, 0x67, 0x53])
@@ -24,15 +23,6 @@ func setup(cfg: ModConfigManager) -> SoundService:
 	return self
 
 
-func is_busy() -> bool:
-	return _operation.is_busy()
-
-
-## Block until the worker thread has fully exited. Call from _exit_tree().
-func wait_to_finish() -> void:
-	_operation.wait_to_finish()
-
-
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
@@ -41,9 +31,9 @@ func wait_to_finish() -> void:
 ## Returns empty array on failure.
 func get_audio_data(uasset_path: String) -> PackedByteArray:
 	var result := _do_extract_audio(uasset_path)
-	if not result[0]:
+	if not result.ok:
 		return PackedByteArray()
-	return result[2]
+	return result.value as PackedByteArray
 
 
 ## Export audio from a SoundWave .uasset to an .ogg file.
@@ -83,44 +73,42 @@ func get_cached_audio(uasset_path: String) -> String:
 
 
 func _start_operation(task: Callable, success_callback: Callable = Callable()) -> void:
-	var error := _operation.start(task, _on_operation_done.bind(success_callback))
+	var error := _start_background(task, _on_operation_done.bind(success_callback))
 	if error == ERR_ALREADY_IN_USE:
 		return
 	if error != OK:
-		operation_finished.emit(false, "Could not start audio operation (error %d)" % error)
+		operation_finished.emit(OperationResult.failed(
+				"Could not start audio operation (error %d)" % error))
 
 
-func _on_operation_done(result: Variant, success_callback: Callable) -> void:
-	if not result is Array or result.size() < 2:
-		operation_finished.emit(false, "Audio operation returned an invalid result")
-		return
-	var success := bool(result[0])
-	if success and success_callback.is_valid():
+func _on_operation_done(result: OperationResult, success_callback: Callable) -> void:
+	if result.ok and success_callback.is_valid():
 		success_callback.call()
-	operation_finished.emit(success, str(result[1]))
+	operation_finished.emit(result)
 
 
-func _do_export_ogg(uasset_path: String, output_ogg: String) -> Array:
+func _do_export_ogg(uasset_path: String, output_ogg: String) -> OperationResult:
 	var result := _do_extract_audio(uasset_path)
-	if result[0]:
-		var write_error := FileUtils.write_bytes_atomic(output_ogg, result[2])
+	if result.ok:
+		var write_error := FileUtils.write_bytes_atomic(output_ogg, result.value)
 		if write_error == OK:
-			return [true, "Exported to %s" % output_ogg.get_file()]
-		return [false, "Failed to write %s (error %d)" % [output_ogg, write_error]]
-	return [false, str(result[1])]
+			return OperationResult.succeeded(
+					"Exported to %s" % output_ogg.get_file(), output_ogg)
+		return OperationResult.failed(
+				"Failed to write %s (error %d)" % [output_ogg, write_error])
+	return result
 
 
 # ── Core extraction ──────────────────────────────────────────────────────────
 
 
 ## Extract OGG audio bytes from a SoundWave .uasset's companion files.
-## Returns [success: bool, message: String, data: PackedByteArray].
-func _do_extract_audio(uasset_path: String) -> Array:
+func _do_extract_audio(uasset_path: String) -> OperationResult:
 	if _cfg and _cfg.get_game_profile().audio_format != "ogg_raw":
-		return [false, "Audio format '%s' is not supported — only raw OGG (ogg_raw) is currently supported" % _cfg.get_game_profile().audio_format, PackedByteArray()]
+		return OperationResult.failed("Audio format '%s' is not supported — only raw OGG (ogg_raw) is currently supported" % _cfg.get_game_profile().audio_format)
 
 	if not FileAccess.file_exists(uasset_path):
-		return [false, "File not found: %s" % uasset_path, PackedByteArray()]
+		return OperationResult.failed("File not found: %s" % uasset_path)
 
 	var base_path := uasset_path.trim_suffix(".uasset")
 
@@ -132,7 +120,7 @@ func _do_extract_audio(uasset_path: String) -> Array:
 		search_files.append(base_path + ".uexp")
 
 	if search_files.is_empty():
-		return [false, "No .uexp or .ubulk file found", PackedByteArray()]
+		return OperationResult.failed("No .uexp or .ubulk file found")
 
 	# Search for OGG magic bytes in each file
 	for file_path in search_files:
@@ -143,9 +131,10 @@ func _do_extract_audio(uasset_path: String) -> Array:
 			DirAccess.make_dir_recursive_absolute(cache_dir)
 			var cache_path := cache_dir.path_join(_cache_key(uasset_path) + ".ogg")
 			FileUtils.write_bytes_atomic(cache_path, ogg_data)
-			return [true, "Extracted %d bytes of audio" % ogg_data.size(), ogg_data]
+			return OperationResult.succeeded(
+					"Extracted %d bytes of audio" % ogg_data.size(), ogg_data)
 
-	return [false, "No OGG audio data found in companion files", PackedByteArray()]
+	return OperationResult.failed("No OGG audio data found in companion files")
 
 
 ## Search a binary file for OGG Vorbis data starting with "OggS" magic bytes.
@@ -248,26 +237,25 @@ func _find_ogg_stream_end(data: PackedByteArray, start: int) -> int:
 ## Inject an OGG file into a SoundWave .uasset's companion file, replacing the
 ## existing audio data.  Updates the FByteBulkData header size fields so UE4
 ## recognises the new payload length.
-## Returns [success: bool, message: String].
-func _do_inject_ogg(uasset_path: String, ogg_path: String) -> Array:
+func _do_inject_ogg(uasset_path: String, ogg_path: String) -> OperationResult:
 	if _cfg and _cfg.get_game_profile().audio_format != "ogg_raw":
-		return [false, "Audio injection not supported for format '%s' — only raw OGG (ogg_raw) is supported" % _cfg.get_game_profile().audio_format]
+		return OperationResult.failed("Audio injection not supported for format '%s' — only raw OGG (ogg_raw) is supported" % _cfg.get_game_profile().audio_format)
 
 	if not FileAccess.file_exists(uasset_path):
-		return [false, "Asset not found: %s" % uasset_path]
+		return OperationResult.failed("Asset not found: %s" % uasset_path)
 	if not FileAccess.file_exists(ogg_path):
-		return [false, "OGG file not found: %s" % ogg_path]
+		return OperationResult.failed("OGG file not found: %s" % ogg_path)
 
 	# Read new OGG data
 	var new_fa := FileAccess.open(ogg_path, FileAccess.READ)
 	if not new_fa:
-		return [false, "Cannot open OGG file: %s" % ogg_path]
+		return OperationResult.failed("Cannot open OGG file: %s" % ogg_path)
 	var new_ogg := new_fa.get_buffer(new_fa.get_length())
 	new_fa.close()
 
 	if new_ogg.size() < 4 or new_ogg[0] != 0x4F or new_ogg[1] != 0x67 or \
 	   new_ogg[2] != 0x67 or new_ogg[3] != 0x53:
-		return [false, "File does not appear to be OGG Vorbis"]
+		return OperationResult.failed("File does not appear to be OGG Vorbis")
 
 	# Find which companion file contains the old OGG data
 	var base_path := uasset_path.trim_suffix(".uasset")
@@ -278,7 +266,7 @@ func _do_inject_ogg(uasset_path: String, ogg_path: String) -> Array:
 		search_files.append(base_path + ".uexp")
 
 	if search_files.is_empty():
-		return [false, "No .uexp or .ubulk file found"]
+		return OperationResult.failed("No .uexp or .ubulk file found")
 
 	# Locate old OGG range in companion file
 	var target_file := ""
@@ -302,7 +290,7 @@ func _do_inject_ogg(uasset_path: String, ogg_path: String) -> Array:
 			break
 
 	if ogg_start < 0:
-		return [false, "No existing OGG data found in companion files"]
+		return OperationResult.failed("No existing OGG data found in companion files")
 
 	var old_size := ogg_end - ogg_start
 
@@ -334,7 +322,8 @@ func _do_inject_ogg(uasset_path: String, ogg_path: String) -> Array:
 			target_file, result_data, true, "audio-backup")
 	var write_error := int(write_result.get("error", ERR_BUG))
 	if write_error != OK:
-		return [false, "Failed to write %s (error %d)" % [target_file, write_error]]
+		return OperationResult.failed(
+				"Failed to write %s (error %d)" % [target_file, write_error])
 
 	var msg := "Injected %s into %s" % [ogg_path.get_file(), target_file.get_file()]
 	if new_ogg.size() != old_size:
@@ -342,7 +331,7 @@ func _do_inject_ogg(uasset_path: String, ogg_path: String) -> Array:
 	var backup_summary := FileUtils.format_backup_summary(write_result.get("backups", []))
 	if not backup_summary.is_empty():
 		msg += ". " + backup_summary
-	return [true, msg]
+	return OperationResult.succeeded(msg).with_backups(write_result.get("backups", []))
 
 
 # ── Cache invalidation ───────────────────────────────────────────────────────

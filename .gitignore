@@ -2,12 +2,12 @@
 config.json
 .mod_state.json
 
-# Claude IDE settings
-.claude/
 
-# Godot editor cache and build output
+# Godot editor cache and repository-level build output
 spellbreak_uasset_editor/.godot/
+# Keep historical local exports ignored; new exports go to dist/.
 spellbreak_uasset_editor/builds/
+dist/
 
 # OS
 .DS_Store

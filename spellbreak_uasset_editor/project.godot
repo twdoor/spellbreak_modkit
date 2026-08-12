@@ -16,7 +16,7 @@ override_environment_variable="SPELLBREAK_MODKIT_CONFIG_DIR"
 [application]
 
 config/name="SpellbreakUAssetEditor"
-config/version="0.11.0"
+config/version="0.12.0-beta.1"
 run/main_scene="uid://c4ng3sdgj0g3o"
 config/features=PackedStringArray("4.7")
 boot_splash/bg_color=Color(0, 0.047058824, 0, 1)
@@ -27,7 +27,6 @@ config/icon="uid://ci3kbtj31kgky"
 
 [autoload]
 
-GUIDE="*uid://p2jwrgjcbexr"
 VersionManager="*res://addons/version_manager/version_manager_runtime.gd"
 AppSettings="*res://addons/app_settings/app_settings_runtime.gd"
 
@@ -42,7 +41,7 @@ window/vsync/vsync_mode=0
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/guide/plugin.cfg", "res://addons/version_manager/plugin.cfg", "res://addons/app_settings/plugin.cfg")
+enabled=PackedStringArray("res://addons/app_settings/plugin.cfg", "res://addons/appimage_export/plugin.cfg", "res://addons/version_manager/plugin.cfg")
 
 [gui]
 
@@ -55,5 +54,6 @@ renderer/rendering_method.mobile="gl_compatibility"
 
 [version_manager]
 
+builds_path="res://../dist"
 changelog_path="res://../CHANGELOG.md"
 export_basename="sbue"

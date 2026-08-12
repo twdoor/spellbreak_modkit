@@ -951,17 +951,17 @@ func _maybe_load_preview_mesh(particles: CPUParticles3D, spec: Dictionary) -> vo
 	_set_preview_status("Loading mesh particle: %s" % mesh_path.get_file(),
 		AppTheme.StatusKind.WORKING)
 	var job_id := _ctx.background_jobs.run(
-		func() -> Array: return mesh_service.get_preview_mesh(mesh_path),
-		func(result: Array) -> void: _on_preview_mesh_loaded(particles, result))
+		func() -> OperationResult: return mesh_service.get_preview_mesh(mesh_path),
+		func(result: OperationResult) -> void: _on_preview_mesh_loaded(particles, result))
 	if job_id >= 0:
 		_preview_mesh_jobs.append(job_id)
 
 
-func _on_preview_mesh_loaded(particles: CPUParticles3D, result: Array) -> void:
+func _on_preview_mesh_loaded(particles: CPUParticles3D, result: OperationResult) -> void:
 	if not is_instance_valid(particles):
 		return
-	var gltf_path := str(result[0]) if result.size() > 0 else ""
-	var error := str(result[1]) if result.size() > 1 else ""
+	var gltf_path := str(result.value) if result.ok else ""
+	var error := result.message
 	if gltf_path.is_empty():
 		_set_preview_status("Failed to load mesh particle%s" % (
 			": " + error if not error.is_empty() else ""), AppTheme.StatusKind.ERROR)
@@ -1228,25 +1228,41 @@ func _maybe_load_preview_material_texture(particles: CPUParticles3D, spec: Dicti
 	_set_preview_status("Loading material texture: %s" % material_path.get_file(),
 		AppTheme.StatusKind.WORKING)
 	var job_id := _ctx.background_jobs.run(
-		func() -> Array: return _load_material_preview_image(material_path, texture_service),
-		func(result: Array) -> void: _on_preview_material_texture_loaded(particles, result))
+		func() -> OperationResult:
+			return _load_material_preview_image(material_path, texture_service),
+		func(result: OperationResult) -> void:
+			_on_preview_material_texture_loaded(particles, result))
 	if job_id >= 0:
 		_preview_texture_jobs.append(job_id)
 
 
-func _load_material_preview_image(material_path: String, texture_service: TextureService) -> Array:
+func _load_material_preview_image(material_path: String,
+		texture_service: TextureService) -> OperationResult:
 	var material_asset := UAssetFile.load_file(material_path)
 	if material_asset == null:
-		return ["", null, 1.0, ""]
-	var alpha := _material_preview_alpha(material_asset)
-	var blend_mode := _material_preview_blend_mode(material_asset)
+		return OperationResult.failed("Could not load material asset")
+	var alpha := ParticleMaterialAnalyzer.preview_alpha(material_asset)
+	var blend_mode := ParticleMaterialAnalyzer.preview_blend_mode(material_asset)
 	var texture_path := _first_texture_path_for_material(material_asset)
 	if texture_path.is_empty() or not FileAccess.file_exists(texture_path):
-		return ["", null, alpha, blend_mode]
+		return OperationResult.failed("No preview texture found", {
+			"alpha": alpha,
+			"blend_mode": blend_mode,
+		})
 	var cached := texture_service.get_cached_preview(texture_path)
-	if not cached.is_empty():
-		return [texture_path, Image.load_from_file(cached), alpha, blend_mode]
-	return [texture_path, texture_service.get_preview_image(texture_path), alpha, blend_mode]
+	var image := Image.load_from_file(cached) if not cached.is_empty() \
+			else texture_service.get_preview_image(texture_path)
+	if image == null:
+		return OperationResult.failed("Could not load preview texture", {
+			"texture_path": texture_path,
+			"alpha": alpha,
+			"blend_mode": blend_mode,
+		})
+	return OperationResult.succeeded("Loaded preview texture", image, {
+		"texture_path": texture_path,
+		"alpha": alpha,
+		"blend_mode": blend_mode,
+	})
 
 
 func _first_texture_path_for_material(material_asset: UAssetFile) -> String:
@@ -1262,119 +1278,21 @@ func _first_texture_path_for_material(material_asset: UAssetFile) -> String:
 	if candidates.is_empty():
 		return ""
 	candidates.sort_custom(func(a: String, b: String) -> bool:
-		return _texture_preview_score(a) > _texture_preview_score(b)
+		return ParticleMaterialAnalyzer.texture_score(a) \
+				> ParticleMaterialAnalyzer.texture_score(b)
 	)
 	return candidates[0]
 
 
-func _material_preview_alpha(material_asset: UAssetFile) -> float:
-	var alpha := 1.0
-	for expo in material_asset.exports:
-		for prop in expo.properties:
-			alpha *= _material_alpha_from_property(prop)
-	return clampf(alpha, 0.0, 1.0)
-
-
-func _material_preview_blend_mode(material_asset: UAssetFile) -> String:
-	for expo in material_asset.exports:
-		for prop in expo.properties:
-			var blend_mode := _material_blend_mode_from_property(prop)
-			if not blend_mode.is_empty():
-				return blend_mode
-	return ""
-
-
-func _material_blend_mode_from_property(prop: UAssetProperty) -> String:
-	if prop == null:
-		return ""
-	if prop.prop_name == "BlendMode":
-		return _string_from_property(prop)
-	for child in prop.children:
-		var blend_mode := _material_blend_mode_from_property(child)
-		if not blend_mode.is_empty():
-			return blend_mode
-	return ""
-
-
-func _material_alpha_from_property(prop: UAssetProperty) -> float:
-	if prop == null:
-		return 1.0
-	if prop.prop_name == "ScalarParameterValues":
-		var scalar_alpha := 1.0
-		for child in prop.children:
-			var parameter_name := _material_parameter_name(child)
-			if _is_material_alpha_parameter(parameter_name):
-				var value_prop := child.find_child("ParameterValue")
-				var value := _float_from_property(value_prop, 1.0) if value_prop != null else 1.0
-				scalar_alpha *= clampf(value, 0.0, 1.0)
-		return scalar_alpha
-	if prop.prop_name == "VectorParameterValues":
-		var vector_alpha := 1.0
-		for child in prop.children:
-			var parameter_name := _material_parameter_name(child)
-			if not _is_material_color_alpha_parameter(parameter_name):
-				continue
-			var value_prop := child.find_child("ParameterValue")
-			if value_prop != null:
-				var color := _color_from_color_property(value_prop, Color(1, 1, 1, 1))
-				vector_alpha *= clampf(color.a, 0.0, 1.0)
-		return vector_alpha
-	var child_alpha := 1.0
-	for child in prop.children:
-		child_alpha *= _material_alpha_from_property(child)
-	return child_alpha
-
-
-func _material_parameter_name(parameter_struct: UAssetProperty) -> String:
-	if parameter_struct == null:
-		return ""
-	var parameter_info := parameter_struct.find_child("ParameterInfo")
-	if parameter_info == null:
-		return ""
-	var name_prop := parameter_info.find_child("Name")
-	return str(name_prop.value) if name_prop != null and name_prop.value != null else ""
-
-
-func _is_material_alpha_parameter(parameter_name: String) -> bool:
-	var name := parameter_name.to_lower()
-	if name.is_empty():
-		return false
-	for excluded in ["min", "max", "mask", "clip", "depth", "fade", "distance", "refraction"]:
-		if name.contains(excluded):
-			return false
-	return name.contains("opacity") \
-			or name.contains("alpha") \
-			or name.contains("translucency")
-
-
-func _is_material_color_alpha_parameter(parameter_name: String) -> bool:
-	var name := parameter_name.to_lower()
-	if name.is_empty():
-		return false
-	return name.contains("color") \
-			or name.contains("tint") \
-			or name.contains("albedo")
-
-
-func _texture_preview_score(path: String) -> int:
-	var name := path.get_file().get_basename().to_lower()
-	var score := 0
-	for token in ["base", "diffuse", "albedo", "color", "campfire", "flame", "smoke"]:
-		if name.contains(token):
-			score += 4
-	for token in ["normal", "_n", "noise", "mask", "erosion", "height"]:
-		if name.contains(token):
-			score -= 3
-	return score
-
-
-func _on_preview_material_texture_loaded(particles: CPUParticles3D, result: Array) -> void:
+func _on_preview_material_texture_loaded(particles: CPUParticles3D,
+		result: OperationResult) -> void:
 	if not is_instance_valid(particles):
 		return
-	var image := result[1] as Image if result.size() > 1 else null
-	var material_alpha := float(result[2]) if result.size() > 2 else 1.0
+	var image := result.value as Image if result.ok else null
+	var material_alpha := float(result.metadata.get("alpha", 1.0))
 	particles.set_meta("preview_material_alpha", material_alpha)
-	particles.set_meta("preview_material_blend_mode", str(result[3]) if result.size() > 3 else "")
+	particles.set_meta("preview_material_blend_mode",
+			str(result.metadata.get("blend_mode", "")))
 	if image == null:
 		var missing_material_name := str(particles.get_meta("preview_material_name", "material"))
 		_set_preview_status("No preview texture found for %s" % missing_material_name,

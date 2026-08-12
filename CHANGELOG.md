@@ -1,9 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.12.0-beta.1 — Editor Preview (Pre-release) — 2026-08-12
 
 - Replaced the editor's legacy update checker with the reusable Version Manager plugin, including semantic-version release selection and export-time repository metadata.
-- Moved mod manager preferences to the App Settings plugin's standard per-user configuration directory with atomic saves, backups, an Open Config Folder action, and automatic import of legacy `config.json` and `.mod_state.json` files.
+- Added one-click in-app updates for direct AppImage, Linux executable, and Windows executable release assets, with download progress, SHA-256 verification, staged replacement, backup, and restart.
+- Simplified the editor around its fixed Spellbreak target: removed legacy settings/profile adapters, centralized bundled tool resolution, and moved local exports outside the Godot project.
+- Added cross-filesystem-safe staged installs, typed operation/mod results, a shared background-service lifecycle, symlink-safe discovery, and lighter watcher fingerprints for large assets.
+- Consolidated installed and save-as pak creation into one transactional packing pipeline.
+- Replaced the bundled GUIDE input framework with native Godot `InputMap` actions and JSON-backed editable key bindings.
+- Added a Reuse As workflow for cloning complete binary asset packages, automatically rewriting their internal asset identity and regenerating companion files.
 
 ## 0.11.0 - 2026-07-17
 
@@ -32,7 +37,7 @@
 
 ## 0.9.0 - 2026-06-29
 
-- Added a Settings keymap manager backed by GUIDE mappings, including editable primary and secondary shortcuts.
+- Added a Settings keymap manager with editable primary and secondary shortcuts.
 - Reworked shortcut handling so editor keybinds respond reliably, renamed tab navigation to Previous Tab and Next Tab, and hid Shift as a standalone bind.
 - Added source generation from game `.pak` files, including an improved u4pak reader for Spellbreak padded version 8 pak footers.
 - Improved Mod Manager source imports with a better source picker, selected-folder matching, fixed Select/Browse behavior, and external opening for text/config files.

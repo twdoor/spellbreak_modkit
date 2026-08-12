@@ -8,19 +8,18 @@ const MANIFEST_FILENAME := "spellbreak_mod_manifest.json"
 const SCHEMA_VERSION := 1
 
 
-static func manifest_path(mod: Dictionary) -> String:
-	var mod_path := str(mod.get("path", "")).rstrip("/")
-	return mod_path.path_join(MANIFEST_FILENAME)
+static func manifest_path(mod: ModInfo) -> String:
+	return mod.path.rstrip("/").path_join(MANIFEST_FILENAME)
 
 
-static func write_workspace_manifest(mod: Dictionary, cfg: ModConfigManager) -> Error:
+static func write_workspace_manifest(mod: ModInfo, cfg: ModConfigManager) -> Error:
 	var manifest := _load_or_new(mod)
 	_refresh_metadata(manifest, mod, cfg)
 	_merge_current_files(manifest, mod, cfg)
 	return _write_manifest(mod, manifest)
 
 
-static func record_copied_files(mod: Dictionary, source_root: String,
+static func record_copied_files(mod: ModInfo, source_root: String,
 		file_paths: Array, cfg: ModConfigManager) -> Error:
 	var manifest := _load_or_new(mod)
 	_refresh_metadata(manifest, mod, cfg)
@@ -45,7 +44,7 @@ static func record_copied_files(mod: Dictionary, source_root: String,
 	return _write_manifest(mod, manifest)
 
 
-static func _load_or_new(mod: Dictionary) -> Dictionary:
+static func _load_or_new(mod: ModInfo) -> Dictionary:
 	var path := manifest_path(mod)
 	if FileAccess.file_exists(path):
 		var file := FileAccess.open(path, FileAccess.READ)
@@ -57,14 +56,14 @@ static func _load_or_new(mod: Dictionary) -> Dictionary:
 	return {}
 
 
-static func _refresh_metadata(manifest: Dictionary, mod: Dictionary,
+static func _refresh_metadata(manifest: Dictionary, mod: ModInfo,
 		cfg: ModConfigManager) -> void:
 	var profile := cfg.get_game_profile()
 	manifest["schema_version"] = SCHEMA_VERSION
 	manifest["updated_at_unix"] = Time.get_unix_time_from_system()
 	manifest["mod"] = {
-		"name": str(mod.get("name", "")),
-		"folder": str(mod.get("path", "")).get_file(),
+		"name": mod.name,
+		"folder": mod.path.get_file(),
 	}
 	manifest["profile"] = {
 		"id": profile.profile_id,
@@ -85,11 +84,11 @@ static func _refresh_metadata(manifest: Dictionary, mod: Dictionary,
 	manifest["sources"] = _sources_snapshot(cfg.sources)
 
 
-static func _merge_current_files(manifest: Dictionary, mod: Dictionary,
+static func _merge_current_files(manifest: Dictionary, mod: ModInfo,
 		cfg: ModConfigManager, by_target: Dictionary = {}) -> void:
 	if by_target.is_empty():
 		by_target = _files_by_target(manifest)
-	var mod_path := str(mod.get("path", "")).rstrip("/")
+	var mod_path := mod.path.rstrip("/")
 	var content_root := cfg.get_game_profile().content_root
 	var current := {}
 	for rel_value in ModDiscovery.list_mod_files(mod_path, content_root):
@@ -134,7 +133,7 @@ static func _sources_snapshot(sources: Array) -> Array:
 	return result
 
 
-static func _write_manifest(mod: Dictionary, manifest: Dictionary) -> Error:
+static func _write_manifest(mod: ModInfo, manifest: Dictionary) -> Error:
 	var path := manifest_path(mod)
 	if path.get_base_dir().is_empty():
 		return ERR_INVALID_PARAMETER

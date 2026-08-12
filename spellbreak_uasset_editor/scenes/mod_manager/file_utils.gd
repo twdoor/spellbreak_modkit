@@ -3,6 +3,8 @@ class_name FileUtils extends RefCounted
 ## Pure-static filesystem helpers shared across the mod manager.
 ## No state, no UI — just file operations.
 
+const COPY_CHUNK_SIZE := 1024 * 1024
+
 
 ## Recursively remove a directory and all its contents.
 static func remove_dir_recursive(path: String) -> void:
@@ -27,12 +29,19 @@ static func remove_dir_recursive(path: String) -> void:
 ## Read bytes from src, create parent dirs for dst, write bytes.
 ## Returns OK on success or an error code on failure.
 static func copy_file(src: String, dst: String) -> Error:
-	var input := FileAccess.open(src, FileAccess.READ)
-	if not input:
-		return FileAccess.get_open_error()
-	var data := input.get_buffer(input.get_length())
-	input.close()
-	return write_bytes_atomic(dst, data)
+	if not FileAccess.file_exists(src):
+		return ERR_FILE_NOT_FOUND
+	var parent_error := DirAccess.make_dir_recursive_absolute(dst.get_base_dir())
+	if parent_error != OK:
+		return parent_error
+	var staged := unique_sibling_path(dst, "copy")
+	var copy_error := _copy_file_contents(src, staged)
+	if copy_error != OK:
+		_remove_file_if_present(staged)
+		return copy_error
+	var result := _install_local_staged_files(
+			[{"source": staged, "target": dst}], [], false, "bak")
+	return result.get("error", ERR_BUG) as Error
 
 
 static func is_path_within(path: String, root: String) -> bool:
@@ -95,7 +104,7 @@ static func write_bytes_atomic_with_result(path: String, data: PackedByteArray,
 		return {"error": FileAccess.get_open_error(), "backups": []}
 	output.store_buffer(data)
 	output.close()
-	var result := install_staged_files_with_result(
+	var result := _install_local_staged_files(
 			[{"source": staged, "target": path}], [], keep_backup, backup_label)
 	var error := int(result.get("error", ERR_BUG))
 	if error != OK and FileAccess.file_exists(staged):
@@ -116,6 +125,57 @@ static func install_staged_files_with_result(files: Array, removed_targets: Arra
 		keep_backups: bool = false, backup_label: String = "bak") -> Dictionary:
 	if files.is_empty():
 		return {"error": ERR_INVALID_PARAMETER, "backups": []}
+
+	# External tools commonly write under the OS temp directory while users keep
+	# game assets on another filesystem or Windows drive. A rename across those
+	# boundaries is not portable. Copy every artifact to a hidden sibling of its
+	# target first; the transactional phase then consists only of local renames.
+	var prepared: Array = []
+	var original_sources: Array[Dictionary] = []
+	var prepared_targets: Dictionary = {}
+	for raw_pair in files:
+		if not raw_pair is Dictionary:
+			_cleanup_prepared_files(prepared)
+			return {"error": ERR_INVALID_PARAMETER, "backups": []}
+		var pair := raw_pair as Dictionary
+		var source := str(pair.get("source", ""))
+		var target := str(pair.get("target", ""))
+		if source.is_empty() or target.is_empty() or not FileAccess.file_exists(source):
+			_cleanup_prepared_files(prepared)
+			return {"error": ERR_FILE_NOT_FOUND, "backups": []}
+		if prepared_targets.has(target):
+			_cleanup_prepared_files(prepared)
+			return {"error": ERR_ALREADY_EXISTS, "backups": []}
+		prepared_targets[target] = true
+		var parent_error := DirAccess.make_dir_recursive_absolute(target.get_base_dir())
+		if parent_error != OK:
+			_cleanup_prepared_files(prepared)
+			return {"error": parent_error, "backups": []}
+		var local_source := unique_sibling_path(target, "install")
+		var copy_error := _copy_file_contents(source, local_source)
+		if copy_error != OK:
+			_remove_file_if_present(local_source)
+			_cleanup_prepared_files(prepared)
+			return {"error": copy_error, "backups": []}
+		prepared.append({"source": local_source, "target": target})
+		original_sources.append({"source": source, "target": target})
+
+	var result := _install_local_staged_files(
+			prepared, removed_targets, keep_backups, backup_label)
+	if int(result.get("error", ERR_BUG)) == OK:
+		for original in original_sources:
+			var source := str(original.get("source", ""))
+			var target := str(original.get("target", ""))
+			if not same_path(source, target):
+				_remove_file_if_present(source)
+	else:
+		_cleanup_prepared_files(prepared)
+	return result
+
+
+## Transactional phase for sources already staged beside their targets.
+static func _install_local_staged_files(files: Array, removed_targets: Array,
+		keep_backups: bool, backup_label: String) -> Dictionary:
 	var install_targets: Dictionary = {}
 	for pair: Dictionary in files:
 		var source: String = pair.get("source", "")
@@ -166,6 +226,36 @@ static func install_staged_files_with_result(files: Array, removed_targets: Arra
 		for pair: Dictionary in backups:
 			DirAccess.remove_absolute(pair["backup"])
 	return {"error": OK, "backups": backups if keep_backups else []}
+
+
+static func _copy_file_contents(source: String, target: String) -> Error:
+	var input := FileAccess.open(source, FileAccess.READ)
+	if input == null:
+		return FileAccess.get_open_error()
+	var output := FileAccess.open(target, FileAccess.WRITE)
+	if output == null:
+		var error := FileAccess.get_open_error()
+		input.close()
+		return error
+	while not input.eof_reached():
+		var chunk := input.get_buffer(COPY_CHUNK_SIZE)
+		if chunk.is_empty():
+			break
+		output.store_buffer(chunk)
+	input.close()
+	output.close()
+	return OK
+
+
+static func _cleanup_prepared_files(files: Array) -> void:
+	for pair in files:
+		if pair is Dictionary:
+			_remove_file_if_present(str((pair as Dictionary).get("source", "")))
+
+
+static func _remove_file_if_present(path: String) -> void:
+	if not path.is_empty() and FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
 
 
 static func format_backup_summary(backups: Array) -> String:

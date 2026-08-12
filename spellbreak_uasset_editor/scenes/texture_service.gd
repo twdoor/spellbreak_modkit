@@ -1,4 +1,4 @@
-class_name TextureService extends RefCounted
+class_name TextureService extends BackgroundOperationService
 
 ## Wraps UE4-DDS-Tools and ImageMagick to provide texture extraction, injection,
 ## and preview for UE4 texture assets.  Subprocess pattern mirrors PackingService.
@@ -8,10 +8,9 @@ class_name TextureService extends RefCounted
 ##   Import: PNG -> TGA (ImageMagick) -> inject into uasset (UE4-DDS-Tools)
 ##   Preview: export to PNG in temp dir, load as Godot Image
 
-signal operation_finished(success: bool, message: String)
+signal operation_finished(result: OperationResult)
 
 var _cfg: ModConfigManager
-var _operation := SingleBackgroundOperation.new()
 
 ## Temp directory for preview cache
 const CACHE_DIR := "sb_tex_cache"
@@ -22,15 +21,6 @@ const TEXTURE_COMPANION_EXTENSIONS := ["uexp", "ubulk", "uptnl"]
 func setup(cfg: ModConfigManager) -> TextureService:
 	_cfg = cfg
 	return self
-
-
-func is_busy() -> bool:
-	return _operation.is_busy()
-
-
-## Block until the worker thread has fully exited. Call from _exit_tree().
-func wait_to_finish() -> void:
-	_operation.wait_to_finish()
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -55,9 +45,9 @@ func inject_png(uasset_path: String, png_path: String, output_dir: String) -> vo
 ## Returns null on failure.
 func get_preview_image(uasset_path: String) -> Image:
 	var result := _do_export_png(uasset_path, "")
-	if not result[0]:
+	if not result.ok:
 		return null
-	var png_path: String = result[2]
+	var png_path := str(result.value)
 	if png_path.is_empty() or not FileAccess.file_exists(png_path):
 		return null
 	var img := Image.load_from_file(png_path)
@@ -82,22 +72,18 @@ func has_magick() -> bool:
 
 
 func _start_operation(task: Callable, success_callback: Callable = Callable()) -> void:
-	var error := _operation.start(task, _on_operation_done.bind(success_callback))
+	var error := _start_background(task, _on_operation_done.bind(success_callback))
 	if error == ERR_ALREADY_IN_USE:
 		return
 	if error != OK:
-		operation_finished.emit(false, "Could not start texture operation (error %d)" % error)
+		operation_finished.emit(OperationResult.failed(
+				"Could not start texture operation (error %d)" % error))
 
 
-func _on_operation_done(result: Variant, success_callback: Callable) -> void:
-	if not result is Array or result.size() < 2:
-		operation_finished.emit(false, "Texture operation returned an invalid result")
-		return
-	var success := bool(result[0])
-	if success and success_callback.is_valid():
+func _on_operation_done(result: OperationResult, success_callback: Callable) -> void:
+	if result.ok and success_callback.is_valid():
 		success_callback.call()
-	var message := str(result[1])
-	operation_finished.emit(success, message)
+	operation_finished.emit(result)
 
 
 # ── Core operations ───────────────────────────────────────────────────────────
@@ -106,7 +92,7 @@ func _on_operation_done(result: Variant, success_callback: Callable) -> void:
 ## Export uasset -> TGA -> PNG.
 ## If output_png is empty, writes to the preview cache dir.
 ## Returns [success: bool, message: String, png_path: String].
-func _do_export_png(uasset_path: String, output_png: String) -> Array:
+func _do_export_png(uasset_path: String, output_png: String) -> OperationResult:
 	var tools := _get_texture_toolchain()
 	if not bool(tools.get("ok", false)):
 		return _export_error(str(tools.get("error", "Texture toolchain is not configured")))
@@ -166,14 +152,14 @@ func _do_export_png(uasset_path: String, output_png: String) -> Array:
 	if install_error != OK:
 		return _export_error("Could not install PNG (error %d)" % install_error)
 
-	return [true, "Exported to %s" % target_png.get_file(), target_png]
+	return OperationResult.succeeded("Exported to %s" % target_png.get_file(), target_png)
 
 
 ## Inject PNG -> TGA -> uasset.
 ## Pipeline: ImageMagick converts PNG to TGA (lossless), then UE4-DDS-Tools
 ## injects the TGA using libtexconv to match the original texture's BC format.
 ## Returns [success: bool, message: String].
-func _do_inject_png(uasset_path: String, png_path: String, output_dir: String) -> Array:
+func _do_inject_png(uasset_path: String, png_path: String, output_dir: String) -> OperationResult:
 	if not FileAccess.file_exists(png_path):
 		return _inject_error("PNG file not found: %s" % png_path)
 
@@ -241,7 +227,8 @@ func _do_inject_png(uasset_path: String, png_path: String, output_dir: String) -
 	var backup_summary := FileUtils.format_backup_summary(install_result.get("backups", []))
 	if not backup_summary.is_empty():
 		message += ". " + backup_summary
-	return [true, message]
+	return OperationResult.succeeded(message).with_backups(
+			install_result.get("backups", []))
 
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
@@ -418,16 +405,16 @@ func _get_texture_toolchain() -> Dictionary:
 	}
 
 
-func _export_error(message: String, tmp_dir: String = "") -> Array:
+func _export_error(message: String, tmp_dir: String = "") -> OperationResult:
 	if not tmp_dir.is_empty():
 		_remove_dir(tmp_dir)
-	return [false, message, ""]
+	return OperationResult.failed(message)
 
 
-func _inject_error(message: String, tmp_dir: String = "") -> Array:
+func _inject_error(message: String, tmp_dir: String = "") -> OperationResult:
 	if not tmp_dir.is_empty():
 		_remove_dir(tmp_dir)
-	return [false, message]
+	return OperationResult.failed(message)
 
 
 func _find_magick() -> String:

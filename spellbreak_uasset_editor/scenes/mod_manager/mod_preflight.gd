@@ -14,10 +14,10 @@ const COMPANION_EXTENSIONS := ["uexp", "ubulk", "uptnl"]
 const TEXT_SIDEcar_EXTENSIONS := ["txt", "json", "ini", "cfg", "csv", "md"]
 
 
-static func validate_mod_for_pack(mod: Dictionary, cfg: ModConfigManager) -> Array[Dictionary]:
+static func validate_mod_for_pack(mod: ModInfo, cfg: ModConfigManager) -> Array[Dictionary]:
 	var issues: Array[Dictionary] = []
-	var mod_path := str(mod.get("path", "")).rstrip("/")
-	var mod_name := str(mod.get("name", mod_path.get_file()))
+	var mod_path := mod.path.rstrip("/")
+	var mod_name := mod.name if not mod.name.is_empty() else mod_path.get_file()
 	var content_root := cfg.get_game_profile().content_root
 	var content_path := mod_path.path_join(content_root)
 	if not FileUtils.is_path_within(content_path, mod_path):

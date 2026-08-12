@@ -136,6 +136,11 @@ func _read_export_presets() -> Array[Dictionary]:
 			"architecture": str(
 				config.get_value(options_section, "binary_format/architecture", "")
 			),
+			"generates_appimage": bool(
+				config.get_value(
+					options_section, "appimage/generate_an_appimage", false
+				)
+			),
 			"existing_path": str(config.get_value(section, "export_path", "")),
 		})
 
@@ -205,7 +210,11 @@ func _create_release() -> void:
 
 	_export_thread = Thread.new()
 	var thread_error := _export_thread.start(
-		_run_exports.bind(release_setup.tasks, OS.get_executable_path())
+		_run_exports.bind(
+			release_setup.tasks,
+			OS.get_executable_path(),
+			_release_folder
+		)
 	)
 	if thread_error != OK:
 		_export_thread = null
@@ -386,10 +395,17 @@ func _plan_release_tasks(
 			app_name,
 			_export_extension(preset),
 		]
+		var additional_outputs := PackedStringArray()
+		if (
+			str(preset.platform).to_lower() == "linux"
+			and bool(preset.get("generates_appimage", false))
+		):
+			additional_outputs.append(output_path.get_basename() + ".AppImage")
 		tasks.append({
 			"target": preset_name,
 			"preset": preset_name,
 			"output_path": ProjectSettings.globalize_path(output_path),
+			"additional_outputs": additional_outputs,
 		})
 
 	return {
@@ -673,7 +689,11 @@ func _show_error(message: String) -> void:
 	_error_dialog.popup_centered(Vector2i(520, 180))
 
 
-func _run_exports(tasks: Array[Dictionary], godot_executable: String) -> void:
+func _run_exports(
+	tasks: Array[Dictionary],
+	godot_executable: String,
+	release_folder: String
+) -> void:
 	var failures: Array[String] = []
 	var project_path := ProjectSettings.globalize_path("res://")
 
@@ -688,18 +708,71 @@ func _run_exports(tasks: Array[Dictionary], godot_executable: String) -> void:
 			str(task.output_path),
 		])
 		var exit_code := OS.execute(godot_executable, arguments, output, true)
-		if exit_code != 0 or not FileAccess.file_exists(str(task.output_path)):
+		var missing_outputs: Array[String] = []
+		if not FileAccess.file_exists(str(task.output_path)):
+			missing_outputs.append(str(task.output_path))
+		for additional_path: String in task.get(
+			"additional_outputs", PackedStringArray()
+		):
+			var global_additional_path := ProjectSettings.globalize_path(additional_path)
+			if not FileAccess.file_exists(global_additional_path):
+				missing_outputs.append(global_additional_path)
+		if exit_code != 0 or not missing_outputs.is_empty():
 			var details := ""
 			if not output.is_empty():
 				details = str(output[0]).strip_edges()
 				if details.length() > 500:
 					details = details.substr(details.length() - 500)
+			if not missing_outputs.is_empty():
+				details += " Missing output: %s" % ", ".join(missing_outputs)
 			failures.append(
 				"%s export failed (exit code %d). %s"
 				% [str(task.target), exit_code, details]
 			)
 
+	if failures.is_empty():
+		var checksum_error := _write_release_checksums(tasks, release_folder)
+		if not checksum_error.is_empty():
+			failures.append(checksum_error)
+
 	_on_exports_finished.call_deferred(failures)
+
+
+func _write_release_checksums(
+	tasks: Array[Dictionary], release_folder: String
+) -> String:
+	var artifact_paths: Array[String] = []
+	for task: Dictionary in tasks:
+		artifact_paths.append(str(task.output_path))
+		for additional_path: String in task.get(
+			"additional_outputs", PackedStringArray()
+		):
+			artifact_paths.append(ProjectSettings.globalize_path(additional_path))
+
+	var checksum_lines: Array[String] = []
+	for artifact_path: String in artifact_paths:
+		if not FileAccess.file_exists(artifact_path):
+			return "Could not checksum missing release artifact: %s" % artifact_path
+		var relative_path := artifact_path.trim_prefix(release_folder).trim_prefix("/")
+		checksum_lines.append(
+			"%s  %s" % [FileAccess.get_sha256(artifact_path), relative_path]
+		)
+	checksum_lines.sort()
+
+	var checksum_path := release_folder.path_join("SHA256SUMS")
+	var checksum_file := FileAccess.open(checksum_path, FileAccess.WRITE)
+	if checksum_file == null:
+		return "Could not write %s (error %d)." % [
+			checksum_path, FileAccess.get_open_error()
+		]
+	checksum_file.store_string("\n".join(checksum_lines) + "\n")
+	var checksum_file_error := checksum_file.get_error()
+	checksum_file.close()
+	if checksum_file_error != OK:
+		return "Could not write %s (error %d)." % [
+			checksum_path, checksum_file_error
+		]
+	return ""
 
 
 func _on_exports_finished(failures: Array[String]) -> void:

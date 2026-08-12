@@ -1,17 +1,15 @@
 class_name ModDiscovery extends RefCounted
 
-## Scans a mods directory and returns metadata for each discovered mod.
+## Scans a mods directory and returns typed metadata for each discovered mod.
 ## A valid mod is any subdirectory that contains a g3/ subfolder.
 ## Mirrors the discover_mods() logic in mod_manager.py.
 
 const ASSET_EXTENSIONS := [".uasset", ".uexp", ".ubulk", ".umap"]
 
 
-## Returns an Array of Dictionaries:
-##   { "name": String, "path": String, "file_count": int, "size_bytes": int }
 ## content_root: the top-level folder inside each mod. Spellbreak uses "g3".
-static func scan(mods_dir: String, content_root: String = "g3") -> Array:
-	var results: Array = []
+static func scan(mods_dir: String, content_root: String = "g3") -> Array[ModInfo]:
+	var results: Array[ModInfo] = []
 	if mods_dir.is_empty() or not DirAccess.dir_exists_absolute(mods_dir):
 		return results
 
@@ -24,7 +22,7 @@ static func scan(mods_dir: String, content_root: String = "g3") -> Array:
 	dir.list_dir_begin()
 	var entry := dir.get_next()
 	while not entry.is_empty():
-		if dir.current_is_dir() and not entry.begins_with("."):
+		if dir.current_is_dir() and not dir.is_link(entry) and not entry.begins_with("."):
 			names.append(entry)
 		entry = dir.get_next()
 	dir.list_dir_end()
@@ -38,12 +36,8 @@ static func scan(mods_dir: String, content_root: String = "g3") -> Array:
 		if not DirAccess.dir_exists_absolute(content_path):
 			continue
 		var assets := _list_assets(content_path)
-		results.append({
-			"name":       mod_name,
-			"path":       mod_path,
-			"file_count": assets.size(),
-			"size_bytes": _dir_size(content_path),
-		})
+		results.append(ModInfo.new(
+				mod_name, mod_path, assets.size(), _dir_size(content_path)))
 
 	return results
 
@@ -56,16 +50,26 @@ static func list_assets(base_path: String) -> Array:
 ## List all file paths relative to mod_path, recursively under its content root folder.
 ## content_root: the top-level folder inside the mod (e.g. "g3" for Spellbreak).
 static func list_mod_files(mod_path: String, content_root: String = "g3") -> Array:
+	var entries := list_mod_file_entries(mod_path, content_root)
+	var result: Array = []
+	for entry: ModFileEntry in entries:
+		result.append(entry.relative_path)
+	return result
+
+
+static func list_mod_file_entries(mod_path: String,
+		content_root: String = "g3") -> Array[ModFileEntry]:
 	var root := mod_path.path_join(content_root)
 	if not FileUtils.is_path_within(root, mod_path):
 		return []
 	if not DirAccess.dir_exists_absolute(root):
 		return []
 	var all_files := _list_all_files(root)
-	var result: Array = []
+	var result: Array[ModFileEntry] = []
 	for f in all_files:
-		result.append(f.trim_prefix(mod_path + "/"))
-	result.sort()
+		result.append(ModFileEntry.new(f.trim_prefix(mod_path + "/"), f))
+	result.sort_custom(func(a: ModFileEntry, b: ModFileEntry) -> bool:
+		return a.relative_path < b.relative_path)
 	return result
 
 
@@ -102,12 +106,18 @@ static func _walk(path: String, cb: Callable) -> void:
 	dir.list_dir_begin()
 	var entry := dir.get_next()
 	while not entry.is_empty():
-		entries.append({"name": entry, "is_dir": dir.current_is_dir()})
+		entries.append({
+			"name": entry,
+			"is_dir": dir.current_is_dir(),
+			"is_link": dir.is_link(entry),
+		})
 		entry = dir.get_next()
 	dir.list_dir_end()
 	entries.sort_custom(func(a, b): return a["name"] < b["name"])
 
 	for e in entries:
+		if bool(e["is_link"]):
+			continue
 		var full := path.path_join(e["name"])
 		if e["is_dir"] and not (e["name"] as String).begins_with("."):
 			_walk(full, cb)

@@ -1,29 +1,11 @@
 extends CanvasLayer
 
+const BASE_FILE_EXPLORER_TAB := preload("res://scenes/base_file_explorer_tab.gd")
+
 @onready var open_file_popup: FileDialog = %OpenFilePopup
 @onready var tab_cont: TabContainer = %TabCont
 
-@export_group("Inputs")
-@export var mapping: GUIDEMappingContext
-@export var open_action: GUIDEAction
-@export var close_action: GUIDEAction
-@export var save_action: GUIDEAction
-@export var previous_tab_action: GUIDEAction
-@export var next_tab_action: GUIDEAction
-@export var copy: GUIDEAction
-@export var paste: GUIDEAction
-@export var cut: GUIDEAction
-@export var undo: GUIDEAction
-@export var delete: GUIDEAction
-@export var shift: GUIDEAction
-@export var cancel: GUIDEAction
-@export var create: GUIDEAction
-@export var compare_action: GUIDEAction
-
-var _toast_label: Label
-var _toast_panel: PanelContainer
-var _toast_timer: SceneTreeTimer
-var _toast_tween: Tween
+var _toast_notifier: ToastNotifier
 
 var _close_dialog: ConfirmationDialog
 var _tab_pending_close: UassetFileTab
@@ -34,8 +16,16 @@ var _hover_title_offset := 0
 var _hover_title_hold_ticks := 0
 var _compare_file_popup: FileDialog
 var _compare_base_tab: UassetFileTab
+var _reuse_file_dialog: FileDialog
+var _reuse_source_tab: UassetFileTab
 var _update_dialog: ConfirmationDialog
+var _update_progress_bar: ProgressBar
+var _update_release_button: Button
 var _latest_release_url := ""
+var _pending_update: Dictionary = {}
+var _prepared_update: Dictionary = {}
+var _update_download_active := false
+var _update_cancel_requested := false
 
 var _status_label: Label
 var _cfg: ModConfigManager
@@ -44,10 +34,9 @@ var _sound_service: SoundService
 var _mesh_service: MeshService
 var _background_jobs: BackgroundJobRunner
 var _checking_for_updates := false
-var _keymap_config: GUIDERemappingConfig
+var _keymap_config: Dictionary = {}
+var _keymap_tab: KeymapSettingsTab
 
-const _TOAST_HIDDEN_Y := -8.0   # resting offset_bottom when hidden (just off-screen bottom)
-const _TOAST_SHOWN_Y  := -72.0  # offset_bottom when fully visible
 const _TAB_CLOSE_GAP := "   "
 const _TAB_MAX_WIDTH := 190
 const _TAB_TITLE_VISIBLE_CHARS := 24
@@ -58,21 +47,19 @@ const _STARTUP_OPEN_EXTENSIONS := ["uasset", "json"]
 
 func _ready() -> void:
 	_background_jobs = BackgroundJobRunner.new()
-	_configure_shortcut_actions()
-	_keymap_config = KeymapSettingsTab.load_saved_config(mapping)
-	GUIDE.enable_mapping_context(mapping)
-	GUIDE.set_remapping_config(_keymap_config)
+	_keymap_config = KeymapSettingsTab.load_saved_config()
+	KeymapSettingsTab.apply_config(_keymap_config)
 
 	AppTheme.configure_file_dialog(open_file_popup)
 	open_file_popup.file_selected.connect(_on_file_selected)
 	open_file_popup.files_selected.connect(_on_files_selected)
 
-	_connect_shortcuts()
 	_configure_tab_close_controls()
 
 	_build_toast()
 	_build_close_dialog()
 	_build_compare_dialog()
+	_build_reuse_dialog()
 	_build_status_bar()
 	_setup_mod_tab()
 	_build_update_dialog()
@@ -110,51 +97,37 @@ func _make_tab_close_icon() -> Texture2D:
 	return ImageTexture.create_from_image(img)
 
 
-func _connect_shortcuts() -> void:
-	# Command shortcuts are edge-triggered. GUIDEAction.triggered fires every
-	# frame while active; just_triggered fires once per press and keeps keyboard
-	# behavior consistent while preserving GUIDE-based remapping.
-	open_action.just_triggered.connect(_open_file_dialog)
-	close_action.just_triggered.connect(_close_current_tab)
-	save_action.just_triggered.connect(_save_current_tab)
-	previous_tab_action.just_triggered.connect(_select_previous_tab)
-	next_tab_action.just_triggered.connect(_select_next_tab)
-	copy.just_triggered.connect(_copy_selection)
-	paste.just_triggered.connect(_paste_clipboard)
-	cut.just_triggered.connect(_cut_selection)
-	undo.just_triggered.connect(_undo)
-	delete.just_triggered.connect(_delete_selection)
-	cancel.just_triggered.connect(_cancel_selection)
-	create.just_triggered.connect(_create_file)
-	compare_action.just_triggered.connect(_compare_current_tab)
-
-
-func _configure_shortcut_actions() -> void:
-	mapping.display_name = "Editor"
-	_configure_action(open_action, &"open_file", "Open File", "File")
-	_configure_action(close_action, &"close_tab", "Close Tab", "File")
-	_configure_action(save_action, &"save_file", "Save File", "File")
-	_configure_action(create, &"add_files_from_sources", "Add Files from Sources", "Mod Manager")
-	_configure_action(previous_tab_action, &"previous_tab", "Previous Tab", "Navigation")
-	_configure_action(next_tab_action, &"next_tab", "Next Tab", "Navigation")
-	_configure_action(copy, &"copy_selection", "Copy", "Edit")
-	_configure_action(paste, &"paste_selection", "Paste", "Edit")
-	_configure_action(cut, &"cut_selection", "Cut", "Edit")
-	_configure_action(undo, &"undo", "Undo", "Edit")
-	_configure_action(delete, &"delete_selection", "Delete Selection", "Edit")
-	_configure_action(cancel, &"cancel", "Cancel / Clear Selection", "Edit")
-	_configure_action(compare_action, &"compare_file", "Compare File", "File")
-	_configure_action(shift, &"selection_modifier_shift", "Shift", "Navigation", false)
-
-
-func _configure_action(action: GUIDEAction, action_name: StringName,
-		display_name: String, category: String, remappable: bool = true) -> void:
-	if action == null:
+func _process(_delta: float) -> void:
+	if is_instance_valid(_keymap_tab) and _keymap_tab.is_capturing():
 		return
-	action.name = action_name
-	action.display_name = display_name
-	action.display_category = category
-	action.is_remappable = remappable
+	if Input.is_action_just_pressed(KeymapSettingsTab.ACTION_OPEN):
+		_open_file_dialog()
+	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_CLOSE):
+		_close_current_tab()
+	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_SAVE):
+		_save_current_tab()
+	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_REUSE):
+		_reuse_current_asset()
+	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_PREVIOUS_TAB):
+		_select_previous_tab()
+	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_NEXT_TAB):
+		_select_next_tab()
+	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_COPY):
+		_copy_selection()
+	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_PASTE):
+		_paste_clipboard()
+	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_CUT):
+		_cut_selection()
+	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_UNDO):
+		_undo()
+	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_DELETE):
+		_delete_selection()
+	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_CANCEL):
+		_cancel_selection()
+	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_CREATE):
+		_create_file()
+	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_COMPARE):
+		_compare_current_tab()
 
 
 func _exit_tree() -> void:
@@ -228,7 +201,8 @@ func _setup_mod_tab() -> void:
 	)
 	settings.status_changed.connect(_on_mod_status_changed)
 
-	var keymap := KeymapSettingsTab.new().setup(mapping, _keymap_config)
+	var keymap := KeymapSettingsTab.new().setup(_keymap_config)
+	_keymap_tab = keymap
 	tab_cont.add_child(keymap)
 	tab_cont.move_child(keymap, 2)
 	tab_cont.set_tab_title(2, "Key Mappings")
@@ -240,9 +214,9 @@ func _setup_mod_tab() -> void:
 		tab_cont.current_tab = 2
 	)
 
-	keymap.keymap_changed.connect(func(config: GUIDERemappingConfig) -> void:
-		_keymap_config = config
-		GUIDE.set_remapping_config(_keymap_config)
+	keymap.keymap_changed.connect(func(config: Dictionary) -> void:
+		_keymap_config = config.duplicate(true)
+		KeymapSettingsTab.apply_config(_keymap_config)
 	)
 	keymap.close_requested.connect(func() -> void:
 		tab_cont.set_tab_hidden(2, true)
@@ -268,6 +242,21 @@ func _setup_mod_tab() -> void:
 	)
 	diagnostics.status_changed.connect(_on_mod_status_changed)
 
+	# Persistent source browser. Hidden utility tabs above it do not affect its
+	# visible position beside Mod Manager.
+	var explorer := BASE_FILE_EXPLORER_TAB.new().setup(_cfg, _background_jobs)
+	tab_cont.add_child(explorer)
+	tab_cont.move_child(explorer, 4)
+	tab_cont.set_tab_title(4, "Base Files")
+	explorer.open_asset_requested.connect(_on_file_selected)
+	explorer.add_to_mod_requested.connect(panel.add_source_file_to_mod)
+	explorer.open_settings_requested.connect(func() -> void:
+		settings.refresh()
+		tab_cont.set_tab_hidden(1, false)
+		tab_cont.current_tab = 1
+	)
+	explorer.status_changed.connect(_on_mod_status_changed)
+
 
 func _on_mod_status_changed(text: String, is_error: bool) -> void:
 	_status_label.text = text
@@ -275,56 +264,12 @@ func _on_mod_status_changed(text: String, is_error: bool) -> void:
 
 
 func _build_toast() -> void:
-	_toast_panel = PanelContainer.new()
-	_toast_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_toast_panel.z_index = 100
-	_toast_panel.add_theme_stylebox_override("panel", AppTheme.make_toast_style())
-
-	_toast_label = Label.new()
-	_toast_label.add_theme_font_size_override("font_size", AppTheme.FONT_TOAST)
-	_toast_label.add_theme_color_override("font_color", AppTheme.TEXT_TOAST)
-	_toast_panel.add_child(_toast_label)
-
-	# Anchor bottom-centre, start hidden below the visible area
-	_toast_panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	_toast_panel.anchor_left = 0.5
-	_toast_panel.anchor_right = 0.5
-	_toast_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_toast_panel.offset_bottom = _TOAST_HIDDEN_Y
-	_toast_panel.offset_top = _TOAST_HIDDEN_Y
-	_toast_panel.modulate.a = 0.0
-
-	add_child(_toast_panel)
+	_toast_notifier = ToastNotifier.new()
+	add_child(_toast_notifier)
 
 
 func _show_toast(message: String) -> void:
-	_toast_label.text = message
-
-	# Kill previous tween and timer so a rapid second call restarts cleanly
-	if _toast_tween:
-		_toast_tween.kill()
-	if _toast_timer != null:
-		_toast_timer.timeout.disconnect(_hide_toast)
-
-	# Slide up + fade in
-	_toast_tween = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-	_toast_tween.tween_property(_toast_panel, "offset_bottom", _TOAST_SHOWN_Y, 0.25)
-	_toast_tween.parallel().tween_property(_toast_panel, "offset_top", _TOAST_SHOWN_Y, 0.25)
-	_toast_tween.parallel().tween_property(_toast_panel, "modulate:a", 1.0, 0.2)
-	await _toast_tween.finished
-	await get_tree().create_timer(1.5).timeout
-	_hide_toast()
-
-
-func _hide_toast() -> void:
-	if _toast_tween:
-		_toast_tween.kill()
-
-	# Slide down + fade out
-	_toast_tween = create_tween().set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
-	_toast_tween.tween_property(_toast_panel, "offset_bottom", _TOAST_HIDDEN_Y, 0.3)
-	_toast_tween.parallel().tween_property(_toast_panel, "offset_top", _TOAST_HIDDEN_Y, 0.3)
-	_toast_tween.parallel().tween_property(_toast_panel, "modulate:a", 0.0, 0.25)
+	_toast_notifier.show_message(message)
 
 
 func _build_close_dialog() -> void:
@@ -352,14 +297,41 @@ func _build_compare_dialog() -> void:
 	add_child(_compare_file_popup)
 
 
+func _build_reuse_dialog() -> void:
+	_reuse_file_dialog = FileDialog.new()
+	_reuse_file_dialog.title = "Reuse Asset As"
+	_reuse_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	_reuse_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	_reuse_file_dialog.filters = PackedStringArray(["*.uasset ; Unreal Asset (binary)"])
+	_reuse_file_dialog.file_selected.connect(_on_reuse_destination_selected)
+	_reuse_file_dialog.canceled.connect(func() -> void: _reuse_source_tab = null)
+	AppTheme.configure_file_dialog(_reuse_file_dialog)
+	add_child(_reuse_file_dialog)
+
+
 func _build_update_dialog() -> void:
 	_update_dialog = ConfirmationDialog.new()
 	_update_dialog.title = "Update Available"
-	_update_dialog.ok_button_text = "Open Release"
+	_update_dialog.ok_button_text = "Download Update"
 	_update_dialog.cancel_button_text = "Later"
-	_update_dialog.confirmed.connect(_open_latest_release)
+	_update_dialog.dialog_hide_on_ok = false
+	_update_release_button = _update_dialog.add_button(
+		"Open Release Page", false, "open_release")
+	_update_dialog.confirmed.connect(_on_update_primary_action)
+	_update_dialog.custom_action.connect(_on_update_dialog_action)
+	_update_dialog.canceled.connect(_on_update_dialog_cancelled)
+
+	_update_progress_bar = ProgressBar.new()
+	_update_progress_bar.custom_minimum_size = Vector2(420, 24)
+	_update_progress_bar.show_percentage = true
+	_update_progress_bar.visible = false
+	_update_dialog.add_child(_update_progress_bar)
 	AppTheme.apply_theme(_update_dialog)
 	add_child(_update_dialog)
+
+	var version_manager := get_node_or_null("/root/VersionManager")
+	if version_manager != null and version_manager.has_signal("update_download_progress"):
+		version_manager.update_download_progress.connect(_on_update_download_progress)
 
 
 func _setup_version_manager() -> void:
@@ -384,12 +356,152 @@ func _check_for_updates() -> void:
 
 
 func _on_update_available(result: Dictionary) -> void:
+	_pending_update = result.duplicate(true)
+	_prepared_update.clear()
+	_update_download_active = false
+	_update_cancel_requested = false
 	_latest_release_url = str(result.get("release_url", ""))
 	var version := str(result.get("latest_version", "")).trim_prefix("v").trim_prefix("V")
-	_update_dialog.dialog_text = (
-		"Spellbreak Modkit %s is available.\n\nOpen the GitHub release page?" % version
-	)
+	var automatic := bool(result.get("install_supported", false))
+	_update_progress_bar.visible = false
+	_update_dialog.get_ok_button().disabled = false
+	_update_dialog.cancel_button_text = "Later"
+	if automatic:
+		var asset: Dictionary = result.get("asset", {})
+		_update_dialog.ok_button_text = "Download Update"
+		_update_release_button.visible = true
+		_update_release_button.disabled = false
+		_update_dialog.dialog_text = (
+			"Spellbreak Modkit %s is available.\n\n"
+			+ "Download %s, verify it, then install and restart?"
+		) % [version, str(asset.get("name", "the platform build"))]
+	else:
+		_update_dialog.ok_button_text = "Open Release Page"
+		_update_release_button.visible = false
+		var reason := str(result.get("install_error", "Automatic installation is unavailable."))
+		_update_dialog.dialog_text = (
+			"Spellbreak Modkit %s is available.\n\n%s\n\n"
+			+ "Open the GitHub release page to update manually?"
+		) % [version, reason]
 	_update_dialog.popup_centered()
+
+
+func _on_update_primary_action() -> void:
+	if not _prepared_update.is_empty():
+		_install_prepared_update()
+	elif bool(_pending_update.get("install_supported", false)):
+		_start_update_download()
+	else:
+		_open_latest_release()
+		_update_dialog.hide()
+
+
+func _on_update_dialog_action(action: StringName) -> void:
+	if action == &"open_release":
+		_open_latest_release()
+
+
+func _on_update_dialog_cancelled() -> void:
+	if not _update_download_active:
+		return
+	_update_cancel_requested = true
+	var version_manager := get_node_or_null("/root/VersionManager")
+	if version_manager != null and version_manager.has_method("cancel_update_download"):
+		version_manager.cancel_update_download()
+
+
+func _start_update_download() -> void:
+	if _update_download_active:
+		return
+	var version_manager := get_node_or_null("/root/VersionManager")
+	if version_manager == null or not version_manager.has_method("download_and_prepare_update"):
+		_show_update_error("The update service is unavailable.")
+		return
+	_update_download_active = true
+	_update_cancel_requested = false
+	_update_dialog.get_ok_button().disabled = true
+	_update_release_button.disabled = true
+	_update_dialog.cancel_button_text = "Cancel Download"
+	_update_progress_bar.value = 0
+	_update_progress_bar.max_value = 100
+	_update_progress_bar.visible = true
+	var asset: Dictionary = _pending_update.get("asset", {})
+	_update_dialog.dialog_text = "Downloading %s…" % str(asset.get("name", "update"))
+
+	var result: Dictionary = await version_manager.download_and_prepare_update(_pending_update)
+	_update_download_active = false
+	_update_dialog.cancel_button_text = "Later"
+	_update_release_button.disabled = false
+	if bool(result.get("cancelled", false)) or _update_cancel_requested:
+		_update_progress_bar.visible = false
+		return
+	if not bool(result.get("success", false)):
+		_update_dialog.ok_button_text = "Retry Download"
+		_update_dialog.get_ok_button().disabled = false
+		_show_update_error(str(result.get("error", "The update could not be prepared.")))
+		return
+
+	_prepared_update = result
+	_update_progress_bar.value = 100
+	_update_progress_bar.visible = true
+	_update_dialog.ok_button_text = "Install & Restart"
+	_update_dialog.get_ok_button().disabled = false
+	_update_dialog.dialog_text = (
+		"Spellbreak Modkit %s has been downloaded and verified.\n\n"
+		+ "Install it now and restart the app? A backup of this executable will be kept."
+	) % str(result.get("version", ""))
+	if not _update_dialog.visible:
+		_update_dialog.popup_centered()
+
+
+func _on_update_download_progress(downloaded_bytes: int, total_bytes: int) -> void:
+	if not _update_download_active:
+		return
+	if total_bytes > 0:
+		_update_progress_bar.value = clampf(
+			float(downloaded_bytes) / float(total_bytes) * 100.0, 0.0, 100.0)
+		_update_dialog.dialog_text = "Downloading update…  %s / %s" % [
+			_format_update_size(downloaded_bytes), _format_update_size(total_bytes)]
+	else:
+		_update_dialog.dialog_text = "Downloading update…  %s" % _format_update_size(
+			downloaded_bytes)
+
+
+func _install_prepared_update() -> void:
+	var dirty_tabs := 0
+	for child in tab_cont.get_children():
+		if child is UassetFileTab and (child as UassetFileTab).is_dirty():
+			dirty_tabs += 1
+	if dirty_tabs > 0:
+		_show_update_error(
+			"Save or close %d file%s with unsaved changes before restarting." % [
+				dirty_tabs, "" if dirty_tabs == 1 else "s"])
+		return
+	var version_manager := get_node_or_null("/root/VersionManager")
+	if version_manager == null or not version_manager.has_method("launch_prepared_update"):
+		_show_update_error("The update installer is unavailable.")
+		return
+	var result: Dictionary = version_manager.launch_prepared_update(_prepared_update)
+	if not bool(result.get("success", false)):
+		_show_update_error(str(result.get("error", "Could not start the update installer.")))
+		return
+	_update_dialog.hide()
+	get_tree().quit()
+
+
+func _show_update_error(message: String) -> void:
+	_update_progress_bar.visible = false
+	_update_dialog.dialog_text = "The automatic update could not continue:\n\n%s" % message
+	if not _update_dialog.visible:
+		_update_dialog.popup_centered()
+
+
+func _format_update_size(bytes: int) -> String:
+	if bytes < 1024:
+		return "%d B" % bytes
+	if bytes < 1024 * 1024:
+		return "%.1f KB" % (bytes / 1024.0)
+	return "%.1f MB" % (bytes / (1024.0 * 1024.0))
 
 
 func _open_latest_release() -> void:
@@ -460,10 +572,80 @@ func _on_file_selected(path: String) -> void:
 	var new_tab := UassetFileTab.setup(asset, _texture_service, _sound_service,
 		_mesh_service, _background_jobs)
 	new_tab.tab_title_changed.connect(_on_asset_tab_title_changed)
+	new_tab.reuse_requested.connect(_on_reuse_requested)
 	tab_cont.add_child(new_tab)
 	# Refresh all tab titles: duplicates get "ParentFolder/Name", unique ones stay short.
 	_refresh_tab_titles()
 	tab_cont.current_tab = tab_cont.get_tab_idx_from_control(new_tab)
+
+
+func _reuse_current_asset() -> void:
+	var tab := tab_cont.get_current_tab_control()
+	if tab is UassetFileTab:
+		_on_reuse_requested(tab as UassetFileTab)
+
+
+func _on_reuse_requested(tab: UassetFileTab) -> void:
+	if not is_instance_valid(tab) or tab.tab_asset == null:
+		return
+	var source_path := tab.tab_asset.binary_path
+	if source_path.is_empty() or source_path.get_extension().to_lower() != "uasset":
+		_show_toast("Reuse As requires an open binary .uasset file")
+		return
+	_reuse_source_tab = tab
+	_reuse_file_dialog.current_dir = source_path.get_base_dir()
+	_reuse_file_dialog.current_file = "%s_Copy.uasset" % source_path.get_file().get_basename()
+	_reuse_file_dialog.popup_centered(Vector2i(900, 650))
+
+
+func _on_reuse_destination_selected(selected_path: String) -> void:
+	var source_tab := _reuse_source_tab
+	_reuse_source_tab = null
+	if not is_instance_valid(source_tab) or source_tab.tab_asset == null:
+		_show_toast("The source asset is no longer open")
+		return
+	var destination_path := selected_path
+	if destination_path.get_extension().is_empty():
+		destination_path += ".uasset"
+	if destination_path.get_extension().to_lower() != "uasset":
+		_show_toast("Choose a .uasset destination")
+		return
+	if FileUtils.same_path(source_tab.tab_asset.binary_path, destination_path):
+		_show_toast("Choose a different asset file from the source")
+		return
+
+	var existing_tab := _find_open_asset_tab(destination_path)
+	if existing_tab != null and existing_tab.is_dirty():
+		_show_toast("Cannot replace an open asset with unsaved changes")
+		return
+
+	_show_toast("Creating reused asset...")
+	var result := source_tab.tab_asset.save_reuse_copy(destination_path)
+	if not result.ok:
+		_show_toast(result.message)
+		return
+
+	if existing_tab != null:
+		if not existing_tab.reload_asset_from_disk():
+			_show_toast("Created asset, but could not reload its open tab")
+			return
+		tab_cont.current_tab = tab_cont.get_tab_idx_from_control(existing_tab)
+	else:
+		_on_file_selected(destination_path)
+	_show_toast("Reused as %s (%d names updated)" % [
+		destination_path.get_file(),
+		int(result.metadata.get("renamed_name_entries", 0)),
+	])
+
+
+func _find_open_asset_tab(path: String) -> UassetFileTab:
+	for child in tab_cont.get_children():
+		if child is UassetFileTab:
+			var asset_tab := child as UassetFileTab
+			if asset_tab.tab_asset != null \
+					and FileUtils.same_path(asset_tab.tab_asset.file_path, path):
+				return asset_tab
+	return null
 
 
 func _on_files_selected(paths: PackedStringArray) -> void:

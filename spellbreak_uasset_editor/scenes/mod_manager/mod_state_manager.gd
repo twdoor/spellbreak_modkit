@@ -8,9 +8,6 @@ var _state_path: String = ""
 var _state: Dictionary = {}
 var _state_mutex := Mutex.new()
 
-signal state_changed(mod_name: String, enabled: bool)
-
-
 func setup(state_path: String) -> ModStateManager:
 	_state_path = state_path
 	load_state()
@@ -55,7 +52,6 @@ func set_enabled(mod_name: String, enabled: bool) -> void:
 	_state[mod_name] = enabled
 	_state_mutex.unlock()
 	save()
-	state_changed.emit(mod_name, enabled)
 
 
 func toggle(mod_name: String) -> bool:

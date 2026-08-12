@@ -148,7 +148,7 @@ static func _create_editor(prop: UAssetProperty, row: PropertyRow, asset: UAsset
 			if asset and asset.game_profile:
 				known = asset.game_profile.get_enum_values(prop.enum_type)
 			else:
-				known = UE4Enums.get_values(prop.enum_type)
+				known = SpellbreakProfile.shared().get_enum_values(prop.enum_type)
 			if known.size() > 0:
 				var opt := OptionButton.new()
 				var selected_idx := 0
@@ -723,124 +723,19 @@ static func _on_change(row: PropertyRow, new_value: Variant) -> void:
 ## on_change is called with the selected/submitted tag string.
 ## tag_list: the array of known Spellbreak tags to search against.
 static func _make_tag_autocomplete(current: String, on_change: Callable, tag_list: Array = []) -> Control:
-	var line := LineEdit.new()
-	line.text = current
-	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-	var dropdown := CompletionDropdown.make()
-	var dropdown_list := VBoxContainer.new()
-	dropdown.add_child(dropdown_list)
-	line.add_child(dropdown)
-
-	var committed := {"value": current}
-	var commit := func(value: String) -> void:
-		if value == committed["value"]:
-			return
-		committed["value"] = value
-		on_change.call(value)
-
-	line.text_changed.connect(func(t: String):
-		CompletionDropdown.clear(dropdown_list)
-		if t.length() < 2:
-			dropdown.hide()
-			return
-		var t_lower := t.to_lower()
-		var added := 0
-		for tag in tag_list:
-			if (tag as String).to_lower().contains(t_lower):
-				_add_completion_dropdown_item(dropdown_list, line, dropdown, str(tag),
-					func(value: String) -> void:
-						commit.call(value))
-				added += 1
-				if added >= 20:
-					break
-		if added > 0:
-			CompletionDropdown.show(dropdown, line, 280.0)
-		else:
-			dropdown.hide()
-	)
-
-	line.focus_exited.connect(func():
-		dropdown.hide.call_deferred()
-		commit.call(line.text)
-	)
-
-	line.text_submitted.connect(func(t: String):
-		dropdown.hide()
-		commit.call(t)
-	)
-
-	return line
-
-
-static func _add_completion_dropdown_item(dropdown_list: VBoxContainer, line_edit: LineEdit,
-		dropdown: Control, text: String, on_selected: Callable) -> void:
-	CompletionDropdown.add_button(dropdown_list, text, func() -> void:
-		line_edit.set_block_signals(true)
-		line_edit.text = text
-		line_edit.set_block_signals(false)
-		line_edit.caret_column = text.length()
-		dropdown.hide()
-		line_edit.grab_focus.call_deferred()
-		on_selected.call(text)
-	)
+	return PropertyInputHelpers.make_tag_autocomplete(current, on_change, tag_list)
 
 
 ## Creates an editable list of gameplay tags for a GameplayTagContainer property.
 ## prop.value must be an Array of String tag names.
 static func _make_tag_list_editor(prop: UAssetProperty, row: PropertyRow, tag_list: Array = []) -> Control:
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", AppTheme.SPACING_TAGS)
-	_rebuild_tag_list(vbox, prop, row, tag_list)
-	return vbox
+	return PropertyInputHelpers.make_tag_list_editor(prop, row, tag_list)
 
 
 ## Clears and repopulates a tag list VBoxContainer.
 ## Called directly by class name from button callbacks to avoid closure-capture issues.
 static func _rebuild_tag_list(vbox: VBoxContainer, prop: UAssetProperty, row: PropertyRow, tag_list: Array = []) -> void:
-	for child in vbox.get_children():
-		child.hide()
-		child.queue_free()
-	var tags: Array = prop.value as Array
-	for i in tags.size():
-		var tag_str := str(tags[i])
-		var hbox := HBoxContainer.new()
-		hbox.add_theme_constant_override("separation", AppTheme.SPACING_TIGHT)
-
-		var autocomplete := _make_tag_autocomplete(tag_str, func(new_tag: String):
-			var old_state := prop.capture_state()
-			tags[i] = new_tag
-			prop.raw["Value"] = tags
-			row.value_changed.emit(prop, old_state, prop.capture_state())
-		, tag_list)
-		autocomplete.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		hbox.add_child(autocomplete)
-
-		var del_btn := Button.new()
-		del_btn.text = "×"
-		del_btn.flat = true
-		del_btn.custom_minimum_size.x = 24
-		del_btn.pressed.connect(func():
-			var old_state := prop.capture_state()
-			tags.remove_at(i)
-			prop.raw["Value"] = tags
-			row.value_changed.emit(prop, old_state, prop.capture_state())
-			PropertyRow._rebuild_tag_list(vbox, prop, row, tag_list)
-		)
-		hbox.add_child(del_btn)
-		vbox.add_child(hbox)
-
-	var add_btn := Button.new()
-	add_btn.text = "+ Add Tag"
-	add_btn.flat = true
-	add_btn.pressed.connect(func():
-		var old_state := prop.capture_state()
-		tags.append("")
-		prop.raw["Value"] = tags
-		row.value_changed.emit(prop, old_state, prop.capture_state())
-		PropertyRow._rebuild_tag_list(vbox, prop, row, tag_list)
-	)
-	vbox.add_child(add_btn)
+	PropertyInputHelpers.rebuild_tag_list(vbox, prop, row, tag_list)
 
 
 # ── Numeric constant helpers ──────────────────────────────────────────────────
@@ -849,102 +744,4 @@ static func _rebuild_tag_list(vbox: VBoxContainer, prop: UAssetProperty, row: Pr
 ## constants: Dictionary of Spellbreak constant name → numeric value.
 ## is_int: if true, the final result is cast to int.
 static func _attach_constant_helper(spin: SpinBox, constants: Dictionary, is_int: bool) -> void:
-	var line_edit := spin.get_line_edit()
-
-	# Tooltip listing available constants
-	var tip_lines := PackedStringArray(["Constants:"])
-	for key in constants:
-		tip_lines.append("  %s = %s" % [key, constants[key]])
-	spin.tooltip_text = "\n".join(tip_lines)
-
-	# Autocomplete dropdown for constant names. This is an in-tree Control, not a
-	# PopupMenu window, so it cannot take keyboard focus away from the LineEdit.
-	var dropdown := CompletionDropdown.make()
-	var dropdown_list := VBoxContainer.new()
-	dropdown.add_child(dropdown_list)
-	line_edit.add_child(dropdown)
-	line_edit.focus_exited.connect(func():
-		dropdown.hide.call_deferred()
-	)
-
-	line_edit.text_changed.connect(func(text: String):
-		if not line_edit.has_focus():
-			return
-		var token := _get_token_at_caret(text, line_edit.caret_column)
-		CompletionDropdown.clear(dropdown_list)
-		if token.length() < 1 or token.is_valid_float():
-			dropdown.hide()
-			return
-		var t_lower := token.to_lower()
-		var added := 0
-		for key in constants:
-			if (key as String).to_lower().contains(t_lower):
-				_add_constant_dropdown_item(dropdown_list, line_edit, dropdown, str(key),
-						constants[key])
-				added += 1
-				if added >= 15:
-					break
-		if added > 0:
-			CompletionDropdown.show(dropdown, line_edit)
-		else:
-			dropdown.hide()
-	)
-
-	# Evaluate expressions with constant substitution on Enter
-	line_edit.text_submitted.connect(func(text: String):
-		var substituted := _substitute_constants(text, constants)
-		if substituted != text:
-			var expr := Expression.new()
-			if expr.parse(substituted) == OK:
-				var result = expr.execute()
-				if not expr.has_execute_failed():
-					var val := float(result)
-					if is_int:
-						val = float(int(val))
-					spin.value = val
-	)
-
-
-static func _add_constant_dropdown_item(dropdown_list: VBoxContainer, line_edit: LineEdit,
-		dropdown: Control, const_name: String, value: Variant) -> void:
-	CompletionDropdown.add_button(dropdown_list, "%s  =  %s" % [const_name, value], func() -> void:
-		_insert_constant_name(line_edit, dropdown, const_name)
-	)
-
-
-static func _insert_constant_name(line_edit: LineEdit, dropdown: Control, const_name: String) -> void:
-	var text := line_edit.text
-	var caret := line_edit.caret_column
-	var bounds := _get_token_bounds(text, caret)
-	line_edit.text = text.substr(0, bounds[0]) + const_name + text.substr(bounds[1])
-	line_edit.caret_column = bounds[0] + const_name.length()
-	dropdown.hide()
-	line_edit.grab_focus.call_deferred()
-
-
-## Replaces known constant names in text with their numeric values.
-static func _substitute_constants(text: String, constants: Dictionary) -> String:
-	var result := text
-	for key in constants:
-		var re := RegEx.new()
-		re.compile("(?i)\\b" + key + "\\b")
-		result = re.sub(result, str(constants[key]), true)
-	return result
-
-
-## Returns the token (word) at the caret position, or "" if caret is on a separator.
-static func _get_token_at_caret(text: String, caret_col: int) -> String:
-	var bounds := _get_token_bounds(text, caret_col)
-	return text.substr(bounds[0], bounds[1] - bounds[0])
-
-
-## Returns [start, end] indices of the token at the caret position.
-static func _get_token_bounds(text: String, caret_col: int) -> Array[int]:
-	const SEPARATORS := " +-*/()	"
-	var start := caret_col
-	var end := caret_col
-	while start > 0 and not SEPARATORS.contains(text[start - 1]):
-		start -= 1
-	while end < text.length() and not SEPARATORS.contains(text[end]):
-		end += 1
-	return [start, end]
+	PropertyInputHelpers.attach_constant_helper(spin, constants, is_int)

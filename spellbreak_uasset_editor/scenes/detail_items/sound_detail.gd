@@ -383,8 +383,8 @@ func _run_sound_export(uasset_path: String, output_path: String) -> void:
 	snd_service.export_ogg(uasset_path, output_path)
 
 
-func _on_export_finished(success: bool, message: String) -> void:
-	_finish_feedback(success, message)
+func _on_export_finished(result: OperationResult) -> void:
+	_finish_feedback(result.ok, result.message)
 	_set_action_buttons_disabled(false)
 
 
@@ -434,16 +434,16 @@ func _run_sound_import(uasset_path: String, ogg_path: String) -> void:
 	snd_service.inject_ogg(uasset_path, ogg_path)
 
 
-func _on_import_finished(success: bool, message: String) -> void:
-	_finish_feedback(success, message)
+func _on_import_finished(result: OperationResult) -> void:
+	_finish_feedback(result.ok, result.message)
 	_set_action_buttons_disabled(false)
 	# Reload preview after successful import
-	if success:
+	if result.ok:
 		if _ctx.reload_asset.is_valid():
 			var reloaded := bool(_ctx.reload_asset.call())
 			if not reloaded:
 				_finish_feedback(false,
-					message + " Reload failed; close and reopen before saving.", false)
+					result.message + " Reload failed; close and reopen before saving.", false)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

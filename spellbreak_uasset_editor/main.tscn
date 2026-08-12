@@ -1,40 +1,10 @@
 [gd_scene format=3 uid="uid://c4ng3sdgj0g3o"]
 
 [ext_resource type="Script" uid="uid://bswk3vjdcpjbk" path="res://main.gd" id="1_ig7tw"]
-[ext_resource type="Resource" uid="uid://cw5ln0cgjgjdo" path="res://guide/open.tres" id="2_0xm2m"]
-[ext_resource type="Resource" uid="uid://d4fisj7tgmtjp" path="res://guide/mapping.tres" id="2_h2yge"]
-[ext_resource type="Resource" uid="uid://dy3uooruiy2f0" path="res://guide/close.tres" id="4_1bvp3"]
-[ext_resource type="Resource" uid="uid://dricjsoopc74d" path="res://guide/save.tres" id="5_lquwl"]
-[ext_resource type="Resource" uid="uid://xhks6b4hjy4f" path="res://guide/switch_tab.tres" id="6_7mycd"]
-[ext_resource type="Resource" uid="uid://b27gmx58pdmwv" path="res://guide/next_tab.tres" id="6_qt1fs"]
-[ext_resource type="Resource" uid="uid://bcgja7kjbx7r7" path="res://guide/copy.tres" id="7_5vw27"]
-[ext_resource type="Resource" uid="uid://ccrx1i2iv5vmf" path="res://guide/paste.tres" id="8_kek77"]
-[ext_resource type="Resource" uid="uid://cbtlbx3ejx06t" path="res://guide/cut.tres" id="9_efxa6"]
-[ext_resource type="Resource" uid="uid://cafxwvdqdma2g" path="res://guide/undo.tres" id="9_kek77"]
-[ext_resource type="Resource" uid="uid://c3lxg6d23k8yl" path="res://guide/delete.tres" id="11_dg77c"]
-[ext_resource type="Resource" uid="uid://dwapj4lckokjm" path="res://guide/shift.tres" id="12_dg77c"]
-[ext_resource type="Resource" uid="uid://6kog7u0g47oc" path="res://guide/cancel.tres" id="13_ycdy4"]
-[ext_resource type="Resource" uid="uid://d04k6gcnu57o1" path="res://guide/create.tres" id="14_w48qg"]
-[ext_resource type="Resource" uid="uid://dv0nmj8rkomp4" path="res://guide/compare.tres" id="15_compare"]
 [ext_resource type="Theme" uid="uid://d3ygy1hpwcbqw" path="res://main_theme.tres" id="theme_main"]
 
 [node name="Main" type="CanvasLayer" unique_id=1562985923]
 script = ExtResource("1_ig7tw")
-mapping = ExtResource("2_h2yge")
-open_action = ExtResource("2_0xm2m")
-close_action = ExtResource("4_1bvp3")
-save_action = ExtResource("5_lquwl")
-previous_tab_action = ExtResource("6_7mycd")
-next_tab_action = ExtResource("6_qt1fs")
-copy = ExtResource("7_5vw27")
-paste = ExtResource("8_kek77")
-cut = ExtResource("9_efxa6")
-undo = ExtResource("9_kek77")
-delete = ExtResource("11_dg77c")
-shift = ExtResource("12_dg77c")
-cancel = ExtResource("13_ycdy4")
-create = ExtResource("14_w48qg")
-compare_action = ExtResource("15_compare")
 
 [node name="Panel" type="PanelContainer" parent="." unique_id=1396061657]
 anchors_preset = 15
