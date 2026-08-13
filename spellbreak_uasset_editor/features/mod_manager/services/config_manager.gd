@@ -15,6 +15,9 @@ var last_error := ""
 var game_dir:   String = ""
 var mods_dir:   String = ""
 var launch_cmd: String = ""
+## Keep the previous output .pak and .sig as restore backups after packing.
+## Transactional temporary backups are still used during replacement when disabled.
+var keep_pack_backups := false
 ## Optional override: absolute path to the u4pak/ directory (the folder containing u4pak.py).
 ## Leave empty to use the bundled u4pak copy.
 var u4pak_dir:  String = ""
@@ -77,6 +80,9 @@ func load_config() -> Error:
 	game_dir = str(_settings.get_value(SETTINGS_SECTION, "game_dir", ""))
 	mods_dir = str(_settings.get_value(SETTINGS_SECTION, "mods_dir", ""))
 	launch_cmd = str(_settings.get_value(SETTINGS_SECTION, "launch_cmd", ""))
+	keep_pack_backups = bool(
+		_settings.get_value(SETTINGS_SECTION, "keep_pack_backups", false)
+	)
 	u4pak_dir = str(_settings.get_value(SETTINGS_SECTION, "u4pak_dir", ""))
 	ue4_dds_tools_dir = str(
 		_settings.get_value(SETTINGS_SECTION, "ue4_dds_tools_dir", "")
@@ -111,6 +117,12 @@ func _store_current_values() -> void:
 	_settings.set_value(SETTINGS_SECTION, "game_dir", game_dir, false)
 	_settings.set_value(SETTINGS_SECTION, "mods_dir", mods_dir, false)
 	_settings.set_value(SETTINGS_SECTION, "launch_cmd", launch_cmd, false)
+	_settings.set_value(
+		SETTINGS_SECTION,
+		"keep_pack_backups",
+		keep_pack_backups,
+		false
+	)
 	_settings.set_value(SETTINGS_SECTION, "u4pak_dir", u4pak_dir, false)
 	_settings.set_value(
 		SETTINGS_SECTION,

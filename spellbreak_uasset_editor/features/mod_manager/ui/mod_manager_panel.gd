@@ -1,7 +1,7 @@
 class_name ModManagerPanel extends VBoxContainer
 
 ## Persistent left-side panel: mod list, enable/disable toggles, pack, watch, launch, settings.
-## Entirely code-driven — no .tscn needed.
+## The stable control hierarchy lives in mod_manager_panel.tscn; TreeItems remain data-driven.
 ## Wire open_asset_requested to main.gd to open .uasset files in the editor.
 
 signal open_asset_requested(path: String)
@@ -24,15 +24,6 @@ var _log_lines:      Array      = []
 var _last_pack_operation: Callable
 const _MAX_LOG := 80
 const _WATCH_TOGGLE_COOLDOWN_SEC := 0.25
-const _TEXT_FILE_EXTENSIONS := [
-	"txt", "cfg", "conf", "config", "ini", "json", "jsonc",
-	"yaml", "yml", "toml", "xml", "csv", "tsv", "md", "markdown",
-	"log", "properties", "props", "manifest", "bat", "cmd", "ps1",
-	"sh", "py", "gd", "lua", "js", "ts", "css", "html", "htm"
-]
-const _TEXT_FILE_NAMES := [
-	"readme", "license", "changelog", "credits", "config", "settings"
-]
 const _PACKAGE_FILE_EXTENSIONS := ["uasset", "umap", "uexp", "ubulk", "uptnl"]
 
 # File clipboard — independent of the uasset ClipboardManager
@@ -48,17 +39,19 @@ const _BTN_DEL := 0
 const _BTN_OPEN_EXTERNAL := 1
 
 # ── UI references ──────────────────────────────────────────────────────────────
-var _mod_tree:  Tree
-var _watch_btn: Button
-var _pack_btn:  Button
+@onready var _mod_tree: Tree = %ModTree
+@onready var _watch_btn: Button = %WatchButton
+@onready var _pack_btn: Button = %PackButton
+@onready var _launch_btn: Button = %LaunchButton
+@onready var _new_mod_btn: Button = %NewModButton
+@onready var _diagnostics_btn: Button = %DiagnosticsButton
+@onready var _settings_btn: Button = %SettingsButton
+@onready var _operation_feedback_wrapper: MarginContainer = %OperationFeedbackWrapper
+
 var _operation_feedback: OperationFeedback
-var _operation_feedback_wrapper: MarginContainer
 
 
 func _ready() -> void:
-	size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	size_flags_vertical   = Control.SIZE_EXPAND_FILL
-
 	_cfg     = ModConfigManager.new()
 	_state   = ModStateManager.new().setup(_cfg.get_state_path())
 	_packer  = PackingService.new().setup(_cfg)
@@ -75,7 +68,7 @@ func _ready() -> void:
 	_new_mod_from_pak_service.generate_finished.connect(_on_new_mod_from_pak_finished)
 	_cfg.config_changed.connect(_on_config_changed)
 
-	_build_ui()
+	_configure_scene_ui()
 	_refresh_mods()
 
 	# Auto-start watcher if any mods are enabled
@@ -90,106 +83,37 @@ func _exit_tree() -> void:
 	_new_mod_from_pak_service.wait_to_finish()
 
 
-# ── UI construction ────────────────────────────────────────────────────────────
-
-func _build_ui() -> void:
-	add_theme_constant_override("separation", 0)
-
-	# ── Toolbar ──
-	var toolbar_margin := MarginContainer.new()
-	toolbar_margin.add_theme_constant_override("margin_left",   AppTheme.MARGIN_TOOLBAR_H)
-	toolbar_margin.add_theme_constant_override("margin_right",  AppTheme.MARGIN_TOOLBAR_H)
-	toolbar_margin.add_theme_constant_override("margin_top",    AppTheme.MARGIN_TOOLBAR_TOP)
-	toolbar_margin.add_theme_constant_override("margin_bottom", AppTheme.MARGIN_TOOLBAR_BOTTOM)
-	var toolbar := HBoxContainer.new()
-	toolbar.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
-
-	_pack_btn = Button.new()
-	_pack_btn.text = "Pack"
+func _configure_scene_ui() -> void:
 	_pack_btn.icon = _icon("AssetLib")
-	_pack_btn.tooltip_text = "Pack enabled mods into a .pak file"
 	_pack_btn.add_theme_color_override("font_color", AppTheme.BTN_PACK)
-	_pack_btn.pressed.connect(_on_pack_pressed)
-	toolbar.add_child(_pack_btn)
-
-	_watch_btn = Button.new()
-	_watch_btn.text = "Watch"
 	_watch_btn.icon = _icon("GuiVisibilityVisible")
-	_watch_btn.tooltip_text = "Auto-pack on file save (toggle)"
 	AppTheme.style_muted_btn(_watch_btn)
-	_watch_btn.pressed.connect(_on_watch_pressed)
-	toolbar.add_child(_watch_btn)
+	_launch_btn.icon = _icon("Play")
+	_launch_btn.add_theme_color_override("font_color", AppTheme.BTN_LAUNCH)
+	_new_mod_btn.icon = _icon("FolderCreate")
+	_new_mod_btn.add_theme_color_override("font_color", AppTheme.BTN_NEW_MOD)
+	_diagnostics_btn.icon = _icon("StatusWarning")
+	AppTheme.style_muted_btn(_diagnostics_btn)
+	_settings_btn.icon = _icon("Tools")
+	AppTheme.style_muted_btn(_settings_btn)
 
-	var launch_btn := Button.new()
-	launch_btn.text = "Launch"
-	launch_btn.icon = _icon("Play")
-	launch_btn.tooltip_text = "Launch game"
-	launch_btn.add_theme_color_override("font_color", AppTheme.BTN_LAUNCH)
-	launch_btn.pressed.connect(_on_launch_pressed)
-	toolbar.add_child(launch_btn)
-
-	# Spacer pushes the next buttons to the right
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	toolbar.add_child(spacer)
-
-	var new_mod_btn := Button.new()
-	new_mod_btn.text = "New Mod"
-	new_mod_btn.icon = _icon("FolderCreate")
-	new_mod_btn.tooltip_text = "Create a new mod folder"
-	new_mod_btn.add_theme_color_override("font_color", AppTheme.BTN_NEW_MOD)
-	new_mod_btn.pressed.connect(_on_new_mod_pressed)
-	toolbar.add_child(new_mod_btn)
-
-	var diagnostics_btn := Button.new()
-	diagnostics_btn.text = "Health"
-	diagnostics_btn.icon = _icon("StatusWarning")
-	diagnostics_btn.tooltip_text = "Check paths, tools, and writable folders"
-	AppTheme.style_muted_btn(diagnostics_btn)
-	diagnostics_btn.pressed.connect(func() -> void: open_diagnostics_requested.emit())
-	toolbar.add_child(diagnostics_btn)
-
-	var settings_btn := Button.new()
-	settings_btn.text = "Settings"
-	settings_btn.icon = _icon("Tools")
-	settings_btn.tooltip_text = "Configure paths"
-	AppTheme.style_muted_btn(settings_btn)
-	settings_btn.pressed.connect(func() -> void: open_settings_requested.emit())
-	toolbar.add_child(settings_btn)
-
-	toolbar_margin.add_child(toolbar)
-	add_child(toolbar_margin)
-	add_child(HSeparator.new())
-
-	# ── Mod tree ──
-	_mod_tree = Tree.new()
-	_mod_tree.hide_root = true
-	_mod_tree.size_flags_vertical   = Control.SIZE_EXPAND_FILL
-	_mod_tree.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_mod_tree.select_mode = Tree.SELECT_MULTI
-	_mod_tree.allow_rmb_select = true
-	_mod_tree.item_activated.connect(_on_tree_item_activated)
-	_mod_tree.item_mouse_selected.connect(_on_tree_item_mouse_selected)
-	_mod_tree.button_clicked.connect(_on_tree_button_clicked)
-	_mod_tree.gui_input.connect(_on_mod_tree_gui_input)
-	_mod_tree.empty_clicked.connect(func(_pos: Vector2, _btn: int) -> void: clear_selection())
-	add_child(_mod_tree)
-
-	add_child(HSeparator.new())
-
-	# ── Operation feedback ──
-	_operation_feedback_wrapper = MarginContainer.new()
-	_operation_feedback_wrapper.add_theme_constant_override("margin_left", AppTheme.MARGIN_LOG_H)
-	_operation_feedback_wrapper.add_theme_constant_override("margin_right", AppTheme.MARGIN_LOG_H)
-	_operation_feedback_wrapper.add_theme_constant_override("margin_top", AppTheme.MARGIN_LOG_TOP)
-	_operation_feedback_wrapper.add_theme_constant_override("margin_bottom", AppTheme.MARGIN_LOG_BOTTOM)
-	_operation_feedback_wrapper.visible = false
 	_operation_feedback = OperationFeedback.new().setup(_retry_last_pack_operation, true)
 	_operation_feedback.set_auto_dismiss_seconds(8.0)
 	_operation_feedback.dismiss_requested.connect(
 		func() -> void: _operation_feedback_wrapper.visible = false)
 	_operation_feedback_wrapper.add_child(_operation_feedback)
-	add_child(_operation_feedback_wrapper)
+
+
+func _on_diagnostics_pressed() -> void:
+	open_diagnostics_requested.emit()
+
+
+func _on_settings_pressed() -> void:
+	open_settings_requested.emit()
+
+
+func _on_tree_empty_clicked(_position: Vector2, _mouse_button_index: int) -> void:
+	clear_selection()
 
 
 ## Returns a Godot editor icon by name, or null when EditorIcons aren't in the theme.
@@ -200,13 +124,7 @@ func _icon(icon_name: String) -> Texture2D:
 
 
 func _is_text_file_path(path: String) -> bool:
-	var file_name := path.get_file().to_lower()
-	for ext in [".uasset", ".uexp", ".ubulk", ".umap"]:
-		if file_name.ends_with(ext):
-			return false
-	if file_name.get_extension() in _TEXT_FILE_EXTENSIONS:
-		return true
-	return file_name in _TEXT_FILE_NAMES
+	return ExternalFileLauncher.is_text_file(path)
 
 
 func _open_external_file(path: String) -> void:

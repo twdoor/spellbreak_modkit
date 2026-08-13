@@ -3,7 +3,7 @@ extends VBoxContainer
 
 const MAX_VISIBLE_DIFFS := 800
 const VALUE_PREVIEW_LENGTH := 260
-const SMOOTH_SCROLL_CONTAINER := preload("res://scenes/smooth_scroll_container.gd")
+const SMOOTH_SCROLL_CONTAINER := preload("res://ui/components/smooth_scroll_container.gd")
 
 var left_asset: UAssetFile
 var right_asset: UAssetFile

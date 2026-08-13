@@ -1,0 +1,262 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" uid="uid://bf2iuvmwdxc5t" path="res://features/mod_manager/ui/mod_settings_tab.gd" id="1_settings"]
+[ext_resource type="Script" uid="uid://nlpwhurtsbly" path="res://ui/components/smooth_scroll_container.gd" id="2_scroll"]
+
+[node name="ModSettingsTab" type="VBoxContainer"]
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 0
+script = ExtResource("1_settings")
+
+[node name="SettingsScroll" type="ScrollContainer" parent="."]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+script = ExtResource("2_scroll")
+
+[node name="ContentMargin" type="MarginContainer" parent="SettingsScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 16
+
+[node name="Content" type="VBoxContainer" parent="SettingsScroll/ContentMargin"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 16
+
+[node name="GameDirectoryTitle" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+text = "Spellbreak Directory"
+
+[node name="GameDirectoryHint" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="GameDirectoryRow" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="GameDirectoryEdit" type="LineEdit" parent="SettingsScroll/ContentMargin/Content/GameDirectoryRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "/path/to/game"
+
+[node name="GameDirectoryBrowseButton" type="Button" parent="SettingsScroll/ContentMargin/Content/GameDirectoryRow"]
+layout_mode = 2
+text = "Browse…"
+
+[node name="ModsDirectoryTitle" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+text = "Mods Directory"
+
+[node name="ModsDirectoryHint" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ModsDirectoryRow" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="ModsDirectoryEdit" type="LineEdit" parent="SettingsScroll/ContentMargin/Content/ModsDirectoryRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "/path/to/mods"
+
+[node name="ModsDirectoryBrowseButton" type="Button" parent="SettingsScroll/ContentMargin/Content/ModsDirectoryRow"]
+layout_mode = 2
+text = "Browse…"
+
+[node name="LaunchCommandTitle" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+text = "Launch Command"
+
+[node name="LaunchCommandHint" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+text = "Shell command to start the game. Leave blank to disable the Launch button."
+
+[node name="LaunchCommandEdit" type="LineEdit" parent="SettingsScroll/ContentMargin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "steam steam://rungameid/..."
+
+[node name="PackingTitle" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+text = "Packing"
+
+[node name="PackingHint" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+text = "Optionally keep the previous output .pak and .sig after a successful pack or export. This is disabled by default to avoid accumulating backup files."
+
+[node name="BackupRow" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="BackupLabel" type="Label" parent="SettingsScroll/ContentMargin/Content/BackupRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Keep previous packed files"
+
+[node name="BackupToggle" type="Button" parent="SettingsScroll/ContentMargin/Content/BackupRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(96, 0)
+layout_mode = 2
+toggle_mode = true
+
+[node name="FileAssociationTitle" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+text = ".uasset File Association"
+
+[node name="FileAssociationHint" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+text = "Use the custom asset icon for .uasset files and open them in Spellbreak Modkit. Registration only affects your user account."
+
+[node name="FileAssociationRow" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="FileAssociationLabel" type="Label" parent="SettingsScroll/ContentMargin/Content/FileAssociationRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Default application"
+
+[node name="FileAssociationButton" type="Button" parent="SettingsScroll/ContentMargin/Content/FileAssociationRow"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="UmodelTitle" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+text = "umodel (3D Preview)"
+
+[node name="UmodelHint" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+text = "Path to the umodel binary. Required for 3D mesh and animation preview. Download from gildor.org/en/projects/umodel"
+
+[node name="UmodelRow" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="UmodelEdit" type="LineEdit" parent="SettingsScroll/ContentMargin/Content/UmodelRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "/path/to/umodel"
+
+[node name="UmodelBrowseButton" type="Button" parent="SettingsScroll/ContentMargin/Content/UmodelRow"]
+layout_mode = 2
+text = "Browse..."
+
+[node name="SourcesTitle" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+text = "Sources"
+
+[node name="SourcesHint" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="SourcesContainer" type="VBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="SourceActions" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="AddSourceButton" type="Button" parent="SettingsScroll/ContentMargin/Content/SourceActions"]
+layout_mode = 2
+text = "+ Add Source"
+
+[node name="GenerateSourceButton" type="Button" parent="SettingsScroll/ContentMargin/Content/SourceActions"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Generate a source by unpacking a game .pak"
+text = "Generate from Pak"
+
+[node name="BaseSourceFeedbackMount" type="VBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ConfigFileTitle" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+text = "Config File"
+
+[node name="ConfigFileRow" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="ConfigPathHint" type="Label" parent="SettingsScroll/ContentMargin/Content/ConfigFileRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="OpenConfigButton" type="Button" parent="SettingsScroll/ContentMargin/Content/ConfigFileRow"]
+layout_mode = 2
+text = "Open Config Folder"
+
+[node name="KeyMappingsHeader" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="KeyMappingsTitle" type="Label" parent="SettingsScroll/ContentMargin/Content/KeyMappingsHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Key Mappings"
+
+[node name="EditKeymapButton" type="Button" parent="SettingsScroll/ContentMargin/Content/KeyMappingsHeader"]
+layout_mode = 2
+text = "Edit Keymap"
+
+[node name="KeyMappingsHint" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+text = "Customize editor shortcuts using native Godot input actions."
+
+[node name="FooterSeparator" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="FooterMargin" type="MarginContainer" parent="."]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 8
+
+[node name="Footer" type="HBoxContainer" parent="FooterMargin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SaveButton" type="Button" parent="FooterMargin/Footer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save"
+
+[node name="CloseOrRevertButton" type="Button" parent="FooterMargin/Footer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[connection signal="text_changed" from="SettingsScroll/ContentMargin/Content/GameDirectoryRow/GameDirectoryEdit" to="." method="_on_game_directory_changed"]
+[connection signal="pressed" from="SettingsScroll/ContentMargin/Content/GameDirectoryRow/GameDirectoryBrowseButton" to="." method="_on_game_directory_browse_pressed"]
+[connection signal="text_changed" from="SettingsScroll/ContentMargin/Content/ModsDirectoryRow/ModsDirectoryEdit" to="." method="_on_mods_directory_changed"]
+[connection signal="pressed" from="SettingsScroll/ContentMargin/Content/ModsDirectoryRow/ModsDirectoryBrowseButton" to="." method="_on_mods_directory_browse_pressed"]
+[connection signal="text_changed" from="SettingsScroll/ContentMargin/Content/LaunchCommandEdit" to="." method="_on_launch_command_changed"]
+[connection signal="toggled" from="SettingsScroll/ContentMargin/Content/BackupRow/BackupToggle" to="." method="_on_backup_toggled"]
+[connection signal="pressed" from="SettingsScroll/ContentMargin/Content/FileAssociationRow/FileAssociationButton" to="." method="_on_register_file_association"]
+[connection signal="text_changed" from="SettingsScroll/ContentMargin/Content/UmodelRow/UmodelEdit" to="." method="_on_umodel_path_changed"]
+[connection signal="pressed" from="SettingsScroll/ContentMargin/Content/UmodelRow/UmodelBrowseButton" to="." method="_on_umodel_browse_pressed"]
+[connection signal="pressed" from="SettingsScroll/ContentMargin/Content/SourceActions/AddSourceButton" to="." method="_add_source"]
+[connection signal="pressed" from="SettingsScroll/ContentMargin/Content/SourceActions/GenerateSourceButton" to="." method="_on_generate_base_source_pressed"]
+[connection signal="pressed" from="SettingsScroll/ContentMargin/Content/ConfigFileRow/OpenConfigButton" to="." method="_open_config_folder"]
+[connection signal="pressed" from="SettingsScroll/ContentMargin/Content/KeyMappingsHeader/EditKeymapButton" to="." method="_on_edit_keymap_pressed"]
+[connection signal="pressed" from="FooterMargin/Footer/SaveButton" to="." method="_on_save"]
+[connection signal="pressed" from="FooterMargin/Footer/CloseOrRevertButton" to="." method="_on_close_or_revert"]

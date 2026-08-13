@@ -1,7 +1,6 @@
 class_name UassetFileTab extends MarginContainer
 
 signal tab_title_changed(tab: UassetFileTab)
-signal reuse_requested(tab: UassetFileTab)
 
 ## Thin orchestrator for a single open .uasset file.
 ## All heavy lifting is delegated to:
@@ -86,16 +85,6 @@ func get_tab_title() -> String:
 
 
 func _ready() -> void:
-	var asset_label := %AssetLabel as Label
-	asset_label.text = tab_asset.file_path.get_file()
-	asset_label.tooltip_text = tab_asset.file_path
-	var reuse_button := %ReuseAsButton as Button
-	AppTheme.style_muted_btn(reuse_button)
-	reuse_button.pressed.connect(func() -> void: reuse_requested.emit(self))
-	reuse_button.disabled = tab_asset.binary_path.is_empty()
-	if reuse_button.disabled:
-		reuse_button.tooltip_text = "Reuse As is available for binary .uasset files"
-
 	# Instantiate components
 	_selection    = SelectionManager.new()
 	_tree_manager = TreeManager.new().setup(tree, tab_asset)

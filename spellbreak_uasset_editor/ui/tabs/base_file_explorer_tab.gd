@@ -333,8 +333,14 @@ func _on_item_activated() -> void:
 		status_changed.emit("File no longer exists: %s" % path, true)
 		return
 	if not _is_editor_asset(path):
-		_set_status("%s is visible for reference, but only .uasset and .json files open in the editor."
-			% path.get_file(), AppTheme.StatusKind.WARNING)
+		var result := ExternalFileLauncher.open(
+				path, ExternalFileLauncher.is_text_file(path))
+		if result != OK:
+			_set_status("Could not open file: %s" % path.get_file(),
+					AppTheme.StatusKind.ERROR)
+			status_changed.emit("Could not open file: %s" % path.get_file(), true)
+			return
+		_set_status("Opening %s" % path.get_file(), AppTheme.StatusKind.IDLE)
 		return
 	open_asset_requested.emit(path)
 
@@ -610,4 +616,4 @@ static func _result_location(source_name: String, relative_path: String) -> Stri
 
 
 static func _is_editor_asset(path: String) -> bool:
-	return path.get_extension().to_lower() in ["uasset", "json"]
+	return path.get_extension().to_lower() == "uasset"

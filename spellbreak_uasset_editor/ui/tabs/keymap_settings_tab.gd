@@ -6,7 +6,7 @@ signal status_changed(text: String, is_error: bool)
 
 const KEYMAP_PATH := "user://keymaps/editor_keymap.json"
 const SLOT_COUNT := 2
-const SMOOTH_SCROLL_CONTAINER := preload("res://scenes/smooth_scroll_container.gd")
+const KEY_BINDING_ROW_SCENE := preload("res://ui/components/key_binding_row.tscn")
 
 const ACTION_OPEN := &"open_file"
 const ACTION_CLOSE := &"close_tab"
@@ -24,12 +24,18 @@ const ACTION_CREATE := &"add_files_from_sources"
 const ACTION_COMPARE := &"compare_file"
 
 var _working_config: Dictionary = {}
-var _row_data: Array[Dictionary] = []
-var _items_container: VBoxContainer
-var _status_label: Label
+var _binding_rows: Dictionary = {}
 var _capturing_action := StringName()
 var _capturing_slot := -1
 var _dirty := false
+
+@onready var _items_container: VBoxContainer = %ItemsContainer
+@onready var _status_label: Label = %StatusLabel
+@onready var _title_label: Label = %KeyMappingsTitle
+@onready var _hint_label: Label = %KeyMappingsHint
+@onready var _save_button: Button = %SaveButton
+@onready var _reset_button: Button = %ResetAllButton
+@onready var _close_button: Button = %CloseButton
 
 
 static func action_definitions() -> Array[Dictionary]:
@@ -220,15 +226,14 @@ func refresh(config: Dictionary = {}) -> void:
 	_dirty = false
 	_capturing_action = &""
 	_capturing_slot = -1
-	for child in get_children():
-		child.free()
-	_build_ui()
+	_status_label.text = ""
+	_status_label.visible = false
+	_rebuild_rows()
 
 
 func _ready() -> void:
-	size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_build_ui()
+	_configure_scene_ui()
+	_rebuild_rows()
 
 
 func _input(event: InputEvent) -> void:
@@ -249,39 +254,20 @@ func _input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 
-func _build_ui() -> void:
-	add_theme_constant_override("separation", 0)
-	var scroll := SMOOTH_SCROLL_CONTAINER.new() as ScrollContainer
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var outer := MarginContainer.new()
-	outer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for side in ["left", "right"]:
-		outer.add_theme_constant_override("margin_" + side, AppTheme.MARGIN_SETTINGS_H)
-	for side in ["top", "bottom"]:
-		outer.add_theme_constant_override("margin_" + side, AppTheme.MARGIN_SETTINGS_V)
-	var content := VBoxContainer.new()
-	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content.add_theme_constant_override("separation", AppTheme.MARGIN_SETTINGS_V)
-	content.add_child(_section("Key Mappings"))
-	content.add_child(_hint("Customize native Godot shortcuts. Changes apply immediately; save to keep them after restart."))
-	_items_container = VBoxContainer.new()
-	_items_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_items_container.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
-	content.add_child(_items_container)
-	_rebuild_rows()
-	_status_label = _hint("")
-	_status_label.visible = false
-	content.add_child(_status_label)
-	outer.add_child(content)
-	scroll.add_child(outer)
-	add_child(scroll)
-	add_child(HSeparator.new())
-	_add_footer()
+func _configure_scene_ui() -> void:
+	AppTheme.style_header(_title_label)
+	_title_label.add_theme_color_override("font_color", AppTheme.TEXT_HEADING)
+	AppTheme.style_muted(_hint_label)
+	_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	AppTheme.style_muted(_status_label)
+	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_save_button.add_theme_color_override("font_color", AppTheme.BTN_SAVE)
+	_reset_button.add_theme_color_override("font_color", AppTheme.BTN_REMOVE)
+	AppTheme.style_muted_btn(_close_button)
 
 
 func _rebuild_rows() -> void:
-	_row_data.clear()
+	_binding_rows.clear()
 	for child in _items_container.get_children():
 		child.free()
 	var current_category := ""
@@ -294,43 +280,26 @@ func _rebuild_rows() -> void:
 
 
 func _build_action_row(definition: Dictionary) -> Control:
-	var row := HBoxContainer.new()
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
-	var label := Label.new()
-	label.text = str(definition["name"])
-	label.custom_minimum_size.x = 210
-	row.add_child(label)
-	var slots := HBoxContainer.new()
-	slots.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	slots.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
-	row.add_child(slots)
 	var action := definition["action"] as StringName
+	var binding_labels: Array[String] = []
 	for slot in SLOT_COUNT:
-		slots.add_child(_build_binding_button(action, slot))
+		binding_labels.append(format_event(event_from_data(
+				(_working_config[str(action)] as Array)[slot])))
+	var row := KEY_BINDING_ROW_SCENE.instantiate() as KeyBindingRow
+	row.configure(action, str(definition["name"]), binding_labels)
+	row.binding_action_requested.connect(_on_binding_action_requested)
+	_binding_rows[action] = row
 	return row
 
 
-func _build_binding_button(action: StringName, slot: int) -> Button:
-	var button := Button.new()
-	button.text = format_event(event_from_data((_working_config[str(action)] as Array)[slot]))
-	button.tooltip_text = "Left click to change\nMiddle click to clear\nRight click to reset"
-	button.custom_minimum_size.x = 160
-	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	button.clip_text = true
-	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	AppTheme.style_muted_btn(button)
-	button.gui_input.connect(func(event: InputEvent) -> void:
-		if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
-			match (event as InputEventMouseButton).button_index:
-				MOUSE_BUTTON_LEFT: _start_capture(action, slot)
-				MOUSE_BUTTON_MIDDLE: _change_binding(action, slot, null, "Cleared")
-				MOUSE_BUTTON_RIGHT: _reset_binding(action, slot)
-				_: return
-			button.accept_event()
-	)
-	_row_data.append({"action": action, "slot": slot, "button": button})
-	return button
+func _on_binding_action_requested(action: StringName, slot: int, request: int) -> void:
+	match request:
+		KeyBindingRow.BindingRequest.CAPTURE:
+			_start_capture(action, slot)
+		KeyBindingRow.BindingRequest.CLEAR:
+			_change_binding(action, slot, null, "Cleared")
+		KeyBindingRow.BindingRequest.RESET:
+			_reset_binding(action, slot)
 
 
 func _start_capture(action: StringName, slot: int) -> void:
@@ -361,11 +330,13 @@ func _after_binding_changed(message: String) -> void:
 
 
 func _refresh_binding_labels() -> void:
-	for entry in _row_data:
-		var button := entry["button"] as Button
-		if is_instance_valid(button):
-			var slots := _working_config[str(entry["action"])] as Array
-			button.text = format_event(event_from_data(slots[int(entry["slot"])]))
+	for action: StringName in _binding_rows:
+		var row := _binding_rows[action] as KeyBindingRow
+		if not is_instance_valid(row):
+			continue
+		var slots := _working_config[str(action)] as Array
+		for slot in SLOT_COUNT:
+			row.set_binding_text(slot, format_event(event_from_data(slots[slot])))
 
 
 func _on_save_pressed() -> void:
@@ -388,31 +359,8 @@ func _on_reset_all_pressed() -> void:
 	_set_status("Restored all default key mappings. Save to keep it.", false)
 
 
-func _add_footer() -> void:
-	var margin := MarginContainer.new()
-	for side in ["left", "right"]:
-		margin.add_theme_constant_override("margin_" + side, AppTheme.MARGIN_SETTINGS_H)
-	for side in ["top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, AppTheme.SPACING_ROW)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
-	var save_button := Button.new()
-	save_button.text = "Save"
-	save_button.add_theme_color_override("font_color", AppTheme.BTN_SAVE)
-	save_button.pressed.connect(_on_save_pressed)
-	row.add_child(save_button)
-	var reset_button := Button.new()
-	reset_button.text = "Reset All"
-	reset_button.add_theme_color_override("font_color", AppTheme.BTN_REMOVE)
-	reset_button.pressed.connect(_on_reset_all_pressed)
-	row.add_child(reset_button)
-	var close_button := Button.new()
-	close_button.text = "Close"
-	AppTheme.style_muted_btn(close_button)
-	close_button.pressed.connect(func() -> void: close_requested.emit())
-	row.add_child(close_button)
-	margin.add_child(row)
-	add_child(margin)
+func _on_close_pressed() -> void:
+	close_requested.emit()
 
 
 static func format_event(event: InputEvent) -> String:
@@ -493,12 +441,4 @@ func _section(text: String) -> Label:
 	label.text = text
 	label.add_theme_font_size_override("font_size", AppTheme.FONT_HEADER)
 	label.add_theme_color_override("font_color", AppTheme.TEXT_HEADING)
-	return label
-
-
-func _hint(text: String) -> Label:
-	var label := Label.new()
-	label.text = text
-	AppTheme.style_muted(label)
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD
 	return label

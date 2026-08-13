@@ -1,0 +1,111 @@
+[gd_scene format=3 uid="uid://c4ng3sdgj0g3o"]
+
+[ext_resource type="Script" uid="uid://bswk3vjdcpjbk" path="res://app/main.gd" id="1_ig7tw"]
+[ext_resource type="PackedScene" path="res://ui/components/toast_notifier.tscn" id="3_toast"]
+[ext_resource type="PackedScene" path="res://features/mod_manager/ui/mod_manager_panel.tscn" id="4_mod_manager"]
+[ext_resource type="Theme" uid="uid://d3ygy1hpwcbqw" path="res://app/main_theme.tres" id="theme_main"]
+
+[node name="Main" type="CanvasLayer" unique_id=1562985923]
+script = ExtResource("1_ig7tw")
+
+[node name="Panel" type="PanelContainer" parent="." unique_id=1396061657]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("theme_main")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Panel" unique_id=1522211695]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="TabCont" type="TabContainer" parent="Panel/VBoxContainer" unique_id=94462518]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+current_tab = 0
+drag_to_rearrange_enabled = true
+tab_0/title = "Mods"
+
+[node name="ModManagerPanel" parent="Panel/VBoxContainer/TabCont" unique_id=2058372739 instance=ExtResource("4_mod_manager")]
+unique_name_in_owner = true
+layout_mode = 2
+metadata/_tab_index = 0
+metadata/_tab_name = "Mods"
+
+[node name="StatusSeparator" type="HSeparator" parent="Panel/VBoxContainer" unique_id=1379137803]
+layout_mode = 2
+
+[node name="StatusBar" type="MarginContainer" parent="Panel/VBoxContainer" unique_id=1645314012]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 3
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 3
+
+[node name="StatusLabel" type="Label" parent="Panel/VBoxContainer/StatusBar" unique_id=50218792]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Ready"
+clip_text = true
+
+[node name="OpenFilePopup" type="FileDialog" parent="." unique_id=1170644410]
+unique_name_in_owner = true
+oversampling_override = 1.0
+title = "Open File(s)"
+file_mode = 1
+display_mode = 1
+access = 2
+filters = PackedStringArray("*.uasset ; Unreal Asset (binary)", "*.json ; UAssetAPI JSON")
+use_native_dialog = true
+
+[node name="CloseDialog" type="ConfirmationDialog" parent="." unique_id=1723328117]
+unique_name_in_owner = true
+title = "Unsaved Changes"
+ok_button_text = "Discard & Close"
+
+[node name="CompareFilePopup" type="FileDialog" parent="." unique_id=121264437]
+unique_name_in_owner = true
+title = "Open a File"
+file_mode = 0
+access = 2
+filters = PackedStringArray("*.uasset ; Unreal Asset (binary)", "*.json ; UAssetAPI JSON")
+
+[node name="ReuseFileDialog" type="FileDialog" parent="." unique_id=1941983726]
+unique_name_in_owner = true
+title = "Reuse Asset As"
+access = 2
+filters = PackedStringArray("*.uasset ; Unreal Asset (binary)")
+
+[node name="UpdateDialog" type="ConfirmationDialog" parent="." unique_id=1039248914]
+unique_name_in_owner = true
+title = "Update Available"
+ok_button_text = "Download Update"
+dialog_hide_on_ok = false
+cancel_button_text = "Later"
+
+[node name="UpdateProgressBar" type="ProgressBar" parent="UpdateDialog" unique_id=1514825090]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(420, 24)
+
+[node name="TabTitleScrollTimer" type="Timer" parent="." unique_id=2042588933]
+unique_name_in_owner = true
+wait_time = 0.18
+
+[node name="ToastNotifier" parent="." unique_id=1270184153 instance=ExtResource("3_toast")]
+unique_name_in_owner = true
+
+[connection signal="file_selected" from="OpenFilePopup" to="." method="_on_file_selected"]
+[connection signal="files_selected" from="OpenFilePopup" to="." method="_on_files_selected"]
+[connection signal="confirmed" from="CloseDialog" to="." method="_on_discard_and_close"]
+[connection signal="custom_action" from="CloseDialog" to="." method="_on_save_and_close"]
+[connection signal="file_selected" from="CompareFilePopup" to="." method="_on_compare_file_selected"]
+[connection signal="canceled" from="ReuseFileDialog" to="." method="_on_reuse_dialog_canceled"]
+[connection signal="file_selected" from="ReuseFileDialog" to="." method="_on_reuse_destination_selected"]
+[connection signal="canceled" from="UpdateDialog" to="." method="_on_update_dialog_cancelled"]
+[connection signal="confirmed" from="UpdateDialog" to="." method="_on_update_primary_action"]
+[connection signal="custom_action" from="UpdateDialog" to="." method="_on_update_dialog_action"]
+[connection signal="timeout" from="TabTitleScrollTimer" to="." method="_advance_hovered_tab_title"]

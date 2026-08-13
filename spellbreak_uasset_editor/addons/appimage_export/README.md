@@ -17,8 +17,10 @@ This is a Godot 4 export plugin for exporting a game as a Linux AppImage.
 ![addon](Images/addon.png)
 
 2. Create a Linux preset, enable **Generate An Appimage**, and fill in the
-   AppImage name, description, and PNG or SVG icon. The plugin supports both
-   embedded and separate PCK exports.
+   AppImage name, description, and PNG or SVG icon. Optionally provide
+   semicolon-separated MIME types and desktop `Exec` arguments such as `%F`
+   for applications that open files. The plugin supports both embedded and
+   separate PCK exports.
 
 ![settings](Images/settings.png)
 

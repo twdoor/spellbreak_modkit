@@ -59,6 +59,7 @@ Launch the app, click **Settings**, and fill in:
 - **Game directory** — the folder used to locate the game executable and pak files. For Spellbreak, this install folder should contain `g3/Content/Paks/`.
 - **Mods directory** — the parent folder that contains your mod folders. Each direct child is treated as one mod and should mirror the game structure, for example `Mods/MyMod/g3/Content/...`.
 - **Launch command** — optional, used by the Launch button
+- **.uasset file association** — optional, registers the editor and its custom asset icon for `.uasset` files. Linux can set it as the default directly; Windows opens Default Apps for the final choice.
 - **umodel path** — optional, path to the umodel binary for 3D mesh and animation preview
 - **Sources** — extracted asset directories for reference. Use **Generate from Pak** to select a game `.pak`, choose an output folder, unpack it, and add the extracted folder as a source.
 
@@ -237,9 +238,27 @@ spellbreak-modkit/
 ├── scripts/test.sh                 Parser check and regression test entry point
 ├── dist/                           Local exports (ignored, outside Godot project)
 └── spellbreak_uasset_editor/       Godot 4 app
-    ├── main.gd / main.tscn         Entry point, tab bar, status bar
-    ├── app_theme.gd                Centralized UI theme constants & helpers
-    ├── property_row.gd             Inline property editor widget
+    ├── app/                         Application shell and global theme
+    │   ├── main.gd / main.tscn     Entry point, tab bar, dialogs, status bar
+    │   ├── app_theme.gd            Centralized UI theme constants & helpers
+    │   └── main_theme.tres         Shared Godot Theme resource
+    ├── core/                        UI-independent editor state and operations
+    │   ├── operation_result.gd
+    │   └── editor/                 Documents, commands, selection, clipboard, diff
+    ├── services/                    Background, media, filesystem and platform work
+    │   ├── background/             Worker lifecycle and background jobs
+    │   ├── media/                  Texture, sound, mesh and animation services
+    │   └── platform/               Processes, files, toolchains and associations
+    ├── ui/                          Scene-authored interface and UI controllers
+    │   ├── components/             Reusable controls and their scenes
+    │   ├── controllers/            Tree and detail-panel coordination
+    │   ├── details/                One renderer per asset detail type
+    │   └── tabs/                   Asset, diff, explorer, diagnostics and keymap tabs
+    ├── features/
+    │   └── mod_manager/
+    │       ├── models/             Mod metadata
+    │       ├── services/           Discovery, packing, watching and configuration
+    │       └── ui/                 Mod Manager and Settings scenes
     ├── converter/                  Bundled UAssetAPI DLLs (pre-compiled)
     ├── u4pak/                      Bundled u4pak (pak packing tool)
     ├── ue4_dds_tools/              Bundled UE4-DDS-Tools + libtexconv
@@ -251,55 +270,13 @@ spellbreak-modkit/
     │   ├── uasset_import.gd
     │   ├── uasset_property.gd
     │   └── spellbreak_profile.gd   Fixed Spellbreak profile loader
-    ├── scenes/
-    │   ├── process_utils.gd        Cross-platform subprocess helpers
-    │   ├── toolchain_registry.gd   Bundled tool resolution and extraction
-    │   ├── operation_result.gd     Named service-operation result
-    │   ├── background_operation_service.gd Shared worker lifecycle
-    │   ├── asset_document.gd       Asset ownership, save point, undo/redo history
-    │   ├── asset_edit_command.gd   Reversible editor mutation
-    │   ├── asset_editor_context.gd Typed detail-view dependencies and actions
-    │   ├── background_job_runner.gd Application-owned preview jobs and shutdown
-    │   ├── uasset_tab.gd/tscn      Per-file editor tab
-    │   ├── detail_panel_builder.gd
-    │   ├── tree_manager.gd
-    │   ├── selection_manager.gd
-    │   ├── clipboard_manager.gd
-    │   ├── texture_service.gd      Texture extraction/injection service
-    │   ├── sound_service.gd        Audio extraction/injection service
-    │   ├── mesh_service.gd         3D mesh/animation export via umodel
-    │   ├── mesh_preview_material_loader.gd
-    │   ├── md5_anim_loader.gd      MD5Anim parser and Godot animation builder
-    │   ├── detail_items/           One class per detail-panel view
-    │   │   ├── detail_item.gd      Base class with shared table helpers
-    │   │   ├── property_detail.gd
-    │   │   ├── export_detail.gd
-    │   │   ├── texture_detail.gd   Texture preview & import/export
-    │   │   ├── sound_detail.gd     Audio playback & import/export
-    │   │   ├── mesh_detail.gd      3D mesh, material, and animation preview
-    │   │   ├── exports_list_detail.gd
-    │   │   ├── import_detail.gd
-    │   │   ├── namemap_detail.gd
-    │   │   ├── datatable_row_detail.gd
-    │   │   └── stringtable_detail.gd
-    │   └── mod_manager/
-    │       ├── mod_manager_panel.gd
-    │       ├── mod_settings_tab.gd  Settings UI
-    │       ├── base_source_service.gd
-    │       ├── config_manager.gd
-    │       ├── mod_state_manager.gd
-    │       ├── mod_discovery.gd
-    │       ├── file_watcher.gd
-    │       ├── file_utils.gd
-    │       └── packing_service.gd
-    ├── scenes/keymap_settings_tab.gd Native InputMap keybind editor
     ├── tests/test_core.gd          Core regression tests
     └── addons/                     App Settings and Version Manager plugins
 ```
 
 ## Development
 
-Run the parser check and regression suite with Godot 4.6.3+:
+Run the parser check and regression suite with Godot 4.7.1+:
 
 ```bash
 ./scripts/test.sh

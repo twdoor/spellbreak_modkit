@@ -2,6 +2,25 @@ class_name ExternalFileLauncher extends RefCounted
 
 ## Cross-platform external editor and default-application launching.
 
+const TEXT_FILE_EXTENSIONS := [
+	"txt", "cfg", "conf", "config", "ini", "json", "jsonc",
+	"yaml", "yml", "toml", "xml", "csv", "tsv", "md", "markdown",
+	"log", "properties", "props", "manifest", "bat", "cmd", "ps1",
+	"sh", "py", "gd", "lua", "js", "ts", "css", "html", "htm",
+]
+const TEXT_FILE_NAMES := [
+	"readme", "license", "changelog", "credits", "config", "settings",
+]
+
+
+static func is_text_file(path: String) -> bool:
+	var file_name := path.get_file().to_lower()
+	for extension in ["uasset", "uexp", "ubulk", "umap"]:
+		if file_name.get_extension() == extension:
+			return false
+	return file_name.get_extension() in TEXT_FILE_EXTENSIONS \
+			or file_name in TEXT_FILE_NAMES
+
 static func open(path: String, prefer_text_editor: bool = false) -> Error:
 	var result: int = ERR_CANT_OPEN
 	if prefer_text_editor:
@@ -10,7 +29,7 @@ static func open(path: String, prefer_text_editor: bool = false) -> Error:
 		result = _open_system_app(path)
 	if result < 0:
 		result = OS.shell_open(path)
-	return result as Error
+	return OK if result >= 0 else result as Error
 
 
 static func _open_text_file(path: String) -> int:

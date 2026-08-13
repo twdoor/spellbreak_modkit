@@ -3,7 +3,7 @@ class_name DiagnosticsTab extends VBoxContainer
 signal close_requested
 signal status_changed(text: String, is_error: bool)
 
-const SMOOTH_SCROLL_CONTAINER := preload("res://scenes/smooth_scroll_container.gd")
+const SMOOTH_SCROLL_CONTAINER := preload("res://ui/components/smooth_scroll_container.gd")
 
 enum CheckStatus {
 	PASS,

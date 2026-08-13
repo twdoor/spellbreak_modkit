@@ -55,6 +55,20 @@ func _get_export_options(platform: EditorExportPlatform) -> Array[Dictionary]:
 		},
 		{
 			"option": {
+				"name": "appimage/mime_types",
+				"type": TYPE_STRING,
+			},
+			"default_value": "",
+		},
+		{
+			"option": {
+				"name": "appimage/exec_arguments",
+				"type": TYPE_STRING,
+			},
+			"default_value": "",
+		},
+		{
+			"option": {
 				"name": "appimage/icon",
 				"type": TYPE_STRING,
 				"hint": PROPERTY_HINT_FILE,
@@ -91,6 +105,14 @@ func _get_export_option_warning(
 	if option == "appimage/app_name":
 		if str(get_option(option)).strip_edges().is_empty():
 			return "An application name is required."
+	if option == "appimage/mime_types":
+		for mime_type in _mime_type_list(str(get_option(option))):
+			if not "/" in mime_type or " " in mime_type:
+				return "MIME types must be semicolon-separated values such as application/x-example."
+	if option == "appimage/exec_arguments":
+		var arguments := str(get_option(option))
+		if "\n" in arguments or "\r" in arguments:
+			return "Exec arguments must fit on one desktop-entry line."
 	if option == "appimage/icon":
 		var icon_path := _resolve_file_path(str(get_option(option)))
 		if icon_path.is_empty() or not FileAccess.file_exists(icon_path):
@@ -172,7 +194,9 @@ func _build_appimage() -> Dictionary:
 		app_name,
 		str(get_option("appimage/app_description")),
 		icon_path,
-		icon_extension
+		icon_extension,
+		str(get_option("appimage/mime_types")),
+		str(get_option("appimage/exec_arguments"))
 	)
 	if not bool(setup_result.success):
 		_remove_directory_recursive(appdir_path)
@@ -222,7 +246,9 @@ func _populate_appdir(
 	app_name: String,
 	app_description: String,
 	icon_path: String,
-	icon_extension: String
+	icon_extension: String,
+	mime_types: String,
+	exec_arguments: String
 ) -> Dictionary:
 	var bin_dir := appdir_path.path_join("usr/bin")
 	var mkdir_error := DirAccess.make_dir_recursive_absolute(bin_dir)
@@ -285,20 +311,17 @@ func _populate_appdir(
 			"Could not create .DirIcon: %s" % error_string(copy_error)
 		)
 
-	var desktop_lines := PackedStringArray([
-		"[Desktop Entry]",
-		"Type=Application",
-		"Name=%s" % _desktop_value(app_name),
-		"Comment=%s" % _desktop_value(app_description),
-		"Icon=%s" % app_id,
-		"Exec=%s" % _desktop_exec_value(executable_name),
-		"Terminal=false",
-		"Categories=Development;Utility;",
-		"",
-	])
+	var desktop_contents := desktop_entry(
+		app_id,
+		app_name,
+		app_description,
+		executable_name,
+		mime_types,
+		exec_arguments
+	)
 	var write_error := _write_text_file(
 		appdir_path.path_join(app_id + ".desktop"),
-		"\n".join(desktop_lines)
+		desktop_contents
 	)
 	if write_error != OK:
 		return _failure(
@@ -403,11 +426,49 @@ func _safe_app_id(value: String) -> String:
 	return safe if not safe.is_empty() else "application"
 
 
-func _desktop_value(value: String) -> String:
+static func _desktop_value(value: String) -> String:
 	return value.replace("\r", " ").replace("\n", " ").strip_edges()
 
 
-func _desktop_exec_value(value: String) -> String:
+static func desktop_entry(app_id: String, app_name: String,
+		app_description: String, executable_name: String, mime_types: String = "",
+		exec_arguments: String = "") -> String:
+	var exec_line := "Exec=%s" % _desktop_exec_value(executable_name)
+	var clean_arguments := _desktop_value(exec_arguments)
+	if not clean_arguments.is_empty():
+		exec_line += " " + clean_arguments
+	var desktop_lines := PackedStringArray([
+		"[Desktop Entry]",
+		"Type=Application",
+		"Name=%s" % _desktop_value(app_name),
+		"Comment=%s" % _desktop_value(app_description),
+		"Icon=%s" % app_id,
+		exec_line,
+		"Terminal=false",
+		"Categories=Development;Utility;",
+	])
+	var normalized_mime_types := _normalized_mime_types(mime_types)
+	if not normalized_mime_types.is_empty():
+		desktop_lines.append("MimeType=%s" % normalized_mime_types)
+	desktop_lines.append("")
+	return "\n".join(desktop_lines)
+
+
+static func _normalized_mime_types(value: String) -> String:
+	var mime_types := _mime_type_list(value)
+	return ";".join(mime_types) + ";" if not mime_types.is_empty() else ""
+
+
+static func _mime_type_list(value: String) -> PackedStringArray:
+	var mime_types := PackedStringArray()
+	for raw_value in value.replace(",", ";").split(";"):
+		var mime_type := raw_value.strip_edges()
+		if not mime_type.is_empty() and mime_type not in mime_types:
+			mime_types.append(mime_type)
+	return mime_types
+
+
+static func _desktop_exec_value(value: String) -> String:
 	return '"%s"' % value.replace("\\", "\\\\").replace('"', '\\"')
 
 

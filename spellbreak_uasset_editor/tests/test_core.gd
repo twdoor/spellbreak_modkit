@@ -12,6 +12,9 @@ const PrepareReleaseDialog = preload(
 const VersionManagerRuntime = preload(
 	"res://addons/version_manager/version_manager_runtime.gd"
 )
+const AppimagePluginScript = preload(
+	"res://addons/appimage_export/appimage_export_plugin.gd"
+)
 
 var _failures: Array[String] = []
 
@@ -83,7 +86,9 @@ func _run() -> void:
 	_test_update_version_compare()
 	_test_self_update_metadata()
 	_test_release_manager_project_layout()
+	_test_appimage_desktop_mime_metadata()
 	_test_mod_config_settings_persistence()
+	_test_file_association_metadata()
 	_test_native_keymap_configuration()
 	_test_base_file_explorer_search()
 	_test_explorer_add_to_mod_path()
@@ -360,6 +365,20 @@ func _test_release_manager_project_layout() -> void:
 	release_dialog.free()
 
 
+func _test_appimage_desktop_mime_metadata() -> void:
+	var desktop_entry := AppimagePluginScript.desktop_entry(
+		"sbue",
+		"Spellbreak Modkit",
+		"Edit Unreal assets",
+		"sbue.x86_64",
+		"application/x-unreal-uasset; application/x-extra",
+		"%F"
+	)
+	_expect("Exec=\"sbue.x86_64\" %F" in desktop_entry
+		and "MimeType=application/x-unreal-uasset;application/x-extra;" in desktop_entry,
+		"AppImage desktop metadata advertises MIME handlers and file arguments")
+
+
 func _test_mod_config_settings_persistence() -> void:
 	var override_variable := str(ProjectSettings.get_setting(
 		"app_settings/override_environment_variable",
@@ -373,16 +392,20 @@ func _test_mod_config_settings_persistence() -> void:
 
 	var settings := AppSettingsRuntime.new()
 	var config := ModConfigManager.new(settings)
+	_expect(not config.keep_pack_backups,
+		"automatic pack backups default to disabled")
 	config.game_dir = "/test/game"
 	config.mods_dir = "/test/mods"
 	config.launch_cmd = "updated-launch"
+	config.keep_pack_backups = true
 	config.sources = [{"name": "Base", "path": "/test/source"}]
 	_expect(config.save_config() == OK, "mod config saves through AppSettings")
 
 	var reloaded_settings := AppSettingsRuntime.new()
 	var reloaded_config := ModConfigManager.new(reloaded_settings)
 	_expect(reloaded_config.game_dir == "/test/game"
-		and reloaded_config.mods_dir == "/test/mods",
+		and reloaded_config.mods_dir == "/test/mods"
+		and reloaded_config.keep_pack_backups,
 		"mod config reloads typed paths through AppSettings")
 	_expect(reloaded_config.sources.size() == 1
 		and reloaded_config.sources[0].name == "Base",
@@ -407,6 +430,39 @@ func _cleanup_settings_test_directory(path: String) -> void:
 	for file_name: String in DirAccess.get_files_at(path):
 		DirAccess.remove_absolute(path.path_join(file_name))
 	DirAccess.remove_absolute(path)
+
+
+func _test_file_association_metadata() -> void:
+	var windows_entries := FileAssociationService.windows_registry_entries(
+			"C:\\Apps\\Spellbreak Modkit\\sbue.exe",
+			"C:\\Icons\\uasset_icon.ico")
+	var registry_text := JSON.stringify(windows_entries)
+	_expect("SpellbreakModkit.uasset" in registry_text
+		and "DefaultIcon" in registry_text
+		and "\\\"%1\\\"" in registry_text,
+		"Windows association metadata registers the ProgID, icon, and open command")
+
+	var desktop_entry := FileAssociationService.linux_desktop_entry(
+			"/opt/Spellbreak Modkit/sbue.AppImage")
+	_expect("Exec=\"/opt/Spellbreak Modkit/sbue.AppImage\" %F" in desktop_entry
+		and "MimeType=application/x-unreal-uasset;" in desktop_entry,
+		"Linux desktop metadata opens .uasset paths with the current executable")
+	var mime_package := FileAssociationService.linux_mime_package()
+	_expect("application/x-unreal-uasset" in mime_package
+		and "*.uasset" in mime_package
+		and "application-x-unreal-uasset" in mime_package,
+		"Linux MIME metadata assigns the custom .uasset icon")
+	var icon_test_root := OS.get_temp_dir().path_join(
+			"sb_test_file_icon_%d" % Time.get_ticks_usec())
+	var installed_icon := icon_test_root.path_join("uasset.png")
+	var association_service := FileAssociationService.new().setup(icon_test_root)
+	var icon_error := association_service._write_texture_png(
+			FileAssociationService.UASSET_ICON_RESOURCE, installed_icon)
+	_expect(icon_error == OK and FileAccess.file_exists(installed_icon)
+		and FileAccess.get_file_as_bytes(installed_icon).slice(1, 4) == PackedByteArray([
+			0x50, 0x4e, 0x47,
+		]), "bundled .uasset SVG installs as a PNG MIME icon")
+	FileUtils.remove_dir_recursive(icon_test_root)
 
 
 func _test_native_keymap_configuration() -> void:
@@ -457,6 +513,11 @@ func _test_native_keymap_configuration() -> void:
 
 
 func _test_base_file_explorer_search() -> void:
+	_expect(BaseFileExplorerTab._is_editor_asset("Example.uasset")
+		and not BaseFileExplorerTab._is_editor_asset("Example.json")
+		and ExternalFileLauncher.is_text_file("Config/DefaultGame.ini")
+		and not ExternalFileLauncher.is_text_file("Example.uasset"),
+		"base file explorer routes every non-uasset file through the external launcher")
 	var terms := BaseFileExplorerTab._query_terms("  Player  fire ")
 	_expect(terms == PackedStringArray(["player", "fire"]),
 		"base file explorer normalizes multi-term searches")
@@ -1931,8 +1992,16 @@ func _test_packing_transaction() -> void:
 
 	FileUtils.write_bytes_atomic(mod_dir.path_join("g3/Content/example.bin"), "payload2".to_utf8_buffer())
 	var second_result := packer._do_pack([mod])
-	_expect(second_result.ok and "Backup" in second_result.message,
-		"repacking an existing installed pak reports retained backup paths")
+	_expect(second_result.ok and not "Backup" in second_result.message
+		and second_result.backups.is_empty(),
+		"repacking does not retain backups by default")
+
+	config.keep_pack_backups = true
+	FileUtils.write_bytes_atomic(mod_dir.path_join("g3/Content/example.bin"), "payload3".to_utf8_buffer())
+	var backup_result := packer._do_pack([mod])
+	_expect(backup_result.ok and "Backup" in backup_result.message
+		and backup_result.backups.size() == 2,
+		"repacking retains pak and sig backups when enabled")
 
 	var export_path := root.path_join("exports/TestMod.pak")
 	var export_result := packer._do_pack_to_path([mod], export_path)

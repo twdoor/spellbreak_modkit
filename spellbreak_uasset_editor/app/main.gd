@@ -1,25 +1,29 @@
 extends CanvasLayer
 
-const BASE_FILE_EXPLORER_TAB := preload("res://scenes/base_file_explorer_tab.gd")
+const BASE_FILE_EXPLORER_TAB := preload("res://ui/tabs/base_file_explorer_tab.gd")
+const MOD_SETTINGS_TAB_SCENE := preload(
+	"res://features/mod_manager/ui/mod_settings_tab.tscn")
+const KEYMAP_SETTINGS_TAB_SCENE := preload("res://ui/tabs/keymap_settings_tab.tscn")
 
 @onready var open_file_popup: FileDialog = %OpenFilePopup
 @onready var tab_cont: TabContainer = %TabCont
+@onready var mod_manager_panel: ModManagerPanel = %ModManagerPanel
+@onready var _toast_notifier: ToastNotifier = %ToastNotifier
+@onready var _close_dialog: ConfirmationDialog = %CloseDialog
+@onready var _compare_file_popup: FileDialog = %CompareFilePopup
+@onready var _reuse_file_dialog: FileDialog = %ReuseFileDialog
+@onready var _update_dialog: ConfirmationDialog = %UpdateDialog
+@onready var _update_progress_bar: ProgressBar = %UpdateProgressBar
+@onready var _tab_title_scroll_timer: Timer = %TabTitleScrollTimer
+@onready var _status_label: Label = %StatusLabel
 
-var _toast_notifier: ToastNotifier
-
-var _close_dialog: ConfirmationDialog
 var _tab_pending_close: UassetFileTab
 var _tab_close_icon: Texture2D
-var _tab_title_scroll_timer: Timer
 var _hovered_tab_idx := -1
 var _hover_title_offset := 0
 var _hover_title_hold_ticks := 0
-var _compare_file_popup: FileDialog
 var _compare_base_tab: UassetFileTab
-var _reuse_file_dialog: FileDialog
 var _reuse_source_tab: UassetFileTab
-var _update_dialog: ConfirmationDialog
-var _update_progress_bar: ProgressBar
 var _update_release_button: Button
 var _latest_release_url := ""
 var _pending_update: Dictionary = {}
@@ -27,7 +31,6 @@ var _prepared_update: Dictionary = {}
 var _update_download_active := false
 var _update_cancel_requested := false
 
-var _status_label: Label
 var _cfg: ModConfigManager
 var _texture_service: TextureService
 var _sound_service: SoundService
@@ -40,7 +43,6 @@ var _keymap_tab: KeymapSettingsTab
 const _TAB_CLOSE_GAP := "   "
 const _TAB_MAX_WIDTH := 190
 const _TAB_TITLE_VISIBLE_CHARS := 24
-const _TAB_TITLE_SCROLL_INTERVAL := 0.18
 const _TAB_TITLE_SCROLL_HOLD_TICKS := 4
 const _TAB_TITLE_SCROLL_GAP := "   "
 const _STARTUP_OPEN_EXTENSIONS := ["uasset", "json"]
@@ -50,21 +52,28 @@ func _ready() -> void:
 	_keymap_config = KeymapSettingsTab.load_saved_config()
 	KeymapSettingsTab.apply_config(_keymap_config)
 
-	AppTheme.configure_file_dialog(open_file_popup)
-	open_file_popup.file_selected.connect(_on_file_selected)
-	open_file_popup.files_selected.connect(_on_files_selected)
-
+	_configure_scene_ui()
 	_configure_tab_close_controls()
-
-	_build_toast()
-	_build_close_dialog()
-	_build_compare_dialog()
-	_build_reuse_dialog()
-	_build_status_bar()
 	_setup_mod_tab()
-	_build_update_dialog()
 	_setup_version_manager()
 	_open_startup_files.call_deferred()
+
+
+func _configure_scene_ui() -> void:
+	AppTheme.configure_file_dialog(open_file_popup)
+	AppTheme.configure_file_dialog(_compare_file_popup)
+	AppTheme.configure_file_dialog(_reuse_file_dialog)
+	AppTheme.apply_theme(_close_dialog)
+	AppTheme.apply_theme(_update_dialog)
+	AppTheme.style_muted(_status_label)
+
+	_close_dialog.add_button("Save & Close", false, "save_close")
+	_update_release_button = _update_dialog.add_button(
+		"Open Release Page", false, "open_release")
+
+	var version_manager := get_node_or_null("/root/VersionManager")
+	if version_manager != null and version_manager.has_signal("update_download_progress"):
+		version_manager.update_download_progress.connect(_on_update_download_progress)
 
 
 func _configure_tab_close_controls() -> void:
@@ -78,12 +87,6 @@ func _configure_tab_close_controls() -> void:
 		if tab_bar.has_signal("tab_hovered"):
 			tab_bar.connect("tab_hovered", _on_tab_hovered)
 		tab_bar.mouse_exited.connect(_on_tab_bar_mouse_exited)
-
-	_tab_title_scroll_timer = Timer.new()
-	_tab_title_scroll_timer.wait_time = _TAB_TITLE_SCROLL_INTERVAL
-	_tab_title_scroll_timer.timeout.connect(_advance_hovered_tab_title)
-	add_child(_tab_title_scroll_timer)
-
 
 func _make_tab_close_icon() -> Texture2D:
 	var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
@@ -141,32 +144,9 @@ func _exit_tree() -> void:
 		_mesh_service.wait_to_finish()
 
 
-func _build_status_bar() -> void:
-	var vbox := tab_cont.get_parent()
-
-	vbox.add_child(HSeparator.new())
-
-	var bar := MarginContainer.new()
-	bar.add_theme_constant_override("margin_left",   AppTheme.MARGIN_STATUS_H)
-	bar.add_theme_constant_override("margin_right",  AppTheme.MARGIN_STATUS_H)
-	bar.add_theme_constant_override("margin_top",    AppTheme.MARGIN_STATUS_V)
-	bar.add_theme_constant_override("margin_bottom", AppTheme.MARGIN_STATUS_V)
-
-	_status_label = Label.new()
-	_status_label.text = "Ready"
-	_status_label.add_theme_font_size_override("font_size", AppTheme.FONT_STATUS_BAR)
-	AppTheme.style_muted(_status_label)
-	_status_label.clip_text = true
-
-	bar.add_child(_status_label)
-	vbox.add_child(bar)
-
-
 func _setup_mod_tab() -> void:
 	# Tab 0 — Mod Manager (always visible, never closeable)
-	var panel := ModManagerPanel.new()
-	tab_cont.add_child(panel)
-	tab_cont.move_child(panel, 0)
+	var panel := mod_manager_panel
 	tab_cont.set_tab_title(0, "Mod Manager")
 	panel.open_asset_requested.connect(_on_file_selected)
 	panel.status_changed.connect(_on_mod_status_changed)
@@ -183,7 +163,8 @@ func _setup_mod_tab() -> void:
 	)
 
 	# Tab 1 — Settings (hidden by default; opened by the Settings button, closed by Save/Cancel)
-	var settings := ModSettingsTab.new().setup(panel.get_config())
+	var settings := MOD_SETTINGS_TAB_SCENE.instantiate() as ModSettingsTab
+	settings.setup(panel.get_config())
 	tab_cont.add_child(settings)
 	tab_cont.move_child(settings, 1)
 	tab_cont.set_tab_title(1, "Settings")
@@ -201,7 +182,8 @@ func _setup_mod_tab() -> void:
 	)
 	settings.status_changed.connect(_on_mod_status_changed)
 
-	var keymap := KeymapSettingsTab.new().setup(_keymap_config)
+	var keymap := KEYMAP_SETTINGS_TAB_SCENE.instantiate() as KeymapSettingsTab
+	keymap.setup(_keymap_config)
 	_keymap_tab = keymap
 	tab_cont.add_child(keymap)
 	tab_cont.move_child(keymap, 2)
@@ -263,75 +245,12 @@ func _on_mod_status_changed(text: String, is_error: bool) -> void:
 	AppTheme.style_status(_status_label, is_error)
 
 
-func _build_toast() -> void:
-	_toast_notifier = ToastNotifier.new()
-	add_child(_toast_notifier)
-
-
 func _show_toast(message: String) -> void:
 	_toast_notifier.show_message(message)
 
 
-func _build_close_dialog() -> void:
-	_close_dialog = ConfirmationDialog.new()
-	_close_dialog.title = "Unsaved Changes"
-	_close_dialog.ok_button_text = "Discard & Close"
-	_close_dialog.add_button("Save & Close", false, "save_close")
-	_close_dialog.confirmed.connect(_on_discard_and_close)
-	_close_dialog.custom_action.connect(_on_save_and_close)
-	AppTheme.apply_theme(_close_dialog)
-	add_child(_close_dialog)
-
-
-func _build_compare_dialog() -> void:
-	_compare_file_popup = FileDialog.new()
-	_compare_file_popup.title = "Compare With"
-	_compare_file_popup.file_mode = FileDialog.FILE_MODE_OPEN_FILE
-	_compare_file_popup.access = FileDialog.ACCESS_FILESYSTEM
-	_compare_file_popup.filters = PackedStringArray([
-		"*.uasset ; Unreal Asset (binary)",
-		"*.json ; UAssetAPI JSON",
-	])
-	_compare_file_popup.file_selected.connect(_on_compare_file_selected)
-	AppTheme.configure_file_dialog(_compare_file_popup)
-	add_child(_compare_file_popup)
-
-
-func _build_reuse_dialog() -> void:
-	_reuse_file_dialog = FileDialog.new()
-	_reuse_file_dialog.title = "Reuse Asset As"
-	_reuse_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
-	_reuse_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
-	_reuse_file_dialog.filters = PackedStringArray(["*.uasset ; Unreal Asset (binary)"])
-	_reuse_file_dialog.file_selected.connect(_on_reuse_destination_selected)
-	_reuse_file_dialog.canceled.connect(func() -> void: _reuse_source_tab = null)
-	AppTheme.configure_file_dialog(_reuse_file_dialog)
-	add_child(_reuse_file_dialog)
-
-
-func _build_update_dialog() -> void:
-	_update_dialog = ConfirmationDialog.new()
-	_update_dialog.title = "Update Available"
-	_update_dialog.ok_button_text = "Download Update"
-	_update_dialog.cancel_button_text = "Later"
-	_update_dialog.dialog_hide_on_ok = false
-	_update_release_button = _update_dialog.add_button(
-		"Open Release Page", false, "open_release")
-	_update_dialog.confirmed.connect(_on_update_primary_action)
-	_update_dialog.custom_action.connect(_on_update_dialog_action)
-	_update_dialog.canceled.connect(_on_update_dialog_cancelled)
-
-	_update_progress_bar = ProgressBar.new()
-	_update_progress_bar.custom_minimum_size = Vector2(420, 24)
-	_update_progress_bar.show_percentage = true
-	_update_progress_bar.visible = false
-	_update_dialog.add_child(_update_progress_bar)
-	AppTheme.apply_theme(_update_dialog)
-	add_child(_update_dialog)
-
-	var version_manager := get_node_or_null("/root/VersionManager")
-	if version_manager != null and version_manager.has_signal("update_download_progress"):
-		version_manager.update_download_progress.connect(_on_update_download_progress)
+func _on_reuse_dialog_canceled() -> void:
+	_reuse_source_tab = null
 
 
 func _setup_version_manager() -> void:
@@ -572,7 +491,6 @@ func _on_file_selected(path: String) -> void:
 	var new_tab := UassetFileTab.setup(asset, _texture_service, _sound_service,
 		_mesh_service, _background_jobs)
 	new_tab.tab_title_changed.connect(_on_asset_tab_title_changed)
-	new_tab.reuse_requested.connect(_on_reuse_requested)
 	tab_cont.add_child(new_tab)
 	# Refresh all tab titles: duplicates get "ParentFolder/Name", unique ones stay short.
 	_refresh_tab_titles()

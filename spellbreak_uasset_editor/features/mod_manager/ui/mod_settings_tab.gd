@@ -8,35 +8,47 @@ signal close_requested
 signal open_keymap_requested
 signal status_changed(text: String, is_error: bool)
 
-const SMOOTH_SCROLL_CONTAINER := preload("res://scenes/smooth_scroll_container.gd")
-
 var _cfg: ModConfigManager
-var _sources_container: VBoxContainer
 var _base_source_service: BaseSourceService
-var _base_source_btn: Button
 var _base_source_feedback: OperationFeedback
 var _base_source_status_text := ""
 var _base_source_status_error := false
 var _base_source_status_kind: int = AppTheme.StatusKind.IDLE
 var _last_base_source_operation: Callable
 var _initial_snapshot: Dictionary = {}
-var _save_btn: Button
-var _close_or_revert_btn: Button
+var _file_association_service: FileAssociationService
+var _syncing_controls := false
+
+@onready var _game_directory_hint: Label = %GameDirectoryHint
+@onready var _game_directory_edit: LineEdit = %GameDirectoryEdit
+@onready var _mods_directory_hint: Label = %ModsDirectoryHint
+@onready var _mods_directory_edit: LineEdit = %ModsDirectoryEdit
+@onready var _launch_command_edit: LineEdit = %LaunchCommandEdit
+@onready var _backup_toggle: Button = %BackupToggle
+@onready var _file_association_button: Button = %FileAssociationButton
+@onready var _umodel_edit: LineEdit = %UmodelEdit
+@onready var _sources_hint: Label = %SourcesHint
+@onready var _sources_container: VBoxContainer = %SourcesContainer
+@onready var _base_source_btn: Button = %GenerateSourceButton
+@onready var _base_source_feedback_mount: VBoxContainer = %BaseSourceFeedbackMount
+@onready var _config_path_hint: Label = %ConfigPathHint
+@onready var _save_btn: Button = %SaveButton
+@onready var _close_or_revert_btn: Button = %CloseOrRevertButton
 
 
 func setup(cfg: ModConfigManager) -> ModSettingsTab:
 	_cfg = cfg
 	_base_source_service = BaseSourceService.new().setup(_cfg)
+	_file_association_service = FileAssociationService.new().setup(_cfg.get_config_dir())
 	_base_source_service.generate_started.connect(_on_base_source_generate_started)
 	_base_source_service.generate_finished.connect(_on_base_source_generate_finished)
 	return self
 
 
 func _ready() -> void:
-	size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	size_flags_vertical   = Control.SIZE_EXPAND_FILL
 	_initial_snapshot = _snapshot_config()
-	_build_ui()
+	_configure_scene_ui()
+	_sync_controls()
 
 
 func _exit_tree() -> void:
@@ -44,203 +56,134 @@ func _exit_tree() -> void:
 		_base_source_service.wait_to_finish()
 
 
-## Rebuild the entire UI to reflect current cfg values.
+## Refresh the scene controls to reflect current cfg values.
 ## Called by main.gd each time the Settings tab is opened.
 func refresh() -> void:
 	_initial_snapshot = _snapshot_config()
-	for child in get_children():
-		child.free()
-	_build_ui()
+	_sync_controls()
 
 
-# ── UI ────────────────────────────────────────────────────────────────────────
-
-func _build_ui() -> void:
-	add_theme_constant_override("separation", 0)
-
-	# Scrollable content area
-	var scroll := SMOOTH_SCROLL_CONTAINER.new() as ScrollContainer
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-
-	var outer := MarginContainer.new()
-	outer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	outer.add_theme_constant_override("margin_left",   AppTheme.MARGIN_SETTINGS_H)
-	outer.add_theme_constant_override("margin_right",  AppTheme.MARGIN_SETTINGS_H)
-	outer.add_theme_constant_override("margin_top",    AppTheme.MARGIN_SETTINGS_V)
-	outer.add_theme_constant_override("margin_bottom", AppTheme.MARGIN_SETTINGS_V)
-
-	var content := VBoxContainer.new()
-	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content.add_theme_constant_override("separation", AppTheme.MARGIN_SETTINGS_V)
-	outer.add_child(content)
-	scroll.add_child(outer)
-	add_child(scroll)
-
-	var profile := _cfg.get_game_profile()
-	var cr := profile.content_root
-
-	# ── Game directory ──
-	content.add_child(_section("Spellbreak Directory"))
-	content.add_child(_hint(
-		("Select the Spellbreak install folder used to locate the executable and pak files. " +
-		"The folder should contain %s/ so paks resolve under %s/Content/Paks/.") % [cr, cr]
-	))
-	content.add_child(_dir_row(
-		func() -> String: return _cfg.game_dir,
-		func(v: String) -> void:
-			_cfg.game_dir = v
-			_update_footer_state(),
-		"/path/to/game"
-	))
-
-	# ── Mods directory ──
-	content.add_child(_section("Mods Directory"))
-	content.add_child(_hint(
-		("Choose the folder that contains your mod folders. Structure: Mods/MyMod/%s/Content/... " +
-		"Each direct child folder is treated as one mod and can be enabled, packed, or watched separately.") % cr
-	))
-	content.add_child(_dir_row(
-		func() -> String: return _cfg.mods_dir,
-		func(v: String) -> void:
-			_cfg.mods_dir = v
-			_update_footer_state(),
-		"/path/to/mods"
-	))
-
-	# ── Launch command ──
-	content.add_child(_section("Launch Command"))
-	content.add_child(_hint("Shell command to start the game. Leave blank to disable the Launch button."))
-	var launch_edit := _line_edit(_cfg.launch_cmd, "steam steam://rungameid/...")
-	launch_edit.text_changed.connect(func(v: String) -> void:
-		_cfg.launch_cmd = v
-		_update_footer_state()
-	)
-	content.add_child(launch_edit)
-
-
-	# ── umodel (3D Preview) ──
-	content.add_child(_section("umodel (3D Preview)"))
-	content.add_child(_hint("Path to the umodel binary. Required for 3D mesh and animation preview. Download from gildor.org/en/projects/umodel"))
-	var umodel_row := HBoxContainer.new()
-	umodel_row.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
-	var umodel_edit := _line_edit(_cfg.umodel_path, "/path/to/umodel")
-	umodel_edit.text_changed.connect(func(v: String) -> void:
-		_cfg.umodel_path = v
-		_update_footer_state()
-	)
-	umodel_row.add_child(umodel_edit)
-	var umodel_browse := Button.new()
-	umodel_browse.text = "Browse..."
-	umodel_browse.pressed.connect(func() -> void:
-		var dialog := FileDialog.new()
-		dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
-		dialog.access = FileDialog.ACCESS_FILESYSTEM
-		AppTheme.configure_file_dialog(dialog)
-		dialog.file_selected.connect(func(path: String) -> void:
-			umodel_edit.text = path
-			_cfg.umodel_path = path
-			_update_footer_state()
-			dialog.queue_free()
-		)
-		get_tree().root.add_child(dialog)
-		dialog.popup_centered(Vector2i(800, 600))
-	)
-	umodel_row.add_child(umodel_browse)
-	content.add_child(umodel_row)
-
-	# ── Sources ──
-	content.add_child(_section("Sources"))
-	content.add_child(_hint(
-		"Register exported asset directories for reference — the base game export, older game versions, reference mods, etc. " +
-		"Each source has a name and a path to its root folder (the one containing %s/)." % cr
-	))
-
-	_sources_container = VBoxContainer.new()
-	_sources_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_sources_container.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
-	content.add_child(_sources_container)
-	_rebuild_sources()
-
-	var add_btn := Button.new()
-	add_btn.text = "+ Add Source"
-	add_btn.pressed.connect(_add_source)
-	var generate_btn := Button.new()
-	generate_btn.text = "Generate from Pak"
-	generate_btn.tooltip_text = "Generate a source by unpacking a game .pak"
-	generate_btn.disabled = _base_source_service.is_generating()
-	generate_btn.pressed.connect(_on_generate_base_source_pressed)
-	_base_source_btn = generate_btn
-	var source_actions := HBoxContainer.new()
-	source_actions.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
-	source_actions.add_child(add_btn)
-	source_actions.add_child(generate_btn)
-	content.add_child(source_actions)
+func _configure_scene_ui() -> void:
+	for node in find_children("*Title", "Label", true, false):
+		var label := node as Label
+		AppTheme.style_header(label)
+		label.add_theme_color_override("font_color", AppTheme.TEXT_HEADING)
+	for node in find_children("*Hint", "Label", true, false):
+		var label := node as Label
+		AppTheme.style_muted(label)
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_save_btn.add_theme_color_override("font_color", AppTheme.BTN_SAVE)
 
 	_base_source_feedback = OperationFeedback.new().setup(_retry_base_source_generation)
+	_base_source_feedback_mount.add_child(_base_source_feedback)
+
+
+func _sync_controls() -> void:
+	var profile := _cfg.get_game_profile()
+	var cr := profile.content_root
+	_game_directory_hint.text = (
+		"Select the Spellbreak install folder used to locate the executable and pak files. "
+		+ "The folder should contain %s/ so paks resolve under %s/Content/Paks/." % [cr, cr])
+	_mods_directory_hint.text = (
+		("Choose the folder that contains your mod folders. Structure: Mods/MyMod/%s/Content/... "
+		+ "Each direct child folder is treated as one mod and can be enabled, packed, or watched separately.") % cr)
+	_sources_hint.text = (
+		"Register exported asset directories for reference — the base game export, older game versions, "
+		+ "reference mods, etc. Each source has a name and a path to its root folder "
+		+ "(the one containing %s/)." % cr)
+
+	_syncing_controls = true
+	_game_directory_edit.text = _cfg.game_dir
+	_mods_directory_edit.text = _cfg.mods_dir
+	_launch_command_edit.text = _cfg.launch_cmd
+	_backup_toggle.button_pressed = _cfg.keep_pack_backups
+	_update_toggle_button_text(_backup_toggle, _cfg.keep_pack_backups)
+	_umodel_edit.text = _cfg.umodel_path
+	_config_path_hint.text = _cfg.get_config_path()
+	_syncing_controls = false
+
+	_file_association_button.text = _file_association_service.action_label()
+	_file_association_button.disabled = not _file_association_service.is_available_in_current_build()
+	if not _file_association_service.is_supported():
+		_file_association_button.tooltip_text = "File association is supported on Windows and Linux."
+	elif OS.has_feature("editor"):
+		_file_association_button.tooltip_text = "Run an exported build to register its executable."
+	else:
+		_file_association_button.tooltip_text = "Register this build as a .uasset handler."
+
+	_rebuild_sources()
+	_base_source_btn.disabled = _base_source_service.is_generating()
+	_base_source_feedback.clear_log()
+	_base_source_feedback.set_status(_base_source_status_text, _base_source_status_kind)
 	_base_source_feedback.visible = not _base_source_status_text.is_empty()
 	if not _base_source_status_text.is_empty():
-		_base_source_feedback.set_status(_base_source_status_text, _base_source_status_kind)
 		_base_source_feedback.add_line(_base_source_status_text)
 		_base_source_feedback.set_retry_enabled(
 				_base_source_status_error and _last_base_source_operation.is_valid())
-	content.add_child(_base_source_feedback)
-
-	# ── Config file path ──
-	content.add_child(_section("Config File"))
-	var config_row := HBoxContainer.new()
-	config_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	config_row.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
-	var config_path_hint := _hint(_cfg.get_config_path())
-	config_path_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	config_row.add_child(config_path_hint)
-	var open_config_btn := Button.new()
-	open_config_btn.text = "Open Config Folder"
-	open_config_btn.pressed.connect(_open_config_folder)
-	config_row.add_child(open_config_btn)
-	content.add_child(config_row)
-
-	# ── Key mappings ──
-	var keymap_header := HBoxContainer.new()
-	keymap_header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	keymap_header.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
-	var keymap_title := _section("Key Mappings")
-	keymap_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	keymap_header.add_child(keymap_title)
-	var keymap_btn := Button.new()
-	keymap_btn.text = "Edit Keymap"
-	keymap_btn.pressed.connect(func() -> void: open_keymap_requested.emit())
-	keymap_header.add_child(keymap_btn)
-	content.add_child(keymap_header)
-	content.add_child(_hint("Customize editor shortcuts using native Godot input actions."))
-
-	add_child(HSeparator.new())
-
-	# ── Save / Revert buttons ──
-	var btn_margin := MarginContainer.new()
-	btn_margin.add_theme_constant_override("margin_left",   AppTheme.MARGIN_SETTINGS_H)
-	btn_margin.add_theme_constant_override("margin_right",  AppTheme.MARGIN_SETTINGS_H)
-	btn_margin.add_theme_constant_override("margin_top",     AppTheme.SPACING_ROW)
-	btn_margin.add_theme_constant_override("margin_bottom",  AppTheme.SPACING_ROW)
-
-	var btn_row := HBoxContainer.new()
-	btn_row.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
-
-	var save_btn := Button.new()
-	_save_btn = save_btn
-	save_btn.text = "Save"
-	save_btn.add_theme_color_override("font_color", AppTheme.BTN_SAVE)
-	save_btn.pressed.connect(_on_save)
-	btn_row.add_child(save_btn)
-
-	var close_btn := Button.new()
-	_close_or_revert_btn = close_btn
-	close_btn.pressed.connect(_on_close_or_revert)
-	btn_row.add_child(close_btn)
-
-	btn_margin.add_child(btn_row)
-	add_child(btn_margin)
 	_update_footer_state()
+
+
+func _on_game_directory_changed(path: String) -> void:
+	if _syncing_controls:
+		return
+	_cfg.game_dir = path
+	_update_footer_state()
+
+
+func _on_game_directory_browse_pressed() -> void:
+	_open_dir_dialog(_game_directory_edit, func(path: String) -> void: _cfg.game_dir = path)
+
+
+func _on_mods_directory_changed(path: String) -> void:
+	if _syncing_controls:
+		return
+	_cfg.mods_dir = path
+	_update_footer_state()
+
+
+func _on_mods_directory_browse_pressed() -> void:
+	_open_dir_dialog(_mods_directory_edit, func(path: String) -> void: _cfg.mods_dir = path)
+
+
+func _on_launch_command_changed(command: String) -> void:
+	if _syncing_controls:
+		return
+	_cfg.launch_cmd = command
+	_update_footer_state()
+
+
+func _on_backup_toggled(enabled: bool) -> void:
+	if _syncing_controls:
+		return
+	_cfg.keep_pack_backups = enabled
+	_update_toggle_button_text(_backup_toggle, enabled)
+	_update_footer_state()
+
+
+func _on_umodel_path_changed(path: String) -> void:
+	if _syncing_controls:
+		return
+	_cfg.umodel_path = path
+	_update_footer_state()
+
+
+func _on_umodel_browse_pressed() -> void:
+	var dialog := FileDialog.new()
+	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	dialog.access = FileDialog.ACCESS_FILESYSTEM
+	AppTheme.configure_file_dialog(dialog)
+	dialog.file_selected.connect(func(path: String) -> void:
+		_umodel_edit.text = path
+		_cfg.umodel_path = path
+		_update_footer_state()
+		dialog.queue_free()
+	)
+	get_tree().root.add_child(dialog)
+	dialog.popup_centered(Vector2i(800, 600))
+
+
+func _on_edit_keymap_pressed() -> void:
+	open_keymap_requested.emit()
 
 
 # ── Sources list ──────────────────────────────────────────────────────────────
@@ -481,6 +424,7 @@ func _snapshot_config() -> Dictionary:
 		"game_dir": _cfg.game_dir,
 		"mods_dir": _cfg.mods_dir,
 		"launch_cmd": _cfg.launch_cmd,
+		"keep_pack_backups": _cfg.keep_pack_backups,
 		"u4pak_dir": _cfg.u4pak_dir,
 		"ue4_dds_tools_dir": _cfg.ue4_dds_tools_dir,
 		"umodel_path": _cfg.umodel_path,
@@ -523,6 +467,12 @@ func _on_save() -> void:
 	close_requested.emit()
 
 
+func _on_register_file_association() -> void:
+	var result := _file_association_service.register()
+	_file_association_button.text = _file_association_service.action_label()
+	status_changed.emit(result.message, not result.ok)
+
+
 func _on_close_or_revert() -> void:
 	if _is_dirty():
 		var error := _cfg.load_config()
@@ -545,44 +495,13 @@ func _open_config_folder() -> void:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-func _section(text: String) -> Label:
-	var lbl := Label.new()
-	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", AppTheme.FONT_HEADER)
-	lbl.add_theme_color_override("font_color", AppTheme.TEXT_HEADING)
-	return lbl
-
-
-func _hint(text: String) -> Label:
-	var lbl := Label.new()
-	lbl.text = text
-	AppTheme.style_muted(lbl)
-	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
-	return lbl
-
-
-func _line_edit(current: String, placeholder: String) -> LineEdit:
-	var edit := LineEdit.new()
-	edit.text = current
-	edit.placeholder_text = placeholder
-	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	return edit
-
-
-func _dir_row(get_fn: Callable, set_fn: Callable, placeholder: String) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
-
-	var edit := _line_edit(get_fn.call(), placeholder)
-	edit.text_changed.connect(func(v: String) -> void: set_fn.call(v))
-	row.add_child(edit)
-
-	var btn := Button.new()
-	btn.text = "Browse…"
-	btn.pressed.connect(func() -> void: _open_dir_dialog(edit, set_fn))
-	row.add_child(btn)
-
-	return row
+func _update_toggle_button_text(button: Button, enabled: bool) -> void:
+	button.text = "On" if enabled else "Off"
+	button.tooltip_text = (
+		"Automatic pack backups are enabled."
+		if enabled else
+		"Automatic pack backups are disabled."
+	)
 
 
 func _open_dir_dialog(line_edit: LineEdit, on_select: Callable) -> void:
@@ -594,21 +513,6 @@ func _open_dir_dialog(line_edit: LineEdit, on_select: Callable) -> void:
 		line_edit.text = path
 		on_select.call(path)
 		_update_footer_state()
-		dialog.queue_free()
-	)
-	get_tree().root.add_child(dialog)
-	dialog.popup_centered(Vector2i(800, 600))
-
-
-func _open_file_dialog(line_edit: LineEdit, on_select: Callable) -> void:
-	var dialog := FileDialog.new()
-	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
-	dialog.access    = FileDialog.ACCESS_FILESYSTEM
-	dialog.filters   = PackedStringArray(["*.pak ; Unreal Pak", "* ; All Files"])
-	AppTheme.configure_file_dialog(dialog)
-	dialog.file_selected.connect(func(path: String) -> void:
-		line_edit.text = path
-		on_select.call(path)
 		dialog.queue_free()
 	)
 	get_tree().root.add_child(dialog)

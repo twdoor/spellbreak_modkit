@@ -5,8 +5,9 @@ config.json
 
 # Godot editor cache and repository-level build output
 spellbreak_uasset_editor/.godot/
-# Keep historical local exports ignored; new exports go to dist/.
-spellbreak_uasset_editor/builds/
+# Keep historical local exports ignored; only retain the Godot scan marker.
+spellbreak_uasset_editor/builds/*
+!spellbreak_uasset_editor/builds/.gdignore
 dist/
 
 # OS

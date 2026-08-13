@@ -1,0 +1,39 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://ui/components/key_binding_row.gd" id="1_row"]
+
+[node name="KeyBindingRow" type="HBoxContainer"]
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+script = ExtResource("1_row")
+
+[node name="ActionLabel" type="Label" parent="."]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(210, 0)
+layout_mode = 2
+
+[node name="BindingSlots" type="HBoxContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="PrimaryBindingButton" type="Button" parent="BindingSlots"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Left click to change\nMiddle click to clear\nRight click to reset"
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="SecondaryBindingButton" type="Button" parent="BindingSlots"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Left click to change\nMiddle click to clear\nRight click to reset"
+clip_text = true
+text_overrun_behavior = 3
+
+[connection signal="gui_input" from="BindingSlots/PrimaryBindingButton" to="." method="_on_primary_gui_input"]
+[connection signal="gui_input" from="BindingSlots/SecondaryBindingButton" to="." method="_on_secondary_gui_input"]

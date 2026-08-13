@@ -1,0 +1,83 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" uid="uid://br8jhr7c4um6e" path="res://ui/tabs/keymap_settings_tab.gd" id="1_keymap"]
+[ext_resource type="Script" uid="uid://nlpwhurtsbly" path="res://ui/components/smooth_scroll_container.gd" id="2_scroll"]
+
+[node name="KeymapSettingsTab" type="VBoxContainer"]
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 0
+script = ExtResource("1_keymap")
+
+[node name="KeymapScroll" type="ScrollContainer" parent="."]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+script = ExtResource("2_scroll")
+
+[node name="ContentMargin" type="MarginContainer" parent="KeymapScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 16
+
+[node name="Content" type="VBoxContainer" parent="KeymapScroll/ContentMargin"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 16
+
+[node name="KeyMappingsTitle" type="Label" parent="KeymapScroll/ContentMargin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Key Mappings"
+
+[node name="KeyMappingsHint" type="Label" parent="KeymapScroll/ContentMargin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Customize native Godot shortcuts. Changes apply immediately; save to keep them after restart."
+
+[node name="ItemsContainer" type="VBoxContainer" parent="KeymapScroll/ContentMargin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="StatusLabel" type="Label" parent="KeymapScroll/ContentMargin/Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="FooterSeparator" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="FooterMargin" type="MarginContainer" parent="."]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 8
+
+[node name="Footer" type="HBoxContainer" parent="FooterMargin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SaveButton" type="Button" parent="FooterMargin/Footer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save"
+
+[node name="ResetAllButton" type="Button" parent="FooterMargin/Footer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Reset All"
+
+[node name="CloseButton" type="Button" parent="FooterMargin/Footer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Close"
+
+[connection signal="pressed" from="FooterMargin/Footer/SaveButton" to="." method="_on_save_pressed"]
+[connection signal="pressed" from="FooterMargin/Footer/ResetAllButton" to="." method="_on_reset_all_pressed"]
+[connection signal="pressed" from="FooterMargin/Footer/CloseButton" to="." method="_on_close_pressed"]

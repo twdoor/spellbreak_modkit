@@ -131,7 +131,7 @@ func _pack_mods_to_target(mods: Array, pak_path: String, verb: String) -> Operat
 	var install_result := FileUtils.install_staged_files_with_result([
 		{"source": staged_pak, "target": pak_path},
 		{"source": staged_sig, "target": sig_path},
-	], [], true, "pak-backup")
+	], [], _cfg.keep_pack_backups, "pak-backup")
 	var install_error := int(install_result.get("error", ERR_BUG))
 	if install_error != OK:
 		for staged in [staged_pak, staged_sig]:
