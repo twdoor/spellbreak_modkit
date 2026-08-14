@@ -14,6 +14,7 @@ const UASSET_CONVERTER_FILES := [
 ]
 
 const U4PAK_FILES := ["u4pak.py"]
+const ASSET_REGISTRY_FILES := ["patch_asset_registry.py"]
 
 const DDS_TOOLS_FILES := [
 	"main.py", "util.py", "config.json", "LICENSE",
@@ -36,6 +37,11 @@ static func converter_dll() -> String:
 static func u4pak_script(override_directory: String = "") -> String:
 	return _resolve_with_override(
 			override_directory, "u4pak", "u4pak.py", U4PAK_FILES)
+
+
+static func asset_registry_script() -> String:
+	return _resolve_bundled_file(
+			"asset_registry", "patch_asset_registry.py", ASSET_REGISTRY_FILES)
 
 
 static func dds_tools_script(override_directory: String = "") -> String:

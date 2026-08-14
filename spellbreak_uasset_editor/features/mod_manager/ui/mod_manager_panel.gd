@@ -1425,3 +1425,8 @@ func _set_status(text: String, error: bool = false) -> void:
 ## Exposes the shared config so main.gd can pass it to ModSettingsTab.
 func get_config() -> ModConfigManager:
 	return _cfg
+
+
+## Refresh after another editor workflow creates files in a mod workspace.
+func refresh_mods() -> void:
+	_refresh_mods()

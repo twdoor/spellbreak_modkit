@@ -43,7 +43,7 @@ static func action_definitions() -> Array[Dictionary]:
 		_definition(ACTION_OPEN, "Open File", "File", _key(KEY_SPACE, true)),
 		_definition(ACTION_CLOSE, "Close Tab", "File", _key(KEY_Q, true)),
 		_definition(ACTION_SAVE, "Save File", "File", _key(KEY_S, true)),
-		_definition(ACTION_REUSE, "Reuse Asset As", "File", _key(KEY_S, true, true)),
+		_definition(ACTION_REUSE, "Clone Asset As", "File", _key(KEY_S, true, true)),
 		_definition(ACTION_COMPARE, "Compare File", "File", _key(KEY_K, true)),
 		_definition(ACTION_COPY, "Copy", "Edit", _key(KEY_C, true)),
 		_definition(ACTION_PASTE, "Paste", "Edit", _key(KEY_V, true)),

@@ -75,7 +75,7 @@ filters = PackedStringArray("*.uasset ; Unreal Asset (binary)", "*.json ; UAsset
 
 [node name="ReuseFileDialog" type="FileDialog" parent="." unique_id=1941983726]
 unique_name_in_owner = true
-title = "Reuse Asset As"
+title = "Clone Asset As"
 access = 2
 filters = PackedStringArray("*.uasset ; Unreal Asset (binary)")
 

@@ -606,7 +606,8 @@ func _test_asset_reuse_copy() -> void:
 	asset.exports[0].object_name = "GE_Tough_C"
 	asset.imports[0].package_name = "/Game/Effects/GE_Tough"
 
-	var result := asset.prepare_reuse_copy("/tmp/GE_StoneSkin.uasset")
+	var result := asset.prepare_reuse_copy("/tmp/GE_StoneSkin.uasset", true,
+			"/Game/Effects/GE_Tough", "/Game/Cloned/GE_StoneSkin")
 	var copy := result.value as UAssetFile
 	_expect(result.ok and copy != null,
 		"asset reuse prepares an independent in-memory package")
@@ -614,19 +615,20 @@ func _test_asset_reuse_copy() -> void:
 		"GE_StoneSkin",
 		"GE_StoneSkin_C",
 		"Default__GE_StoneSkin_C",
-		"/Game/Effects/GE_StoneSkin",
+		"/Game/Cloned/GE_StoneSkin",
 		"UnrelatedName",
 	]), "asset reuse renames base, generated-class, default-object, and path names")
 	_expect(copy.exports[0].object_name == "GE_StoneSkin_C"
-			and copy.imports[0].package_name == "/Game/Effects/GE_StoneSkin"
+			and copy.imports[0].package_name == "/Game/Cloned/GE_StoneSkin"
 			and copy.raw["Custom"]["AssetPath"]
-				== "/Game/Effects/GE_StoneSkin.GE_StoneSkin_C",
+				== "/Game/Cloned/GE_StoneSkin.GE_StoneSkin_C",
 		"asset reuse updates serialized object metadata and references")
 	_expect(copy.raw["Custom"]["$type"] == "GE_Tough.SerializerType",
 		"asset reuse preserves UAssetAPI serializer type descriptors")
-	_expect(copy.package_guid == "{11111111-2222-3333-4444-555555555555}"
+	_expect(copy.package_guid != "{11111111-2222-3333-4444-555555555555}"
+			and copy.package_guid.length() == 38
 			and asset.name_map[0] == "GE_Tough",
-		"asset reuse retains the package GUID without changing the source asset")
+		"unique asset clone generates a package GUID without changing the source asset")
 	_expect(not asset.prepare_reuse_copy(asset.binary_path).ok,
 		"asset reuse refuses to replace its own source package")
 
@@ -1785,6 +1787,26 @@ func _test_mod_manifest() -> void:
 		"mod manifest preserves copied file source path")
 	_expect(str(manifest.get("build", {}).get("content_root", "")) == "g3",
 		"mod manifest records build content root")
+
+	var clone_file := mod_path.path_join("g3/Content/Items/TestUniqueLongName.uasset")
+	FileUtils.write_bytes_atomic(clone_file, "clone".to_utf8_buffer())
+	var described := ModManifest.describe_unique_clone(source_file, clone_file, config)
+	_expect(described.ok
+			and str(described.value.get("source", "")) == "/Game/Items/Test.Test"
+			and str(described.value.get("target", ""))
+				== "/Game/Items/TestUniqueLongName.TestUniqueLongName",
+		"unique clone derives source and target ObjectPaths from workspace paths")
+	var recorded := ModManifest.record_unique_clone(described.value, config)
+	manifest = JSON.parse_string(
+			FileAccess.get_file_as_string(ModManifest.manifest_path(mod)))
+	var custom_assets: Array = manifest.get("custom_assets", [])
+	_expect(recorded.ok and custom_assets.size() == 1
+			and str(custom_assets[0].get("file", ""))
+				== "g3/Content/Items/TestUniqueLongName.uasset",
+		"unique clone is persisted in the existing workspace manifest")
+	_expect(not ModManifest.describe_unique_clone(
+			source_file, root.path_join("Outside.uasset"), config).ok,
+		"unique clone refuses destinations outside a mod workspace")
 	FileUtils.remove_dir_recursive(root)
 
 

@@ -107,6 +107,10 @@ func _pack_mods_to_target(mods: Array, pak_path: String, verb: String) -> Operat
 	if not merge_result.ok:
 		FileUtils.remove_dir_recursive(tmp_dir)
 		return merge_result
+	var registry_result := _stage_custom_asset_registry(mods, merged, tmp_dir, python)
+	if not registry_result.ok:
+		FileUtils.remove_dir_recursive(tmp_dir)
+		return registry_result
 
 	_emit_log("")
 	_emit_log("Packing...")
@@ -176,6 +180,88 @@ func _merge_mods_to_dir(mods: Array, merged: String) -> OperationResult:
 			return OperationResult.failed(
 					"Could not merge mod '%s' (error %d)" % [mod.name, copy_error])
 	return OperationResult.succeeded()
+
+
+func _stage_custom_asset_registry(mods: Array, merged: String, tmp_dir: String,
+		python: String) -> OperationResult:
+	var declarations: Array = []
+	var targets := {}
+	for mod_value in mods:
+		var mod := mod_value as ModInfo
+		if mod == null:
+			continue
+		var manifest_path := ModManifest.manifest_path(mod)
+		if not FileAccess.file_exists(manifest_path):
+			continue
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(manifest_path))
+		if not parsed is Dictionary:
+			return OperationResult.failed("Invalid manifest JSON for '%s'" % mod.name)
+		for value in parsed.get("custom_assets", []):
+			if not value is Dictionary:
+				return OperationResult.failed(
+						"Invalid unique asset declaration in '%s'" % mod.name)
+			var declaration := value as Dictionary
+			var source := str(declaration.get("source", ""))
+			var target := str(declaration.get("target", ""))
+			var relative_file := str(declaration.get("file", ""))
+			if source.is_empty() or target.is_empty() or relative_file.is_empty():
+				return OperationResult.failed(
+						"Incomplete unique asset declaration in '%s'" % mod.name)
+			if targets.has(target):
+				return OperationResult.failed(
+						"Duplicate unique asset target '%s' in '%s' and '%s'" % [
+							target, str(targets[target]), mod.name])
+			var package_file := mod.path.path_join(relative_file)
+			if not FileUtils.is_path_within(package_file, mod.path) \
+					or not FileAccess.file_exists(package_file):
+				return OperationResult.failed(
+						"Unique asset file is missing in '%s': %s" % [mod.name, relative_file])
+			targets[target] = mod.name
+			declarations.append({"source": source, "target": target})
+	if declarations.is_empty():
+		return OperationResult.succeeded()
+
+	var base_registry := _find_base_asset_registry()
+	if base_registry.is_empty():
+		return OperationResult.failed(
+				"Unique assets require g3/AssetRegistry.bin in a configured source")
+	var patcher := ToolchainRegistry.asset_registry_script()
+	if patcher.is_empty() or not FileAccess.file_exists(patcher):
+		return OperationResult.failed("Asset Registry patcher was not found")
+	var operations_path := tmp_dir.path_join("custom_assets.json")
+	var operations_error := FileUtils.write_bytes_atomic(
+			operations_path, JSON.stringify(declarations, "  ").to_utf8_buffer())
+	if operations_error != OK:
+		return OperationResult.failed(
+				"Could not stage unique asset declarations (error %d)" % operations_error)
+	var output_registry := merged.path_join(
+			_cfg.get_game_profile().content_root).path_join("AssetRegistry.bin")
+	var output: Array = []
+	var code := ProcessUtils.run_python_script(python, patcher, tmp_dir, [
+		base_registry, output_registry, "--operations", operations_path,
+	], output)
+	for line in ProcessUtils.output_text(output, "").split("\n"):
+		if not line.strip_edges().is_empty():
+			_emit_log("Registry: " + line.strip_edges())
+	if code != 0:
+		return OperationResult.failed(
+				"Asset Registry generation failed (exit %d): %s" % [
+					code, ProcessUtils.output_text(output)])
+	_emit_log("Registry: merged %d unique asset(s)" % declarations.size())
+	return OperationResult.succeeded()
+
+
+func _find_base_asset_registry() -> String:
+	var content_root := _cfg.get_game_profile().content_root
+	for source_value in _cfg.sources:
+		if not source_value is Dictionary:
+			continue
+		var root := str(source_value.get("path", "")).rstrip("/")
+		var candidate := root.path_join(content_root).path_join("AssetRegistry.bin")
+		if not root.is_empty() and FileUtils.is_path_within(candidate, root) \
+				and FileAccess.file_exists(candidate):
+			return candidate
+	return ""
 
 
 func _remove_staged_file(path: String) -> void:

@@ -411,9 +411,10 @@ func save_file(path: String = "") -> Error:
 ## Build an independent copy of this binary asset for a new package path.
 ## The source and destination filename stems define the identity replacement.
 ## Every serialized content string is updated, except UAssetAPI $type descriptors.
-func prepare_reuse_copy(destination_path: String) -> OperationResult:
+func prepare_reuse_copy(destination_path: String, regenerate_guid: bool = false,
+		source_package: String = "", target_package: String = "") -> OperationResult:
 	if binary_path.is_empty() or binary_path.get_extension().to_lower() != "uasset":
-		return OperationResult.failed("Reuse As requires an open binary .uasset file")
+		return OperationResult.failed("Clone requires an open binary .uasset file")
 	if destination_path.get_extension().to_lower() != "uasset":
 		return OperationResult.failed("The destination must be a .uasset file")
 	if FileUtils.same_path(binary_path, destination_path):
@@ -424,7 +425,7 @@ func prepare_reuse_copy(destination_path: String) -> OperationResult:
 	if source_name.is_empty() or destination_name.is_empty():
 		return OperationResult.failed("The source and destination need valid asset names")
 	if source_name == destination_name:
-		return OperationResult.failed("The reused asset needs a different filename")
+		return OperationResult.failed("The cloned asset needs a different filename")
 
 	var renamed_name_entries := 0
 	for name in name_map:
@@ -436,7 +437,10 @@ func prepare_reuse_copy(destination_path: String) -> OperationResult:
 
 	var serialized := _to_dict()
 	var stats := {"replacements": 0}
-	serialized = _replace_reuse_identity(serialized, source_name, destination_name, stats)
+	serialized = _replace_reuse_identity(serialized, source_name, destination_name, stats,
+			source_package, target_package)
+	if regenerate_guid:
+		serialized["PackageGuid"] = _generate_package_guid()
 	var copy := _from_dict(serialized, binary_path)
 	copy.binary_path = binary_path
 	copy.file_path = binary_path
@@ -454,24 +458,49 @@ func prepare_reuse_copy(destination_path: String) -> OperationResult:
 ## save transaction regenerates every required companion and restores existing
 ## destination files if conversion or installation fails.
 func save_reuse_copy(destination_path: String) -> OperationResult:
-	var prepared := prepare_reuse_copy(destination_path)
+	return save_clone_copy(destination_path)
+
+
+## Save a cloned package. Unique packages receive a fresh package GUID.
+func save_clone_copy(destination_path: String, regenerate_guid: bool = false,
+		source_package: String = "", target_package: String = "") -> OperationResult:
+	var prepared := prepare_reuse_copy(
+			destination_path, regenerate_guid, source_package, target_package)
 	if not prepared.ok:
 		return prepared
 	var copy := prepared.value as UAssetFile
 	var save_error := copy.save_file(destination_path)
 	if save_error != OK:
 		return OperationResult.failed(
-				"Could not create reused asset (error %d)" % save_error,
+				"Could not create cloned asset (error %d)" % save_error,
 				prepared.metadata)
 	return OperationResult.succeeded(
 			"Created %s" % destination_path.get_file(), copy, prepared.metadata)
 
 
+static func _generate_package_guid() -> String:
+	var bytes := Crypto.new().generate_random_bytes(16)
+	# Use conventional UUID version/variant bits while retaining all 128 GUID bits.
+	bytes[6] = (bytes[6] & 0x0f) | 0x40
+	bytes[8] = (bytes[8] & 0x3f) | 0x80
+	var hex := ""
+	for byte in bytes:
+		hex += "%02x" % byte
+	return "{%s-%s-%s-%s-%s}" % [
+		hex.substr(0, 8), hex.substr(8, 4), hex.substr(12, 4),
+		hex.substr(16, 4), hex.substr(20, 12),
+	]
+
+
 static func _replace_reuse_identity(value: Variant, source_name: String,
-		destination_name: String, stats: Dictionary) -> Variant:
+		destination_name: String, stats: Dictionary, source_package: String = "",
+		target_package: String = "") -> Variant:
 	if value is String:
 		var text := value as String
 		var occurrences := text.count(source_name)
+		if not source_package.is_empty() and source_package != target_package:
+			occurrences += text.count(source_package)
+			text = text.replace(source_package, target_package)
 		if occurrences > 0:
 			stats["replacements"] = int(stats.get("replacements", 0)) + occurrences
 			return text.replace(source_name, destination_name)
@@ -483,19 +512,22 @@ static func _replace_reuse_identity(value: Variant, source_name: String,
 			if str(key) == "$type":
 				continue
 			dictionary[key] = _replace_reuse_identity(
-					dictionary[key], source_name, destination_name, stats)
+					dictionary[key], source_name, destination_name, stats,
+					source_package, target_package)
 		return dictionary
 	if value is Array:
 		var array := value as Array
 		for index in array.size():
 			array[index] = _replace_reuse_identity(
-					array[index], source_name, destination_name, stats)
+					array[index], source_name, destination_name, stats,
+					source_package, target_package)
 		return array
 	if value is PackedStringArray:
 		var strings := value as PackedStringArray
 		for index in strings.size():
 			strings[index] = _replace_reuse_identity(
-					strings[index], source_name, destination_name, stats)
+					strings[index], source_name, destination_name, stats,
+					source_package, target_package)
 		return strings
 	return value
 

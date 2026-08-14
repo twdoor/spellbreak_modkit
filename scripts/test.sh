@@ -28,6 +28,7 @@ run_godot_checked --headless --editor --path "$project_dir" --quit
 run_godot_checked --headless --path "$project_dir" --script res://tests/test_core.gd
 run_godot_checked --headless --path "$project_dir" --script res://tests/test_background_jobs.gd
 run_godot_checked --headless --path "$project_dir" --script res://tests/app_settings_test.gd
+"$python_bin" "$repo_root/tools/test_patch_asset_registry.py"
 
 pak_test_dir="$(mktemp -d)"
 trap 'rm -f "${logs[@]}"; rm -rf "$settings_test_dir" "$pak_test_dir"' EXIT
