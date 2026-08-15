@@ -1,6 +1,7 @@
 # User-specific config (generated on first run)
 config.json
 .mod_state.json
+.opencode/
 
 
 # Godot editor cache and repository-level build output
