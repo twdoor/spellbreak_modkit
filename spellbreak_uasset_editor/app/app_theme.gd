@@ -132,7 +132,7 @@ static func apply_theme(win: Window) -> void:
 ## which prevents checking paths or hovering the app while choosing a file.
 static func configure_file_dialog(dialog: FileDialog) -> void:
 	apply_theme(dialog)
-	dialog.use_native_dialog = false
+	dialog.use_native_dialog = true
 	dialog.exclusive = false
 	dialog.transient = false
 	dialog.always_on_top = false

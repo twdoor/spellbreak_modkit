@@ -79,6 +79,7 @@ func _run() -> void:
 	_test_mod_discovery_models_and_symlinks()
 	_test_mod_manifest()
 	_test_mod_preflight()
+	_test_clone_helpers()
 	_test_asset_reuse_copy()
 	_test_uasset_save_validation()
 	_test_path_safety()
@@ -631,6 +632,15 @@ func _test_asset_reuse_copy() -> void:
 		"unique asset clone generates a package GUID without changing the source asset")
 	_expect(not asset.prepare_reuse_copy(asset.binary_path).ok,
 		"asset reuse refuses to replace its own source package")
+
+	var overlap := asset.prepare_reuse_copy("/tmp/GE_ToughSkin.uasset", true,
+			"/Game/Effects/GE_Tough", "/Game/Cloned/GE_ToughSkin")
+	var overlap_copy := overlap.value as UAssetFile
+	_expect(overlap.ok
+			and overlap_copy.raw["Custom"]["AssetPath"]
+				== "/Game/Cloned/GE_ToughSkin.GE_ToughSkin_C"
+			and overlap_copy.name_map.has("/Game/Cloned/GE_ToughSkin"),
+		"clone with a destination name containing the source name is not corrupted")
 
 
 func _test_swap_and_snapshot_restore() -> void:
@@ -1807,6 +1817,14 @@ func _test_mod_manifest() -> void:
 	_expect(not ModManifest.describe_unique_clone(
 			source_file, root.path_join("Outside.uasset"), config).ok,
 		"unique clone refuses destinations outside a mod workspace")
+
+	DirAccess.remove_absolute(clone_file)
+	var pruned_error := ModManifest.write_workspace_manifest(mod, config)
+	manifest = JSON.parse_string(
+			FileAccess.get_file_as_string(ModManifest.manifest_path(mod)))
+	_expect(pruned_error == OK
+			and manifest.get("custom_assets", []).is_empty(),
+		"deleting a unique clone's package prunes its registry declaration")
 	FileUtils.remove_dir_recursive(root)
 
 
@@ -1843,6 +1861,28 @@ func _test_mod_discovery_models_and_symlinks() -> void:
 			_expect(ModDiscovery.list_mod_file_entries(mod_path).size() == 1,
 					"mod discovery rejects symlinked files")
 	FileUtils.remove_dir_recursive(root)
+
+
+func _test_clone_helpers() -> void:
+	var mod := ModInfo.new("TestMod", "/tmp/clone_mod")
+	var destination := ModManagerPanel._clone_destination_path(
+			mod, "g3/Content/Items/BP_Thing.uasset", "BP_ThingSkin")
+	_expect(destination == "/tmp/clone_mod/g3/Content/Items/BP_ThingSkin.uasset",
+		"clone destination mirrors the source directory with the new name")
+	_expect(ModManagerPanel._clone_destination_path(mod, "g3/Content/BP_A.uasset", "") == "",
+		"clone destination is empty without a clone name")
+	_expect(ModManagerPanel._valid_clone_name("BP_ThingSkin", "BP_Thing"),
+		"clone name validation accepts a plain identifier")
+	_expect(ModManagerPanel._valid_clone_name("BP_Thing_6", "BP_Thing"),
+		"clone name validation accepts trailing FName-style numbers")
+	_expect(not ModManagerPanel._valid_clone_name("BP_Thing", "BP_Thing"),
+		"clone name validation rejects the source name itself")
+	_expect(not ModManagerPanel._valid_clone_name("9Lives", "BP_Thing"),
+		"clone name validation rejects names starting with a digit")
+	_expect(not ModManagerPanel._valid_clone_name("Bad.Name", "BP_Thing"),
+		"clone name validation rejects dots")
+	_expect(not ModManagerPanel._valid_clone_name("", "BP_Thing"),
+		"clone name validation rejects an empty name")
 
 
 func _test_mod_preflight() -> void:

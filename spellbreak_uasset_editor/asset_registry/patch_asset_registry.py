@@ -163,7 +163,12 @@ def rewrite_identity(value: str, old: str, new: str) -> str:
     new_dir = new_package.rsplit("/", 1)[0]
     if value == old_dir:
         return new_dir
-    return value.replace(old_package, new_package).replace(old_asset, new_asset)
+    # Swap the package path to a sentinel first so the bare-asset rewrite cannot
+    # corrupt a target package that contains the source asset as a substring.
+    sentinel = "\x00REUSE_PKG\x00"
+    value = value.replace(old_package, sentinel)
+    value = value.replace(old_asset, new_asset)
+    return value.replace(sentinel, new_package)
 
 
 def encode_fname(value: str, names: list[str], name_to_index: dict[str, int],

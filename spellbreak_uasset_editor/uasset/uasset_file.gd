@@ -469,6 +469,14 @@ func save_clone_copy(destination_path: String, regenerate_guid: bool = false,
 	if not prepared.ok:
 		return prepared
 	var copy := prepared.value as UAssetFile
+	# The binary save path writes a staged sibling into the destination folder
+	# before installing it, so the destination directory must already exist.
+	var parent_error := DirAccess.make_dir_recursive_absolute(
+			destination_path.get_base_dir())
+	if parent_error != OK:
+		return OperationResult.failed(
+				"Could not create the destination folder (error %d)" % parent_error,
+				prepared.metadata)
 	var save_error := copy.save_file(destination_path)
 	if save_error != OK:
 		return OperationResult.failed(
@@ -500,10 +508,17 @@ static func _replace_reuse_identity(value: Variant, source_name: String,
 		var occurrences := text.count(source_name)
 		if not source_package.is_empty() and source_package != target_package:
 			occurrences += text.count(source_package)
-			text = text.replace(source_package, target_package)
+			# Swap the package path to a sentinel first so the bare-name rewrite
+			# below cannot corrupt a target package that contains the source name
+			# as a substring (e.g. GE_Stone -> GE_StoneSkin).
+			var placeholder := "__REUSE_PKG_%d__" % (randi() % 0x7fffffff)
+			text = text.replace(source_package, placeholder)
+			text = text.replace(source_name, destination_name)
+			text = text.replace(placeholder, target_package)
+		else:
+			text = text.replace(source_name, destination_name)
 		if occurrences > 0:
 			stats["replacements"] = int(stats.get("replacements", 0)) + occurrences
-			return text.replace(source_name, destination_name)
 		return text
 	if value is Dictionary:
 		var dictionary := value as Dictionary

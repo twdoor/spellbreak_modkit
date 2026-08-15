@@ -46,7 +46,6 @@ const _TAB_TITLE_VISIBLE_CHARS := 24
 const _TAB_TITLE_SCROLL_HOLD_TICKS := 4
 const _TAB_TITLE_SCROLL_GAP := "   "
 const _STARTUP_OPEN_EXTENSIONS := ["uasset", "json"]
-const _CLONE_UNIQUE_OPTION := "Mark as unique file"
 
 func _ready() -> void:
 	_background_jobs = BackgroundJobRunner.new()
@@ -64,8 +63,6 @@ func _configure_scene_ui() -> void:
 	AppTheme.configure_file_dialog(open_file_popup)
 	AppTheme.configure_file_dialog(_compare_file_popup)
 	AppTheme.configure_file_dialog(_reuse_file_dialog)
-	if _reuse_file_dialog.get_option_count() == 0:
-		_reuse_file_dialog.add_option(_CLONE_UNIQUE_OPTION, PackedStringArray(), 0)
 	AppTheme.apply_theme(_close_dialog)
 	AppTheme.apply_theme(_update_dialog)
 	AppTheme.style_muted(_status_label)
@@ -235,6 +232,8 @@ func _setup_mod_tab() -> void:
 	tab_cont.set_tab_title(4, "Base Files")
 	explorer.open_asset_requested.connect(_on_file_selected)
 	explorer.add_to_mod_requested.connect(panel.add_source_file_to_mod)
+	explorer.clone_unique_requested.connect(panel.clone_source_file_to_mod)
+	panel.clone_created.connect(_on_file_selected)
 	explorer.open_settings_requested.connect(func() -> void:
 		settings.refresh()
 		tab_cont.set_tab_hidden(1, false)
@@ -514,7 +513,6 @@ func _on_reuse_requested(tab: UassetFileTab) -> void:
 		_show_toast("Clone requires an open binary .uasset file")
 		return
 	_reuse_source_tab = tab
-	_reuse_file_dialog.set_option_default(0, 0)
 	_reuse_file_dialog.current_dir = source_path.get_base_dir()
 	_reuse_file_dialog.current_file = "%s_Copy.uasset" % source_path.get_file().get_basename()
 	_reuse_file_dialog.popup_centered(Vector2i(900, 650))
@@ -522,8 +520,6 @@ func _on_reuse_requested(tab: UassetFileTab) -> void:
 
 func _on_reuse_destination_selected(selected_path: String) -> void:
 	var source_tab := _reuse_source_tab
-	var selected_options := _reuse_file_dialog.get_selected_options()
-	var mark_unique := int(selected_options.get(_CLONE_UNIQUE_OPTION, 0)) == 1
 	_reuse_source_tab = null
 	if not is_instance_valid(source_tab) or source_tab.tab_asset == null:
 		_show_toast("The source asset is no longer open")
@@ -538,36 +534,16 @@ func _on_reuse_destination_selected(selected_path: String) -> void:
 		_show_toast("Choose a different asset file from the source")
 		return
 
-	var unique_declaration: OperationResult = null
-	if mark_unique:
-		unique_declaration = ModManifest.describe_unique_clone(
-				source_tab.tab_asset.binary_path, destination_path, _cfg)
-		if not unique_declaration.ok:
-			_show_toast(unique_declaration.message)
-			return
-
 	var existing_tab := _find_open_asset_tab(destination_path)
 	if existing_tab != null and existing_tab.is_dirty():
 		_show_toast("Cannot replace an open asset with unsaved changes")
 		return
 
 	_show_toast("Cloning asset...")
-	var source_package := ""
-	var target_package := ""
-	if mark_unique:
-		source_package = str(unique_declaration.value.get("source", "")).rsplit(".", true, 1)[0]
-		target_package = str(unique_declaration.value.get("target", "")).rsplit(".", true, 1)[0]
-	var result := source_tab.tab_asset.save_clone_copy(
-			destination_path, mark_unique, source_package, target_package)
+	var result := source_tab.tab_asset.save_clone_copy(destination_path)
 	if not result.ok:
 		_show_toast(result.message)
 		return
-	if mark_unique:
-		var manifest_result := ModManifest.record_unique_clone(unique_declaration.value, _cfg)
-		if not manifest_result.ok:
-			_show_toast("Cloned asset, but %s" % manifest_result.message)
-			return
-		mod_manager_panel.refresh_mods()
 
 	if existing_tab != null:
 		if not existing_tab.reload_asset_from_disk():
@@ -576,9 +552,8 @@ func _on_reuse_destination_selected(selected_path: String) -> void:
 		tab_cont.current_tab = tab_cont.get_tab_idx_from_control(existing_tab)
 	else:
 		_on_file_selected(destination_path)
-	_show_toast("Cloned as %s%s (%d names updated)" % [
+	_show_toast("Cloned as %s (%d names updated)" % [
 		destination_path.get_file(),
-		" and marked unique" if mark_unique else "",
 		int(result.metadata.get("renamed_name_entries", 0)),
 	])
 

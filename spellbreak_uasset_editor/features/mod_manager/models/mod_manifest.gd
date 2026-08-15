@@ -184,6 +184,20 @@ static func _merge_current_files(manifest: Dictionary, mod: ModInfo,
 		entry["extension"] = rel.get_extension().to_lower()
 		current[rel] = entry
 	_set_files_from_map(manifest, current)
+	# Keep unique-asset declarations in sync with the workspace: drop any
+	# declaration whose cloned package no longer exists on disk, so stale
+	# entries cannot block packing later.
+	var custom_assets: Array = []
+	for value in manifest.get("custom_assets", []):
+		if not value is Dictionary:
+			continue
+		var declared_file := str((value as Dictionary).get("file", ""))
+		var declared_path := mod_path.path_join(declared_file)
+		if not declared_file.is_empty() \
+				and FileUtils.is_path_within(declared_path, mod_path) \
+				and FileAccess.file_exists(declared_path):
+			custom_assets.append((value as Dictionary).duplicate(true))
+	manifest["custom_assets"] = custom_assets
 
 
 static func _files_by_target(manifest: Dictionary) -> Dictionary:

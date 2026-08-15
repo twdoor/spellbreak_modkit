@@ -8,6 +8,7 @@ signal open_asset_requested(path: String)
 signal open_settings_requested
 signal open_diagnostics_requested
 signal status_changed(text: String, is_error: bool)
+signal clone_created(path: String)
 
 # ── Services ───────────────────────────────────────────────────────────────────
 var _cfg:     ModConfigManager
@@ -704,6 +705,205 @@ func _show_source_file_mod_picker(source_path: String, source_root: String,
 	mod_list.select(0)
 	update_destination.call(0)
 	mod_list.grab_focus.call_deferred()
+
+# ── Clone unique asset from source ─────────────────────────────────────────────
+
+## Open a picker for one .uasset in the Base Files explorer, asking which mod
+## owns the clone and what it should be named. The destination directory mirrors
+## the source's relative path and is created automatically.
+func clone_source_file_to_mod(source_path: String, source_root: String) -> void:
+	source_path = source_path.strip_edges()
+	source_root = source_root.strip_edges().rstrip("/")
+	if not FileAccess.file_exists(source_path) \
+			or source_path.get_extension().to_lower() != "uasset":
+		_set_status("Choose a binary .uasset file to clone", true)
+		return
+	if not DirAccess.dir_exists_absolute(source_root) \
+			or not FileUtils.is_path_within(source_path, source_root):
+		_set_status("File is outside its configured source: %s" % source_path, true)
+		return
+	var relative_path := _source_relative_path(source_path, source_root)
+	if relative_path.is_empty():
+		_set_status("Could not resolve the file's source-relative path", true)
+		return
+
+	var content_root := _cfg.get_game_profile().content_root
+	_mods = ModDiscovery.scan(_cfg.mods_dir, content_root)
+	_rebuild_mod_list()
+	if _mods.is_empty():
+		_set_status("No mods found — create a mod before cloning", true)
+		return
+	_show_clone_unique_mod_picker(source_path, source_root, relative_path)
+
+
+func _show_clone_unique_mod_picker(source_path: String, source_root: String,
+		relative_path: String) -> void:
+	var source_name := source_path.get_file().get_basename()
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "Clone Unique Asset"
+	dialog.ok_button_text = "Clone"
+	dialog.cancel_button_text = "Cancel"
+	dialog.min_size = Vector2i(580, 460)
+	AppTheme.apply_theme(dialog)
+	add_child(dialog)
+
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
+
+	var source_label := Label.new()
+	source_label.text = "Source file"
+	AppTheme.style_section(source_label)
+	content.add_child(source_label)
+
+	var relative_label := Label.new()
+	relative_label.text = relative_path
+	relative_label.tooltip_text = source_path
+	relative_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	content.add_child(relative_label)
+
+	var prompt := Label.new()
+	prompt.text = "Choose a target mod"
+	AppTheme.style_section(prompt)
+	content.add_child(prompt)
+
+	var mod_list := ItemList.new()
+	mod_list.custom_minimum_size = Vector2(0, 160)
+	mod_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mod_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mod_list.allow_reselect = true
+	for mod: ModInfo in _mods:
+		var index := mod_list.item_count
+		mod_list.add_item(mod.name)
+		mod_list.set_item_metadata(index, mod)
+		mod_list.set_item_tooltip(index, mod.path)
+	content.add_child(mod_list)
+
+	var name_prompt := Label.new()
+	name_prompt.text = "Clone name"
+	AppTheme.style_section(name_prompt)
+	content.add_child(name_prompt)
+
+	var name_edit := LineEdit.new()
+	name_edit.text = source_name
+	name_edit.select(0, source_name.length())
+	name_edit.tooltip_text = "Unreal object name: letters, digits, and underscore; cannot start with a digit"
+	content.add_child(name_edit)
+
+	var destination_label := AppTheme.make_status_label("", AppTheme.StatusKind.IDLE,
+		AppTheme.FONT_SMALL)
+	content.add_child(destination_label)
+	dialog.add_child(content)
+
+	var update_destination := func() -> void:
+		if mod_list.get_selected_items().is_empty():
+			return
+		var mod := mod_list.get_item_metadata(mod_list.get_selected_items()[0]) as ModInfo
+		if mod == null:
+			return
+		var clone_name := name_edit.text.strip_edges()
+		var valid_name := ModManagerPanel._valid_clone_name(clone_name, source_name)
+		var destination := ModManagerPanel._clone_destination_path(mod, relative_path, clone_name)
+		if destination.is_empty():
+			AppTheme.set_status_label(destination_label,
+				"Destination: —", AppTheme.StatusKind.ERROR)
+		elif not valid_name:
+			var reason := "invalid name" if clone_name.is_empty() \
+					else "must differ from the source name"
+			AppTheme.set_status_label(destination_label,
+				"Destination: %s (%s)" % [destination, reason],
+				AppTheme.StatusKind.ERROR)
+		elif FileAccess.file_exists(destination):
+			AppTheme.set_status_label(destination_label,
+				"Destination: %s (already exists)" % destination,
+				AppTheme.StatusKind.ERROR)
+		else:
+			AppTheme.set_status_label(destination_label,
+				"Destination: %s" % destination, AppTheme.StatusKind.IDLE)
+
+	var clone_selected := func() -> void:
+		if mod_list.get_selected_items().is_empty():
+			return
+		var mod := mod_list.get_item_metadata(mod_list.get_selected_items()[0]) as ModInfo
+		if mod == null:
+			return
+		var clone_name := name_edit.text.strip_edges()
+		if not ModManagerPanel._valid_clone_name(clone_name, source_name):
+			return
+		var destination := ModManagerPanel._clone_destination_path(mod, relative_path, clone_name)
+		if destination.is_empty() or FileAccess.file_exists(destination):
+			return
+		dialog.queue_free()
+		_perform_unique_clone(source_path, source_root, mod, destination)
+
+	mod_list.item_selected.connect(func(_index: int) -> void: update_destination.call())
+	mod_list.item_activated.connect(func(_index: int) -> void: clone_selected.call())
+	name_edit.text_changed.connect(func(_text: String) -> void: update_destination.call())
+	dialog.confirmed.connect(clone_selected)
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.popup_centered(Vector2i(580, 500))
+	mod_list.select(0)
+	update_destination.call()
+	name_edit.grab_focus.call_deferred()
+
+
+func _perform_unique_clone(source_path: String, source_root: String,
+		mod: ModInfo, destination_path: String) -> void:
+	var described := ModManifest.describe_unique_clone(source_path, destination_path, _cfg)
+	if not described.ok:
+		_set_status(described.message, true)
+		return
+	var source_package := str(described.value.get("source", "")).rsplit(".", true, 1)[0]
+	var target_package := str(described.value.get("target", "")).rsplit(".", true, 1)[0]
+	var source_asset := UAssetFile.load_file(source_path)
+	if source_asset == null:
+		_set_status("Could not load the source asset: %s" % source_path.get_file(), true)
+		return
+	var result := source_asset.save_clone_copy(
+			destination_path, true, source_package, target_package)
+	if not result.ok:
+		_set_status(result.message, true)
+		return
+	var manifest_result := ModManifest.record_unique_clone(described.value, _cfg)
+	if not manifest_result.ok:
+		_set_status("Cloned %s, but %s" % [destination_path.get_file(),
+				manifest_result.message], true)
+	else:
+		_set_status("Cloned %s as a unique asset in %s (%d names updated)" % [
+			destination_path.get_file(), mod.name,
+			int(result.metadata.get("renamed_name_entries", 0))])
+	_refresh_mods()
+	clone_created.emit(destination_path)
+
+
+static func _clone_destination_path(mod: ModInfo, relative_path: String,
+		clone_name: String) -> String:
+	if clone_name.is_empty():
+		return ""
+	return mod.path.path_join(relative_path.get_base_dir()).path_join(clone_name + ".uasset")
+
+
+static func _valid_clone_name(name: String, source_name: String) -> bool:
+	name = name.strip_edges()
+	if name.is_empty() or name == source_name:
+		return false
+	if not _is_ascii_letter_or_underscore(name.substr(0, 1)):
+		return false
+	for i in name.length():
+		var ch := name.substr(i, 1)
+		if not (_is_ascii_letter_or_underscore(ch) or _is_ascii_digit(ch)):
+			return false
+	return true
+
+
+static func _is_ascii_letter_or_underscore(ch: String) -> bool:
+	return ch == "_" \
+			or ch >= "A" and ch <= "Z" \
+			or ch >= "a" and ch <= "z"
+
+
+static func _is_ascii_digit(ch: String) -> bool:
+	return ch >= "0" and ch <= "9"
+
 
 func _on_add_files_pressed(mod: ModInfo, preferred_rel_dir: String = "") -> void:
 	var sources: Array = _cfg.sources.filter(

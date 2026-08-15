@@ -5,6 +5,7 @@ class_name BaseFileExplorerTab extends VBoxContainer
 
 signal open_asset_requested(path: String)
 signal add_to_mod_requested(path: String, source_root: String)
+signal clone_unique_requested(path: String, source_root: String)
 signal open_settings_requested
 signal status_changed(text: String, is_error: bool)
 
@@ -12,6 +13,7 @@ const ALL_SOURCES_ID := "__all_sources__"
 const LAZY_PLACEHOLDER := "__base_explorer_lazy__"
 const MAX_SEARCH_RESULTS := 2500
 const CONTEXT_ADD_TO_MOD := 1
+const CONTEXT_CLONE_UNIQUE := 2
 
 var _cfg: ModConfigManager
 var _background_jobs: BackgroundJobRunner
@@ -111,6 +113,7 @@ func _build_ui() -> void:
 
 	_context_menu = PopupMenu.new()
 	_context_menu.add_item("Add to Mod…", CONTEXT_ADD_TO_MOD)
+	_context_menu.add_item("Clone Unique to Mod…", CONTEXT_CLONE_UNIQUE)
 	_context_menu.id_pressed.connect(_on_context_menu_id_pressed)
 	AppTheme.apply_theme(_context_menu)
 	add_child(_context_menu)
@@ -355,15 +358,21 @@ func _on_item_mouse_selected(_position: Vector2, mouse_button_index: int) -> voi
 	if not metadata is Dictionary or str(metadata.get("type", "")) != "file":
 		return
 	_context_file = (metadata as Dictionary).duplicate(true)
+	var file_name := str(metadata.get("path", "")).get_file()
+	var file_is_asset := _is_editor_asset(str(metadata.get("path", "")))
 	_context_menu.set_item_text(
 		_context_menu.get_item_index(CONTEXT_ADD_TO_MOD),
-		"Add %s to Mod…" % str(metadata.get("path", "")).get_file())
+		"Add %s to Mod…" % file_name)
+	var clone_index := _context_menu.get_item_index(CONTEXT_CLONE_UNIQUE)
+	_context_menu.set_item_text(clone_index,
+		"Clone %s Unique to Mod…" % file_name)
+	_context_menu.set_item_disabled(clone_index, not file_is_asset)
 	var popup_position := Vector2i(_tree.get_global_mouse_position())
 	_context_menu.popup(Rect2i(popup_position, Vector2i.ZERO))
 
 
 func _on_context_menu_id_pressed(id: int) -> void:
-	if id != CONTEXT_ADD_TO_MOD or _context_file.is_empty():
+	if _context_file.is_empty():
 		return
 	var path := str(_context_file.get("path", ""))
 	var source_root := str(_context_file.get("source_path", ""))
@@ -371,7 +380,12 @@ func _on_context_menu_id_pressed(id: int) -> void:
 		_set_status("The selected file is not associated with a configured source.",
 			AppTheme.StatusKind.ERROR)
 		return
-	add_to_mod_requested.emit(path, source_root)
+	if id == CONTEXT_ADD_TO_MOD:
+		add_to_mod_requested.emit(path, source_root)
+	elif id == CONTEXT_CLONE_UNIQUE:
+		if not _is_editor_asset(path):
+			return
+		clone_unique_requested.emit(path, source_root)
 
 
 func _apply_search() -> void:

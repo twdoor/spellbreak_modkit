@@ -47,6 +47,7 @@ def main() -> None:
         operations = [
             {"source": "/Game/Items/Old.Old", "target": "/Game/New/LongName.LongName"},
             {"source": "/Game/Items/Old.Old", "target": "/Game/New/Other_6.Other_6"},
+            {"source": "/Game/Items/Old.Old", "target": "/Game/Older/Old_New.Old_New"},
         ]
         patcher.patch_registry_many(source, output, operations)
         data = output.read_bytes()
@@ -54,9 +55,13 @@ def main() -> None:
         names, _ = patcher.parse_names(data, offset)
         records, _ = patcher.parse_assets(data, names, offset)
         paths = {record.object_path for record in records}
-        assert len(records) == 3
+        assert len(records) == 4
         assert "/Game/New/LongName.LongName" in paths
         assert "/Game/New/Other_6.Other_6" in paths
+        # The target package contains the source asset name as a substring; it
+        # must not be rewritten again by the bare-asset pass.
+        assert "/Game/Older/Old_New.Old_New" in paths
+        assert "/Game/Older/Old_New_New.Old_New" not in paths
     print("PASS: Asset Registry patcher regression tests")
 
 
