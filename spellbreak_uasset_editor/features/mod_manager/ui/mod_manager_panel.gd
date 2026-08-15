@@ -846,7 +846,7 @@ func _show_clone_unique_mod_picker(source_path: String, source_root: String,
 	name_edit.grab_focus.call_deferred()
 
 
-func _perform_unique_clone(source_path: String, source_root: String,
+func _perform_unique_clone(source_path: String, _source_root: String,
 		mod: ModInfo, destination_path: String) -> void:
 	var described := ModManifest.describe_unique_clone(source_path, destination_path, _cfg)
 	if not described.ok:
@@ -882,14 +882,14 @@ static func _clone_destination_path(mod: ModInfo, relative_path: String,
 	return mod.path.path_join(relative_path.get_base_dir()).path_join(clone_name + ".uasset")
 
 
-static func _valid_clone_name(name: String, source_name: String) -> bool:
-	name = name.strip_edges()
-	if name.is_empty() or name == source_name:
+static func _valid_clone_name(clone_name: String, source_name: String) -> bool:
+	clone_name = clone_name.strip_edges()
+	if clone_name.is_empty() or clone_name == source_name:
 		return false
-	if not _is_ascii_letter_or_underscore(name.substr(0, 1)):
+	if not _is_ascii_letter_or_underscore(clone_name.substr(0, 1)):
 		return false
-	for i in name.length():
-		var ch := name.substr(i, 1)
+	for i in clone_name.length():
+		var ch := clone_name.substr(i, 1)
 		if not (_is_ascii_letter_or_underscore(ch) or _is_ascii_digit(ch)):
 			return false
 	return true

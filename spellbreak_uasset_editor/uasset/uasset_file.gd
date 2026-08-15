@@ -1178,30 +1178,30 @@ func _count_name_references() -> Dictionary:
 ## Used to guard NameMap deletions against raw-only references (data table
 ## rows, Name values, asset paths, ...) that the converter still needs.
 func _collect_raw_strings() -> Dictionary:
-	var set := {}
+	var strings := {}
 	for imp in imports:
-		_collect_raw_strings_into(imp.raw, set)
+		_collect_raw_strings_into(imp.raw, strings)
 	for expo in exports:
-		_collect_raw_strings_into(expo.raw, set)
-	return set
+		_collect_raw_strings_into(expo.raw, strings)
+	return strings
 
 
-static func _collect_raw_strings_into(value: Variant, set: Dictionary) -> void:
+static func _collect_raw_strings_into(value: Variant, strings: Dictionary) -> void:
 	if value is String:
-		set[value] = true
+		strings[value] = true
 	elif value is Dictionary:
 		var dictionary := value as Dictionary
 		for key in dictionary.keys():
 			if str(key) == "$type":
 				continue
-			_collect_raw_strings_into(dictionary[key], set)
+			_collect_raw_strings_into(dictionary[key], strings)
 	elif value is Array:
 		var array := value as Array
 		for child in array:
-			_collect_raw_strings_into(child, set)
+			_collect_raw_strings_into(child, strings)
 	elif value is PackedStringArray:
 		for s in value:
-			set[s] = true
+			strings[s] = true
 
 
 ## Get import by index (handles negative indices from export references)
