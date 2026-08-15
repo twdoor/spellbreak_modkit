@@ -294,6 +294,11 @@ func save_file(path: String = "") -> Error:
 
 	var data := _to_dict()
 	_fix_float_to_int(data)
+	# Ensure every name-like string (and its parsed FName base) exists in the
+	# NameMap so the converter never hits a "dummy FName" error.
+	if _ensure_all_fnames(data):
+		data = _to_dict()
+		_fix_float_to_int(data)
 	var json_string := JSON.stringify(data, "  ")
 	var validation_issues := validate_for_save()
 	if not validation_issues.is_empty():
@@ -352,8 +357,13 @@ func save_file(path: String = "") -> Error:
 				push_error("UAssetFile: Converter failed (exit %d): %s" % [exit_code, err_text])
 				return ERR_FILE_CANT_WRITE
 
-			# Add the missing name and rebuild the JSON for the next attempt
+			# Add the missing name and rebuild the JSON for the next attempt.
+			# The converter resolves "X_N" by looking up the parsed base "X" in
+			# the NameMap, so the full string alone never fixes a suffixed name.
 			ensure_name(missing)
+			var missing_base := _fname_split_base(missing)
+			if not missing_base.is_empty() and not has_name(missing_base):
+				ensure_name(missing_base)
 			var data2 := _to_dict()
 			_fix_float_to_int(data2)
 			json_string = JSON.stringify(data2, "  ")
@@ -879,6 +889,63 @@ static func _extract_dummy_fname(err_text: String) -> String:
 	if end < 0:
 		return ""
 	return err_text.substr(start, end - start)
+
+
+## Mirror UAssetAPI's FName.FromStringFragments: when a name ends in "_<digits>"
+## it represents FName(base, number) whose binary form points at the BASE string
+## in the NameMap. Returns the base ("" when no split applies).
+static func _fname_split_base(name: String) -> String:
+	if name.is_empty():
+		return ""
+	var last := name[name.length() - 1]
+	if last < "0" or last > "9":
+		return ""
+	var i := name.length() - 1
+	while i > 1 and name[i] >= "0" and name[i] <= "9":
+		i -= 1
+	if name[i] != "_":
+		return ""
+	var end_segment := name.substr(i + 1)
+	if end_segment.length() > 1 and end_segment[0] == "0":
+		return ""
+	return name.substr(0, i)
+
+
+## Ensure every string in the JSON data (except "$type" serializer names), plus
+## its parsed FName base, exists in the NameMap. Returns true if the map changed.
+func _ensure_all_fnames(data: Variant) -> bool:
+	var names: Array[String] = []
+	_collect_fname_strings(data, names)
+	var added := false
+	for name in names:
+		if not has_name(name):
+			ensure_name(name)
+			added = true
+		var base := _fname_split_base(name)
+		if not base.is_empty() and not has_name(base):
+			ensure_name(base)
+			added = true
+	return added
+
+
+func _collect_fname_strings(value: Variant, out: Array[String]) -> void:
+	if value is Dictionary:
+		for key: Variant in value:
+			if key == "$type":
+				continue
+			var child: Variant = value[key]
+			if child is String:
+				if not child.is_empty():
+					out.append(child)
+			elif child is Dictionary or child is Array:
+				_collect_fname_strings(child, out)
+	elif value is Array:
+		for child: Variant in value:
+			if child is String:
+				if not child.is_empty():
+					out.append(child)
+			elif child is Dictionary or child is Array:
+				_collect_fname_strings(child, out)
 
 
 ## Check if a name exists in the NameMap

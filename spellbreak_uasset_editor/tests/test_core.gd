@@ -82,6 +82,8 @@ func _run() -> void:
 	_test_clone_helpers()
 	_test_asset_reuse_copy()
 	_test_name_map_fname_sync()
+	_test_fname_split_base()
+	_test_dummy_fname_save_heuristics()
 	_test_uasset_save_validation()
 	_test_path_safety()
 	_test_process_arguments()
@@ -779,6 +781,73 @@ func _test_name_map_fname_sync() -> void:
 			and asset.name_map[insert_idx + 1] == "InsertMe2"
 			and asset.index_of_name(kept_name) == kept_idx,
 		"restore_removed_names restores the map and remaps references back")
+
+
+func _test_fname_split_base() -> void:
+	_expect(UAssetFile._fname_split_base("NewName_0") == "NewName",
+		"_fname_split_base splits a single-digit suffix")
+	_expect(UAssetFile._fname_split_base("NewName_1") == "NewName",
+		"_fname_split_base splits any numeric suffix")
+	_expect(UAssetFile._fname_split_base("A_B_10") == "A_B",
+		"_fname_split_base splits at the last underscore")
+	_expect(UAssetFile._fname_split_base("A_01") == "",
+		"_fname_split_base rejects leading-zero suffixes")
+	_expect(UAssetFile._fname_split_base("A_00") == "",
+		"_fname_split_base rejects all-zero multi-digit suffixes")
+	_expect(UAssetFile._fname_split_base("_0") == "",
+		"_fname_split_base needs a non-empty base")
+	_expect(UAssetFile._fname_split_base("NewName") == "",
+		"_fname_split_base leaves unsuffixed names alone")
+	_expect(UAssetFile._fname_split_base("Name_") == "",
+		"_fname_split_base leaves dangling underscores alone")
+	_expect(UAssetFile._fname_split_base("") == "",
+		"_fname_split_base handles empty names")
+	_expect(UAssetFile._fname_split_base(
+			"/Game/Blueprints/Effects/Potion/BP_Effect_Potion_Armor_Tier_0")
+			== "/Game/Blueprints/Effects/Potion/BP_Effect_Potion_Armor_Tier",
+		"_fname_split_base splits a full package path suffix")
+
+
+func _test_dummy_fname_save_heuristics() -> void:
+	var full := "/Game/Blueprints/Effects/Potion/BP_Effect_Potion_Armor_Tier_0"
+	var err_text := "Error: Attempt to serialize dummy FName '%s' - this name was never added to the NameMap." % full
+	_expect(UAssetFile._extract_dummy_fname(err_text) == full,
+		"_extract_dummy_fname parses the missing name from the converter error")
+	_expect(UAssetFile._extract_dummy_fname("Unrelated error text") == "",
+		"_extract_dummy_fname returns empty for unrelated errors")
+
+	var asset := UAssetFile.new()
+	asset.raw = {}
+	asset.file_path = "/tmp/fname_ensure.uasset"
+	asset.binary_path = asset.file_path
+	asset.name_map = PackedStringArray(["Existing"])
+	var data := {
+		"NameMap": ["Existing"],
+		"Exports": [{
+			"$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI",
+			"ObjectName": "Existing",
+			"Data": [{
+				"$type": "UAssetAPI.PropertyTypes.Objects.NamePropertyData, UAssetAPI",
+				"Name": "NewRef",
+				"Value": full,
+			}],
+		}],
+	}
+	_expect(asset._ensure_all_fnames(data),
+		"_ensure_all_fnames reports added names")
+	_expect(asset.has_name(full), "full suffixed name is ensured")
+	_expect(asset.has_name("/Game/Blueprints/Effects/Potion/BP_Effect_Potion_Armor_Tier"),
+		"parsed FName base is ensured (the converter looks up the base)")
+	_expect(asset.has_name("NewRef"), "property name is ensured")
+	_expect(not asset.has_name("UAssetAPI.ExportTypes.NormalExport, UAssetAPI")
+			and not asset.has_name("UAssetAPI.PropertyTypes.Objects.NamePropertyData, UAssetAPI"),
+		"$type serializer names are skipped")
+	_expect(not asset._ensure_all_fnames(data),
+		"_ensure_all_fnames is idempotent")
+	var map_before: Array = asset.name_map
+	asset._ensure_all_fnames(data)
+	_expect(asset.name_map.size() == map_before.size(),
+		"repeated ensure calls never grow the NameMap")
 
 
 func _test_swap_and_snapshot_restore() -> void:
