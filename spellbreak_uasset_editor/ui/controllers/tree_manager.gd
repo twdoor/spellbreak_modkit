@@ -76,7 +76,7 @@ func build_tree() -> void:
 					_add_lazy_placeholder(table_item, func() -> void:
 						for row_dict: Variant in (rows_raw as Array):
 							if row_dict is Dictionary:
-								var row := UAssetProperty.from_dict(row_dict)
+								var row := UAssetProperty.from_dict(row_dict, _asset)
 								var ri := _tree.create_item(table_item)
 								ri.set_text(0, row.prop_name)
 								ri.collapsed = true

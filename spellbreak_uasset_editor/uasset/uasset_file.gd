@@ -146,14 +146,14 @@ static func _from_dict(data: Dictionary, path: String) -> UAssetFile:
 		for i in imp_arr.size():
 			var imp_dict: Variant = imp_arr[i]
 			if imp_dict is Dictionary:
-				asset.imports.append(UAssetImport.from_dict(imp_dict, -(i + 1)))
+				asset.imports.append(UAssetImport.from_dict(imp_dict, -(i + 1), asset))
 	
 	# Exports
 	var exp_arr = data.get("Exports")
 	if exp_arr is Array:
 		for exp_dict in exp_arr:
 			if exp_dict is Dictionary:
-				asset.exports.append(UAssetExport.from_dict(exp_dict))
+				asset.exports.append(UAssetExport.from_dict(exp_dict, asset))
 	
 	asset._ensure_default_properties()
 	return asset
@@ -207,7 +207,7 @@ func _ensure_default_properties() -> void:
 				continue  # already present
 			# Inject into both the parsed properties and the raw data
 			ensure_name(prop_name)
-			var prop := UAssetProperty.from_dict(default_raw)
+			var prop := UAssetProperty.from_dict(default_raw, self)
 			expo.properties.append(prop)
 			var data_arr: Variant = expo.raw.get("Data")
 			if data_arr is Array:
@@ -625,10 +625,10 @@ func restore_package_tables(snapshot: Dictionary) -> void:
 	exports.clear()
 	var import_data: Array = snapshot.get("imports", [])
 	for i in import_data.size():
-		imports.append(UAssetImport.from_dict((import_data[i] as Dictionary).duplicate(true), -(i + 1)))
+		imports.append(UAssetImport.from_dict((import_data[i] as Dictionary).duplicate(true), -(i + 1), self))
 	var export_data: Array = snapshot.get("exports", [])
 	for raw_export in export_data:
-		exports.append(UAssetExport.from_dict((raw_export as Dictionary).duplicate(true)))
+		exports.append(UAssetExport.from_dict((raw_export as Dictionary).duplicate(true), self))
 
 
 ## Insert exports while preserving every positive package index reference.
@@ -895,6 +895,248 @@ func ensure_name(name: String) -> int:
 	return name_map.size() - 1
 
 
+## Resolve a NameMap index back to its string. Returns "" when out of range.
+func resolve_name(index: int) -> String:
+	if index >= 0 and index < name_map.size():
+		return name_map[index]
+	return ""
+
+
+## Find a name's index in the NameMap, optionally appending it when missing.
+## Returns -1 when not found and create is false (or the name is empty).
+func index_of_name(name: String, create: bool = true) -> int:
+	var idx := name_map.find(name)
+	if idx >= 0:
+		return idx
+	if create and not name.is_empty():
+		name_map.append(name)
+		return name_map.size() - 1
+	return -1
+
+
+## Rename a NameMap entry and propagate the exact whole-string replacement
+## through every import/export raw dict so serialized JSON stays consistent.
+## References in the object model are index-backed and follow automatically.
+## Returns stats: {"renames": N}. Exact-match only — safe for substring
+## collisions like GE_Stone -> GE_StoneSkin.
+func rename_name(old_name: String, new_name: String) -> Dictionary:
+	var stats := {"renames": 0}
+	if old_name.is_empty() or old_name == new_name:
+		return stats
+	for i in name_map.size():
+		if name_map[i] == old_name:
+			name_map[i] = new_name
+			stats["renames"] += 1
+	for imp in imports:
+		stats["renames"] += _rename_raw_strings(imp.raw, old_name, new_name)
+	for expo in exports:
+		stats["renames"] += _rename_raw_strings(expo.raw, old_name, new_name)
+	return stats
+
+
+static func _rename_raw_strings(value: Variant, old_name: String,
+		new_name: String) -> int:
+	if value is String:
+		return 1 if value == old_name else 0
+	var count := 0
+	if value is Dictionary:
+		var dictionary := value as Dictionary
+		for key in dictionary.keys():
+			# These strings identify serializer classes, not names in the package.
+			if str(key) == "$type":
+				continue
+			var child: Variant = dictionary[key]
+			if child is String:
+				if child == old_name:
+					dictionary[key] = new_name
+					count += 1
+			elif child is Dictionary or child is Array or child is PackedStringArray:
+				count += _rename_raw_strings(child, old_name, new_name)
+		return count
+	if value is Array:
+		var array := value as Array
+		for i in array.size():
+			var child: Variant = array[i]
+			if child is String:
+				if child == old_name:
+					array[i] = new_name
+					count += 1
+			elif child is Dictionary or child is Array or child is PackedStringArray:
+				count += _rename_raw_strings(child, old_name, new_name)
+		return count
+	if value is PackedStringArray:
+		var count_psa := 0
+		var strings := value as PackedStringArray
+		for i in strings.size():
+			if strings[i] == old_name:
+				strings[i] = new_name
+				count_psa += 1
+		return count_psa
+	return 0
+
+
+# ── NameMap index maintenance ─────────────────────────────────────────────────
+## NameMap entries are append-only and index-backed, so inserting or removing
+## entries shifts every index-based name reference. These helpers remap the
+## object model in lockstep so the map and the references never diverge.
+
+static func _normalized_name_indices(indices: Array, map_size: int) -> Array[int]:
+	var unique: Dictionary = {}
+	for raw_index in indices:
+		var index := int(raw_index)
+		if index >= 0 and index < map_size:
+			unique[index] = true
+	var result: Array[int] = []
+	for index in unique:
+		result.append(index)
+	result.sort()
+	return result
+
+
+## Insert names into the NameMap at a position, shifting index references.
+## Names already present (or empty) are skipped. Returns the inserted names.
+func insert_names(at: int, names: Array) -> Array:
+	var to_insert: Array = []
+	var seen := {}
+	for raw_name in names:
+		var s := str(raw_name)
+		if s.is_empty() or s in name_map or seen.has(s):
+			continue
+		seen[s] = true
+		to_insert.append(s)
+	if to_insert.is_empty():
+		return []
+	var insert_at := clampi(at, 0, name_map.size())
+	var count := to_insert.size()
+	var forward := func(value: int) -> int:
+		return value + count if value >= insert_at else value
+	_remap_name_indices(forward)
+	var new_map: Array = []
+	var inserted := false
+	for i in name_map.size():
+		if i == insert_at:
+			for n in to_insert:
+				new_map.append(n)
+			inserted = true
+		new_map.append(name_map[i])
+	if not inserted:
+		for n in to_insert:
+			new_map.append(n)
+	name_map = PackedStringArray(new_map)
+	return to_insert
+
+
+## Plan which NameMap entries may be removed: an entry is removable only when
+## no object-model reference (or raw serialized string) points at it.
+## Returns {"deleted": [indices], "kept": [indices], "removed": [names]}.
+func plan_name_removal(indices: Array) -> Dictionary:
+	var sorted := _normalized_name_indices(indices, name_map.size())
+	if sorted.is_empty():
+		return {"deleted": [], "kept": [], "removed": []}
+	var counts := _count_name_references()
+	var raw_strings := _collect_raw_strings()
+	var deleted: Array[int] = []
+	var kept: Array[int] = []
+	for idx in sorted:
+		if counts.get(idx, 0) > 0 or raw_strings.has(name_map[idx]):
+			kept.append(idx)
+		else:
+			deleted.append(idx)
+	return {
+		"deleted": deleted,
+		"kept": kept,
+		"removed": deleted.map(func(d: int) -> String: return name_map[d]),
+	}
+
+
+## Remove unreferenced NameMap entries, remapping every index reference.
+## Entries still referenced anywhere are kept. Returns the removal plan.
+func remove_names(indices: Array) -> Dictionary:
+	var plan := plan_name_removal(indices)
+	var deleted: Array = plan["deleted"]
+	if deleted.is_empty():
+		return plan
+	var forward := func(value: int) -> int:
+		var shift := 0
+		for d in deleted:
+			if d < value:
+				shift += 1
+		return value - shift
+	_remap_name_indices(forward)
+	var new_map: Array = []
+	for i in name_map.size():
+		if i not in deleted:
+			new_map.append(name_map[i])
+	name_map = PackedStringArray(new_map)
+	return plan
+
+
+## Inverse of remove_names: reinsert previously removed entries at their old
+## positions and remap every index reference back into the old coordinate space.
+func restore_removed_names(removed: Array, indices: Array) -> void:
+	if removed.size() != indices.size():
+		return
+	for i in removed.size():
+		name_map.insert(int(indices[i]), str(removed[i]))
+	var inverse := func(value: int) -> int:
+		var shift := 0
+		for d in indices:
+			if int(d) <= value:
+				shift += 1
+		return value + shift
+	_remap_name_indices(inverse)
+
+
+func _remap_name_indices(mapper: Callable) -> void:
+	for imp in imports:
+		imp.remap_name_indices(mapper)
+	for expo in exports:
+		expo.remap_name_indices(mapper)
+
+
+func _count_name_references() -> Dictionary:
+	var counts := {}
+	for imp in imports:
+		for idx in imp.get_name_indices():
+			if idx >= 0:
+				counts[idx] = int(counts.get(idx, 0)) + 1
+	for expo in exports:
+		for idx in expo.get_name_indices():
+			if idx >= 0:
+				counts[idx] = int(counts.get(idx, 0)) + 1
+	return counts
+
+
+## Collect every distinct string currently present in import/export raw dicts.
+## Used to guard NameMap deletions against raw-only references (data table
+## rows, Name values, asset paths, ...) that the converter still needs.
+func _collect_raw_strings() -> Dictionary:
+	var set := {}
+	for imp in imports:
+		_collect_raw_strings_into(imp.raw, set)
+	for expo in exports:
+		_collect_raw_strings_into(expo.raw, set)
+	return set
+
+
+static func _collect_raw_strings_into(value: Variant, set: Dictionary) -> void:
+	if value is String:
+		set[value] = true
+	elif value is Dictionary:
+		var dictionary := value as Dictionary
+		for key in dictionary.keys():
+			if str(key) == "$type":
+				continue
+			_collect_raw_strings_into(dictionary[key], set)
+	elif value is Array:
+		var array := value as Array
+		for child in array:
+			_collect_raw_strings_into(child, set)
+	elif value is PackedStringArray:
+		for s in value:
+			set[s] = true
+
+
 ## Get import by index (handles negative indices from export references)
 func get_import(index: int) -> UAssetImport:
 	# UAsset uses negative indices for imports: -1 = imports[0], -2 = imports[1], etc
@@ -926,6 +1168,7 @@ func ensure_import(object_name: String, outer_object_name: String,
 		return 0
 
 	var imp := UAssetImport.new()
+	imp.set_asset(self)
 	imp.object_name = object_name
 	imp.outer_index = outer_idx
 	imp.class_package = imp_class_package
@@ -1025,7 +1268,7 @@ func add_instanced_subobject(
 		"Data": [],
 	}
 
-	var sub_exp := UAssetExport.from_dict(sub_raw)
+	var sub_exp := UAssetExport.from_dict(sub_raw, self)
 	sub_exp.properties = initial_props
 	# Sync raw Data so to_dict() is correct
 	var data_arr: Array = []
@@ -1058,7 +1301,7 @@ func add_instanced_subobject(
 			"IsZero": false,
 			"Value": new_1based,
 		}
-		var new_item := UAssetProperty.from_dict(new_item_raw)
+		var new_item := UAssetProperty.from_dict(new_item_raw, self)
 
 		var arr_raw := {
 			"$type": "UAssetAPI.PropertyTypes.Objects.ArrayPropertyData, UAssetAPI",
@@ -1071,7 +1314,7 @@ func add_instanced_subobject(
 			"IsZero": false,
 			"Value": [new_item_raw],
 		}
-		arr_prop = UAssetProperty.from_dict(arr_raw)
+		arr_prop = UAssetProperty.from_dict(arr_raw, self)
 		arr_prop.children = [new_item]
 		cdo.properties.append(arr_prop)
 	else:
@@ -1087,7 +1330,7 @@ func add_instanced_subobject(
 			"IsZero": false,
 			"Value": new_1based,
 		}
-		arr_prop.children.append(UAssetProperty.from_dict(new_item_raw))
+		arr_prop.children.append(UAssetProperty.from_dict(new_item_raw, self))
 
 	# ── 5. Update class export serialization dependencies ──────────────────
 	if exports.size() >= 1:

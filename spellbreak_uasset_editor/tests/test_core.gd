@@ -81,6 +81,7 @@ func _run() -> void:
 	_test_mod_preflight()
 	_test_clone_helpers()
 	_test_asset_reuse_copy()
+	_test_name_map_fname_sync()
 	_test_uasset_save_validation()
 	_test_path_safety()
 	_test_process_arguments()
@@ -612,13 +613,12 @@ func _test_asset_reuse_copy() -> void:
 	var copy := result.value as UAssetFile
 	_expect(result.ok and copy != null,
 		"asset reuse prepares an independent in-memory package")
-	_expect(copy.name_map == PackedStringArray([
-		"GE_StoneSkin",
-		"GE_StoneSkin_C",
-		"Default__GE_StoneSkin_C",
-		"/Game/Cloned/GE_StoneSkin",
-		"UnrelatedName",
-	]), "asset reuse renames base, generated-class, default-object, and path names")
+	_expect(copy.name_map.has("GE_StoneSkin")
+			and copy.name_map.has("GE_StoneSkin_C")
+			and copy.name_map.has("Default__GE_StoneSkin_C")
+			and copy.name_map.has("/Game/Cloned/GE_StoneSkin")
+			and copy.name_map.has("UnrelatedName"),
+		"asset reuse renames base, generated-class, default-object, and path names")
 	_expect(copy.exports[0].object_name == "GE_StoneSkin_C"
 			and copy.imports[0].package_name == "/Game/Cloned/GE_StoneSkin"
 			and copy.raw["Custom"]["AssetPath"]
@@ -641,6 +641,144 @@ func _test_asset_reuse_copy() -> void:
 				== "/Game/Cloned/GE_ToughSkin.GE_ToughSkin_C"
 			and overlap_copy.name_map.has("/Game/Cloned/GE_ToughSkin"),
 		"clone with a destination name containing the source name is not corrupted")
+
+
+func _test_name_map_fname_sync() -> void:
+	var asset := UAssetFile.new()
+	asset.raw = {}
+	asset.file_path = "/tmp/fname_sync.uasset"
+	asset.binary_path = asset.file_path
+	asset.name_map = PackedStringArray(["OldName", "Unrelated", "OldName_2"])
+
+	var expo := UAssetExport.from_dict({
+		"$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI",
+		"ObjectName": "OldName",
+		"OuterIndex": 0, "ClassIndex": 0, "SuperIndex": 0, "TemplateIndex": 0,
+		"SerialSize": 0, "SerialOffset": 0,
+		"CreateBeforeCreateDependencies": [],
+		"CreateBeforeSerializationDependencies": [],
+		"SerializationBeforeCreateDependencies": [],
+		"SerializationBeforeSerializationDependencies": [],
+		"Data": [{
+			"$type": "UAssetAPI.PropertyTypes.Objects.StrPropertyData, UAssetAPI",
+			"Name": "OldName",
+			"ArrayIndex": 0, "IsZero": false,
+			"Value": "OldNameSkin",
+		}],
+	}, asset)
+	var imp := UAssetImport.from_dict({
+		"$type": "UAssetAPI.Import, UAssetAPI",
+		"ObjectName": "OldName",
+		"ClassName": "Class",
+		"ClassPackage": "/Script/CoreUObject",
+		"PackageName": null,
+		"OuterIndex": 0,
+		"bImportOptional": false,
+	}, 0, asset)
+	asset.exports = [expo]
+	asset.imports = [imp]
+	_expect(expo.object_name == "OldName" and imp.object_name == "OldName"
+			and expo.properties[0].prop_name == "OldName",
+		"asset-backed objects resolve names from the NameMap")
+
+	var stats := asset.rename_name("OldName", "NewName")
+	_expect(stats["renames"] >= 4, "rename_name reports NameMap and raw replacements")
+	_expect(asset.name_map[0] == "NewName", "rename updates the NameMap entry")
+	_expect(expo.object_name == "NewName", "export ObjectName follows the renamed map entry")
+	_expect(imp.object_name == "NewName", "import ObjectName follows the renamed map entry")
+	_expect(expo.properties[0].prop_name == "NewName",
+		"property name follows the renamed map entry")
+	_expect(expo.to_dict()["ObjectName"] == "NewName"
+			and expo.to_dict()["Data"][0]["Name"] == "NewName",
+		"serialized JSON emits the renamed names")
+	_expect(expo.raw["ObjectName"] == "NewName"
+			and expo.raw["Data"][0]["Name"] == "NewName",
+		"raw dict strings are rewritten so saved JSON stays consistent")
+	_expect(asset.name_map[2] == "OldName_2"
+			and expo.properties[0].value == "OldNameSkin",
+		"exact-match rename leaves substring-containing names untouched")
+
+	asset.rename_name("NewName", "OldName")
+	_expect(expo.object_name == "OldName" and expo.to_dict()["ObjectName"] == "OldName",
+		"rename is invertible")
+
+	# Reverse sync: assigning an object name ensures it in the NameMap.
+	expo.object_name = "BrandNew"
+	_expect(asset.has_name("BrandNew") and expo.to_dict()["ObjectName"] == "BrandNew",
+		"object name assignment syncs the NameMap")
+	imp.class_name_str = "NewClass"
+	_expect(asset.has_name("NewClass") and imp.to_dict()["ClassName"] == "NewClass",
+		"import class name assignment syncs the NameMap")
+
+	# Data table row names live only in raw dicts — rename rewrites them too.
+	expo.raw["Table"] = {"Data": [{
+		"$type": "UAssetAPI.PropertyTypes.Objects.IntPropertyData, UAssetAPI",
+		"Name": "RowOld",
+		"ArrayIndex": 0, "IsZero": false,
+		"Value": 5,
+	}]}
+	asset.rename_name("RowOld", "RowNew")
+	_expect(expo.raw["Table"]["Data"][0]["Name"] == "RowNew",
+		"rename propagates into data table row raw names")
+
+	# Detached objects keep working without an asset (fallback strings).
+	var detached := UAssetExport.from_dict({
+		"$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI",
+		"ObjectName": "Loose",
+		"OuterIndex": 0, "ClassIndex": 0, "SuperIndex": 0, "TemplateIndex": 0,
+		"SerialSize": 0, "SerialOffset": 0,
+		"CreateBeforeCreateDependencies": [],
+		"CreateBeforeSerializationDependencies": [],
+		"SerializationBeforeCreateDependencies": [],
+		"SerializationBeforeSerializationDependencies": [],
+		"Data": [],
+	})
+	_expect(detached.object_name == "Loose"
+			and detached.to_dict()["ObjectName"] == "Loose",
+		"asset-less exports keep plain string names")
+
+	# Attaching an asset adopts existing strings into its NameMap.
+	detached.set_asset(asset)
+	_expect(detached.object_name == "Loose" and asset.has_name("Loose"),
+		"set_asset adopts existing names into the NameMap")
+	_expect(asset.index_of_name("Loose", false) == asset.index_of_name("Loose"),
+		"index_of_name finds existing entries without appending")
+	_expect(asset.index_of_name("DoesNotExist", false) == -1,
+		"index_of_name reports missing names without creating them")
+
+	# Inserting map entries shifts index references in lockstep.
+	var before_insert := expo.object_name
+	var insert_idx := asset.index_of_name("Unrelated")
+	asset.insert_names(insert_idx, ["InsertMe", "InsertMe", "InsertMe2"])
+	_expect(asset.name_map[insert_idx] == "InsertMe"
+			and asset.name_map[insert_idx + 1] == "InsertMe2",
+		"insert_names skips duplicates and inserts in order")
+	_expect(expo.object_name == before_insert,
+		"inserting map entries keeps resolved names stable")
+	_expect(asset.index_of_name(before_insert) != asset.index_of_name("InsertMe"),
+		"inserted entries do not collide with existing references")
+
+	# Deleting unreferenced entries remaps indices; referenced ones are kept.
+	var kept_name := expo.object_name
+	var kept_idx := asset.index_of_name(kept_name)
+	var plan := asset.plan_name_removal([kept_idx, insert_idx, insert_idx + 1])
+	_expect(kept_idx in plan["kept"], "referenced map entries are kept by deletion")
+	_expect(insert_idx in plan["deleted"], "unreferenced map entries are deleted")
+	var removed_names: Array = plan["removed"]
+	asset.remove_names([kept_idx, insert_idx, insert_idx + 1])
+	_expect(not asset.has_name("InsertMe") and not asset.has_name("InsertMe2"),
+		"remove_names drops unreferenced entries")
+	_expect(asset.has_name(kept_name) and expo.object_name == kept_name,
+		"remove_names keeps referenced entries and their references intact")
+	var after_remove_idx := asset.index_of_name(kept_name)
+	_expect(after_remove_idx == kept_idx - 2,
+		"remove_names remaps surviving indices past the deleted positions")
+
+	asset.restore_removed_names(removed_names, plan["deleted"])
+	_expect(asset.name_map[insert_idx] == "InsertMe"
+			and asset.name_map[insert_idx + 1] == "InsertMe2"
+			and asset.index_of_name(kept_name) == kept_idx,
+		"restore_removed_names restores the map and remaps references back")
 
 
 func _test_swap_and_snapshot_restore() -> void:

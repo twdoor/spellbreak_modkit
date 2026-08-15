@@ -49,8 +49,9 @@ func _build_name_row(index: int) -> void:
 			line.text = old_name
 			return
 		_ctx.execute("Rename name map entry",
-			func() -> void: asset.name_map[index] = new_name,
-			func() -> void: asset.name_map[index] = old_name)
+			func() -> void: asset.rename_name(old_name, new_name),
+			func() -> void: asset.rename_name(new_name, old_name))
+		_ctx.rebuild_tree.call()
 	line.text_submitted.connect(func(_text: String) -> void: commit.call())
 	line.focus_exited.connect(commit)
 	row.add_child(line)

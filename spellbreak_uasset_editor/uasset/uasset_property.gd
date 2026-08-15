@@ -7,8 +7,7 @@ extends RefCounted
 var raw: Dictionary
 
 ## Common fields
-var prop_name: String
-var prop_type: String  # Short type: "Int", "Text", "Enum", "Struct", "Array", etc.
+var prop_type: String  # Short type: "Int", "Float", "Bool", "Name", "Str", "Enum", "Struct", "Array", etc.
 var prop_type_full: String  # Full $type string
 var array_index: int = 0
 var is_zero: bool = false
@@ -40,10 +39,70 @@ var name_space: String = ""  # TextProperty
 var culture_invariant: String = ""  # TextProperty (HistoryType = -1)
 var source_string: String = ""      # TextProperty (HistoryType = 0, localized base)
 
+## Owning asset (weak) — resolves the index-backed prop_name against the NameMap.
+var _asset_weak: WeakRef
+var _prop_name_index: int = -1
+var _prop_name_fallback: String = ""
 
-static func from_dict(d: Dictionary) -> UAssetProperty:
+
+## PropName — NameMap-backed. Assigning syncs the owning asset's NameMap
+## and keeps the raw dict's "Name" in sync when present.
+var prop_name: String:
+	get:
+		var asset := _get_asset()
+		return asset.resolve_name(_prop_name_index) if asset else _prop_name_fallback
+	set(v):
+		var asset := _get_asset()
+		if asset:
+			_prop_name_index = asset.index_of_name(v)
+		else:
+			_prop_name_fallback = v
+		if raw.has("Name"):
+			raw["Name"] = v
+
+
+## Attach an owning asset. Existing fallback strings are adopted into its
+## NameMap, making this property's prop_name index-backed from now on.
+func set_asset(asset: UAssetFile) -> void:
+	if _asset_weak and _asset_weak.get_ref() == asset:
+		return  # already linked
+	_asset_weak = weakref(asset)
+	var name := _prop_name_fallback
+	_prop_name_index = -1
+	if not name.is_empty():
+		prop_name = name
+	for child in children:
+		child.set_asset(asset)
+
+
+func _get_asset() -> UAssetFile:
+	if _asset_weak:
+		var ref = _asset_weak.get_ref()
+		return ref as UAssetFile
+	return null
+
+
+## All NameMap indices this property references (for reference counting).
+func get_name_indices() -> Array:
+	var indices: Array = [_prop_name_index]
+	for child in children:
+		indices.append_array(child.get_name_indices())
+	return indices
+
+
+## Remap every NameMap index through a mapper (used when entries are inserted
+## or removed). Fallback-backed objects keep -1 indices unchanged.
+func remap_name_indices(mapper: Callable) -> void:
+	_prop_name_index = mapper.call(_prop_name_index)
+	for child in children:
+		child.remap_name_indices(mapper)
+
+
+static func from_dict(d: Dictionary, asset: UAssetFile = null) -> UAssetProperty:
 	var p := UAssetProperty.new()
 	p.raw = d
+	if asset:
+		p.set_asset(asset)
 	p.prop_name = str(d.get("Name", ""))
 	p.array_index = d.get("ArrayIndex", 0) if d.get("ArrayIndex") != null else 0
 	p.is_zero = d.get("IsZero", false) if d.get("IsZero") != null else false
@@ -84,7 +143,7 @@ static func from_dict(d: Dictionary) -> UAssetProperty:
 			if val is Array:
 				for child_dict in val:
 					if child_dict is Dictionary:
-						p.children.append(UAssetProperty.from_dict(child_dict))
+						p.children.append(UAssetProperty.from_dict(child_dict, asset))
 				p.value = null  # Children hold the data
 			else:
 				p.value = val
@@ -95,10 +154,10 @@ static func from_dict(d: Dictionary) -> UAssetProperty:
 			if val is Array:
 				for child_dict in val:
 					if child_dict is Dictionary and child_dict.has("$type"):
-						p.children.append(UAssetProperty.from_dict(child_dict))
+						p.children.append(UAssetProperty.from_dict(child_dict, asset))
 					elif child_dict is Dictionary:
 						# Simple dict element
-						p.children.append(_make_raw_child(child_dict))
+						p.children.append(_make_raw_child(child_dict, asset))
 					else:
 						# Primitive array element
 						var cp := UAssetProperty.new()
@@ -128,9 +187,10 @@ func capture_state() -> Dictionary:
 
 
 func restore_state(state: Dictionary) -> void:
-	var restored := UAssetProperty.from_dict(state.duplicate(true))
+	var restored := UAssetProperty.from_dict(state.duplicate(true), _get_asset())
 	raw = restored.raw
-	prop_name = restored.prop_name
+	_prop_name_index = restored._prop_name_index
+	_prop_name_fallback = restored._prop_name_fallback
 	prop_type = restored.prop_type
 	prop_type_full = restored.prop_type_full
 	array_index = restored.array_index
@@ -160,6 +220,11 @@ func set_value(new_value: Variant) -> void:
 ## Merges edits back into the original raw dict for round-trip fidelity.
 func to_dict() -> Dictionary:
 	var d := raw.duplicate(true)
+	
+	# PropName is NameMap-backed — always emit the resolved string so the
+	# serialized JSON mirrors the current NameMap, even after a rename.
+	if d.has("Name"):
+		d["Name"] = prop_name
 	
 	match prop_type:
 		"Int":
@@ -259,9 +324,11 @@ static func _extract_short_type(full_type: String) -> String:
 	return class_name_part.replace("PropertyData", "")
 
 
-static func _make_raw_child(d: Dictionary) -> UAssetProperty:
+static func _make_raw_child(d: Dictionary, asset: UAssetFile = null) -> UAssetProperty:
 	var p := UAssetProperty.new()
 	p.raw = d
+	if asset:
+		p.set_asset(asset)
 	p.prop_name = d.get("Name", d.get("ObjectName", ""))
 	p.prop_type = "Raw"
 	p.value = d

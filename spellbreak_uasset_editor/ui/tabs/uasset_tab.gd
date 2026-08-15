@@ -351,18 +351,22 @@ func delete_selection() -> void:
 		_show_detail(go_back_to if go_back_to != null else &"exports")
 		return
 
-	# Multi-delete name map entries (sort descending so indices stay valid)
+	# Multi-delete name map entries (index-backed: removal remaps references,
+	# and entries still referenced anywhere in the file are kept)
 	if sel.size() >= 1 and sel[0] is int:
-		var old_names := tab_asset.name_map.duplicate()
-		var new_names := old_names.duplicate()
 		var sorted_idx := sel.duplicate()
-		sorted_idx.sort_custom(func(a, b): return a > b)
-		for i in sorted_idx:
-			new_names.remove_at(i)
+		sorted_idx.sort()
+		var plan := tab_asset.plan_name_removal(sorted_idx)
+		var deleted: Array = plan["deleted"]
+		var removed: Array = plan["removed"]
+		if deleted.is_empty():
+			_current_data = null
+			_detail_stack.clear(); _show_detail(&"namemap")
+			return
 		_document.execute(AssetEditCommand.new(
 			"Delete names",
-			func() -> void: tab_asset.name_map = new_names.duplicate(),
-			func() -> void: tab_asset.name_map = old_names.duplicate()))
+			func() -> void: tab_asset.remove_names(deleted),
+			func() -> void: tab_asset.restore_removed_names(removed, deleted)))
 		_current_data = null
 		_detail_stack.clear(); _show_detail(&"namemap")
 		return

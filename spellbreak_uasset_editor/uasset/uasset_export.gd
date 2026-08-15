@@ -6,7 +6,6 @@ extends RefCounted
 var raw: Dictionary
 
 ## Metadata
-var object_name: String
 var outer_index: int = 0
 var class_index: int = 0
 var super_index: int = 0
@@ -20,8 +19,66 @@ var export_type: String  # "NormalExport", "RawExport", etc.
 ## Properties (the editable data)
 var properties: Array[UAssetProperty] = []
 
+## Owning asset (weak) — resolves the index-backed ObjectName against the NameMap.
+var _asset_weak: WeakRef
+var _object_name_index: int = -1
+var _object_name_fallback: String = ""
 
-static func from_dict(d: Dictionary) -> UAssetExport:
+
+## ObjectName — NameMap-backed. Assigning syncs the owning asset's NameMap
+## and keeps the raw dict's "ObjectName" in sync when present.
+var object_name: String:
+	get:
+		var asset := _get_asset()
+		return asset.resolve_name(_object_name_index) if asset else _object_name_fallback
+	set(v):
+		var asset := _get_asset()
+		if asset:
+			_object_name_index = asset.index_of_name(v)
+		else:
+			_object_name_fallback = v
+		if raw.has("ObjectName"):
+			raw["ObjectName"] = v
+
+
+## Attach an owning asset. Existing fallback strings are adopted into its
+## NameMap, making this export's ObjectName index-backed from now on.
+func set_asset(asset: UAssetFile) -> void:
+	if _asset_weak and _asset_weak.get_ref() == asset:
+		return  # already linked
+	_asset_weak = weakref(asset)
+	var obj := _object_name_fallback
+	_object_name_index = -1
+	if not obj.is_empty():
+		object_name = obj
+	for prop in properties:
+		prop.set_asset(asset)
+
+
+func _get_asset() -> UAssetFile:
+	if _asset_weak:
+		var ref = _asset_weak.get_ref()
+		return ref as UAssetFile
+	return null
+
+
+## All NameMap indices this export references (for reference counting).
+func get_name_indices() -> Array:
+	var indices: Array = [_object_name_index]
+	for prop in properties:
+		indices.append_array(prop.get_name_indices())
+	return indices
+
+
+## Remap every NameMap index through a mapper (used when entries are inserted
+## or removed). Fallback-backed objects keep -1 indices unchanged.
+func remap_name_indices(mapper: Callable) -> void:
+	_object_name_index = mapper.call(_object_name_index)
+	for prop in properties:
+		prop.remap_name_indices(mapper)
+
+
+static func from_dict(d: Dictionary, asset: UAssetFile = null) -> UAssetExport:
 	var expo := UAssetExport.new()
 	expo.raw = d
 	
@@ -29,6 +86,9 @@ static func from_dict(d: Dictionary) -> UAssetExport:
 	var full_type: String = d.get("$type", "")
 	var type_parts := full_type.get_slice(",", 0).split(".")
 	expo.export_type = type_parts[type_parts.size() - 1] if not type_parts.is_empty() else ""
+	
+	if asset:
+		expo.set_asset(asset)
 	
 	# Metadata
 	expo.object_name = str(d.get("ObjectName", ""))
@@ -46,7 +106,7 @@ static func from_dict(d: Dictionary) -> UAssetExport:
 	if data_arr is Array:
 		for prop_dict in data_arr:
 			if prop_dict is Dictionary:
-				expo.properties.append(UAssetProperty.from_dict(prop_dict))
+				expo.properties.append(UAssetProperty.from_dict(prop_dict, asset))
 	
 	return expo
 

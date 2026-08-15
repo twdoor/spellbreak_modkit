@@ -119,7 +119,7 @@ static func paste(context: AssetEditorContext, current_data: Variant,
 
 			var added: Array = []
 			for raw in raws:
-				added.append(UAssetExport.from_dict(raw))
+				added.append(UAssetExport.from_dict(raw, asset))
 			asset.insert_exports(insert_at, added)
 			var final_export_map := _final_copied_export_map(source_indices,
 					copied_export_sentinels, insert_at)
@@ -160,7 +160,7 @@ static func paste(context: AssetEditorContext, current_data: Variant,
 
 			var added: Array = []
 			for raw in raws:
-				added.append(UAssetImport.from_dict(raw, 0))
+				added.append(UAssetImport.from_dict(raw, 0, asset))
 			asset.insert_imports(insert_at, added)
 			var final_import_map := _final_copied_import_map(source_indices,
 					copied_import_sentinels, insert_at)
@@ -176,8 +176,6 @@ static func paste(context: AssetEditorContext, current_data: Variant,
 			context.show_detail.call(&"importmap")
 
 		"name", "name_array":
-			var old_names := asset.name_map.duplicate()
-			var new_names := old_names.duplicate()
 			var names: Array = []
 			if _clipboard["type"] == "name":
 				names.append(_clipboard["value"])
@@ -188,18 +186,15 @@ static func paste(context: AssetEditorContext, current_data: Variant,
 			if selection.size() > 0 and selection[0] is int:
 				insert_at = selection[0] as int
 
-			var changed := false
-			var insertion_offset := 0
-			for raw_name in names:
-				var n := str(raw_name)
-				if not new_names.has(n):
-					new_names.insert(insert_at + insertion_offset, n)
-					insertion_offset += 1
-					changed = true
-			if changed:
+			var inserted := asset.insert_names(insert_at, names)
+			if not inserted.is_empty():
 				context.execute("Paste names",
-					func() -> void: asset.name_map = new_names.duplicate(),
-					func() -> void: asset.name_map = old_names.duplicate())
+					func() -> void: asset.insert_names(insert_at, inserted),
+					func() -> void:
+						var indices: Array = []
+						for i in inserted.size():
+							indices.append(insert_at + i)
+						asset.remove_names(indices))
 			context.show_detail.call(&"namemap")
 
 		"property":
@@ -207,7 +202,7 @@ static func paste(context: AssetEditorContext, current_data: Variant,
 			var warnings: Array[String] = []
 			_remap_raw_package_indices(raw, asset, _clipboard.get("source_package", {}), {},
 					warnings)
-			var new_prop := UAssetProperty.from_dict(raw)
+			var new_prop := UAssetProperty.from_dict(raw, asset)
 			var paste_into: Array = []
 			var show_after: Variant = null
 
@@ -281,7 +276,7 @@ static func paste(context: AssetEditorContext, current_data: Variant,
 				var raw_item_copy := (raw_item as Dictionary).duplicate(true)
 				_remap_raw_package_indices(raw_item_copy, asset,
 						_clipboard.get("source_package", {}), {}, warnings)
-				added.append(UAssetProperty.from_dict(raw_item_copy))
+				added.append(UAssetProperty.from_dict(raw_item_copy, asset))
 			context.execute("Paste properties",
 				func() -> void:
 					for i in added.size():
@@ -518,7 +513,7 @@ static func _ensure_source_import(dest_asset: UAssetFile, source_package: Dictio
 
 	var raw_copy := raw_import.duplicate(true)
 	raw_copy["OuterIndex"] = mapped_outer
-	var imp := UAssetImport.from_dict(raw_copy, -(dest_asset.imports.size() + 1))
+	var imp := UAssetImport.from_dict(raw_copy, -(dest_asset.imports.size() + 1), dest_asset)
 	dest_asset.imports.append(imp)
 	_ensure_import_names(dest_asset, imp)
 	return -dest_asset.imports.size()
