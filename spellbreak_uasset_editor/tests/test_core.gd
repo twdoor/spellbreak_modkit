@@ -58,6 +58,10 @@ func _run() -> void:
 	_test_clipboard_export_group_preserves_internal_refs()
 	_test_property_state_restore()
 	_test_byte_enum_property_round_trip()
+	_test_map_property_parse_round_trip()
+	_test_map_property_edits_and_state()
+	_test_map_property_row_summary()
+	_test_map_pair_clipboard()
 	_test_asset_diff_engine()
 	_test_asset_diff_tab_layout()
 	_test_linear_color_property_editor()
@@ -1068,6 +1072,180 @@ func _test_byte_enum_property_round_trip() -> void:
 	numeric_prop.set_value(5)
 	_expect(numeric_prop.to_dict().get("Value") == 5,
 		"numeric byte property still serializes Value")
+
+
+func _test_map_property_parse_round_trip() -> void:
+	var pairs := [
+		_make_slot_requirement_raw("Equipment.ClassSkills", 9.0),
+		_make_slot_requirement_raw("Equipment.Slot.Weapon.Primary", 23.0),
+		_make_slot_requirement_raw("Equipment.Hotbar", 25.0),
+	]
+	var map_raw := _make_slot_requirements_map_raw(pairs)
+	var prop := UAssetProperty.from_dict(map_raw)
+	_expect(prop.prop_type == "Map", "map property parses to the Map type")
+	_expect(prop.children.size() == 3, "map property parses each entry into a pair child")
+
+	var pair: UAssetProperty = prop.children[0]
+	_expect(pair.prop_type == "MapPair" and pair.children.size() == 2,
+		"map entry parses as a key/value pair child")
+	var key: UAssetProperty = pair.children[0]
+	var value: UAssetProperty = pair.children[1]
+	_expect(key.prop_type == "Struct" and key.struct_type == "Generic"
+			and key.find_child("TagName") != null
+			and key.find_child("TagName").prop_type == "Name"
+			and str(key.find_child("TagName").value) == "Equipment.ClassSkills",
+		"map entry key struct parses with its tag name")
+	_expect(value.prop_type == "Object" and int(value.value) == 9,
+		"map entry value object reference parses")
+	_expect(prop.to_dict() == map_raw,
+		"map serializes back to the identical JSON shape")
+
+
+func _test_map_property_edits_and_state() -> void:
+	var map_raw := _make_slot_requirements_map_raw([
+		_make_slot_requirement_raw("Equipment.ClassSkills", 9.0),
+		_make_slot_requirement_raw("Equipment.Hotbar", 25.0),
+	])
+	var prop := UAssetProperty.from_dict(map_raw)
+	var before := prop.capture_state()
+
+	var pair := prop.children[0]
+	var key: UAssetProperty = pair.children[0]
+	var value: UAssetProperty = pair.children[1]
+	key.find_child("TagName").set_value("Equipment.Perk.Mind")
+	value.set_value(11.0)
+
+	var after := prop.capture_state()
+	var emitted: Array = prop.to_dict()["Value"]
+	var first_pair: Array = emitted[0]
+	var first_key: Dictionary = first_pair[0]
+	var first_value: Dictionary = first_pair[1]
+	_expect(str((first_key["Value"][0] as Dictionary).get("Value"))
+			== "Equipment.Perk.Mind",
+		"map key edits write back to the serialized entry")
+	_expect(float(first_value["Value"]) == 11.0,
+		"map value edits write back to the serialized entry")
+
+	prop.restore_state(before)
+	_expect(str(prop.children[0].children[0].find_child("TagName").value)
+			== "Equipment.ClassSkills",
+		"map state restore brings back original key values")
+	_expect(int(prop.children[0].children[1].value) == 9,
+		"map state restore brings back original value references")
+	prop.restore_state(after)
+	_expect(prop.to_dict() == after, "map snapshots reapply for redo")
+
+
+func _test_map_property_row_summary() -> void:
+	var map_raw := _make_slot_requirements_map_raw([
+		_make_slot_requirement_raw("Equipment.ClassSkills", 9.0),
+		_make_slot_requirement_raw("Equipment.Hotbar", 25.0),
+	])
+	var prop := UAssetProperty.from_dict(map_raw)
+	_expect(prop.get_display_value() == "[map] 2 entries",
+		"map property display value summarizes entries")
+
+	var row := PropertyRow.create(prop)
+	var editor := row.editor_control
+	_expect(editor is Label and (editor as Label).text == "2 entries",
+		"map property row shows a compact entry count instead of raw JSON")
+	_expect(not editor is LineEdit,
+		"map property row never renders the raw JSON dump")
+	row.free()
+
+	var key_prop: UAssetProperty = prop.children[0].children[0]
+	var key_row := PropertyRow.create(key_prop)
+	_expect(key_row.editor_control is LineEdit,
+		"map entry key struct renders as an editable tag line")
+	key_row.free()
+
+	var pair: UAssetProperty = prop.children[0]
+	_expect(PropertyDetail._map_pair_key_summary(pair) == "Equipment.ClassSkills",
+		"map entry key summary resolves the wrapped tag name")
+	var pair_row := PropertyRow.create(pair)
+	_expect(pair_row.editor_control is Label
+			and (pair_row.editor_control as Label).text == "Equipment.ClassSkills",
+		"map entry row shows the key summary instead of null")
+	pair_row.free()
+
+
+func _test_map_pair_clipboard() -> void:
+	var asset := _make_empty_asset("res://map_clipboard.uasset")
+	var map_prop := UAssetProperty.from_dict(
+		_make_slot_requirements_map_raw([
+			_make_slot_requirement_raw("Equipment.ClassSkills", 9.0),
+		]), asset)
+	var context := _make_clipboard_context(asset)
+	var pair: UAssetProperty = map_prop.children[0]
+
+	var copy_result := ClipboardManager.copy(pair, asset, [])
+	_expect(bool(copy_result.get("ok", false)),
+		"clipboard accepts a map entry copy")
+
+	ClipboardManager.paste(context, map_prop, [], null)
+	_expect(map_prop.children.size() == 2,
+		"map entry paste duplicates into the parent map")
+	var emitted: Array = map_prop.to_dict()["Value"]
+	_expect(emitted.size() == 2, "map serialization includes the pasted entry")
+	var pasted_pair: Array = emitted[1]
+	_expect(str((pasted_pair[0]["Value"][0] as Dictionary).get("Value"))
+			== "Equipment.ClassSkills",
+		"pasted map entry preserves the key structure")
+
+	var target_expo := _make_export("Target", 0, 0, 0, [], 0)
+	asset.exports.append(target_expo)
+	ClipboardManager.paste(context, target_expo, [], null)
+	_expect(target_expo.properties.size() == 1,
+		"map entry paste is refused outside a map context")
+
+
+func _make_slot_requirement_raw(tag: String, object_value: float) -> Array:
+	return [
+		{
+			"$type": "UAssetAPI.PropertyTypes.Structs.StructPropertyData, UAssetAPI",
+			"StructType": "Generic",
+			"SerializeNone": true,
+			"StructGUID": "{00000000-0000-0000-0000-000000000000}",
+			"SerializationControl": "NoExtension",
+			"Operation": "None",
+			"Name": "SlotRequirements",
+			"ArrayIndex": 0.0,
+			"IsZero": false,
+			"PropertyTagFlags": "None",
+			"PropertyTypeName": null,
+			"PropertyTagExtensions": "NoExtension",
+			"Value": [{
+				"$type": "UAssetAPI.PropertyTypes.Objects.NamePropertyData, UAssetAPI",
+				"Name": "TagName",
+				"ArrayIndex": 0.0,
+				"IsZero": false,
+				"PropertyTagFlags": "None",
+				"PropertyTypeName": null,
+				"PropertyTagExtensions": "NoExtension",
+				"Value": tag,
+			}],
+		},
+		{
+			"$type": "UAssetAPI.PropertyTypes.Objects.ObjectPropertyData, UAssetAPI",
+			"Name": "SlotRequirements",
+			"ArrayIndex": 0.0,
+			"IsZero": false,
+			"PropertyTagFlags": "None",
+			"PropertyTypeName": null,
+			"PropertyTagExtensions": "NoExtension",
+			"Value": object_value,
+		},
+	]
+
+
+func _make_slot_requirements_map_raw(pairs: Array) -> Dictionary:
+	return {
+		"$type": "UAssetAPI.PropertyTypes.Objects.MapPropertyData, UAssetAPI",
+		"Name": "SlotRequirements",
+		"ArrayIndex": 0,
+		"IsZero": false,
+		"Value": pairs,
+	}
 
 
 func _test_asset_diff_engine() -> void:

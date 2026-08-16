@@ -262,13 +262,13 @@ func get_clipboard_label() -> String:
 
 
 func paste_clipboard() -> void:
-	# When an array item is selected, find its parent array so paste lands there.
+	# When an array/map item is selected, find its parent so paste lands there.
 	var array_context: Variant = null
 	if _current_data is UAssetProperty and (_current_data as UAssetProperty).prop_type != "Array":
 		var result := _find_property_parent(_current_data)
 		if not result.is_empty():
 			var pp: Variant = result.get("parent_prop")
-			if pp is UAssetProperty and (pp as UAssetProperty).prop_type == "Array":
+			if pp is UAssetProperty and (pp as UAssetProperty).prop_type in ["Array", "Map"]:
 				array_context = pp
 	ClipboardManager.paste(_detail_context, _current_data,
 		_selection.get_selection(), array_context)

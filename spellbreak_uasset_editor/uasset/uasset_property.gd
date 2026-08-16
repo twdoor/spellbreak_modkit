@@ -175,6 +175,36 @@ static func from_dict(d: Dictionary, asset: UAssetFile = null) -> UAssetProperty
 		"Object":
 			p.value = d.get("Value")
 		
+		"Map":
+			# Value is a list of [key, value] pairs. Each pair is parsed into a
+			# "MapPair" child so entries can be edited and round-trip faithfully.
+			var val = d.get("Value")
+			if val is Array:
+				for pair_dict in val:
+					if pair_dict is Array and pair_dict.size() >= 2 \
+							and pair_dict[0] is Dictionary and pair_dict[1] is Dictionary:
+						p.children.append(_make_map_pair(pair_dict, asset))
+					else:
+						var cp := UAssetProperty.new()
+						cp.prop_type = "Raw"
+						cp.value = pair_dict
+						cp.raw = {}
+						p.children.append(cp)
+				p.value = null  # Children hold the data
+			else:
+				p.value = val
+		
+		"MapPair":
+			# Value is a [key, value] pair array (used when a copied entry is re-parsed)
+			var val = d.get("Value")
+			if val is Array and val.size() >= 2 \
+					and val[0] is Dictionary and val[1] is Dictionary:
+				p.children.append(UAssetProperty.from_dict(val[0], asset))
+				p.children.append(UAssetProperty.from_dict(val[1], asset))
+				p.value = null
+			else:
+				p.value = val
+		
 		_:
 			# Unknown type - store raw value
 			p.value = d.get("Value")
@@ -257,6 +287,24 @@ func to_dict() -> Dictionary:
 				else:
 					arr.append(child.to_dict())
 			d["Value"] = arr
+		"Map":
+			var pairs: Array = []
+			for child in children:
+				if child.prop_type == "Raw" and child.raw.is_empty():
+					pairs.append(child.value)
+				elif child.prop_type == "MapPair":
+					pairs.append((child.to_dict() as Dictionary).get("Value", []))
+				else:
+					pairs.append(child.raw.duplicate(true) if child.raw is Dictionary else child.value)
+			d["Value"] = pairs
+		"MapPair":
+			if children.size() >= 2:
+				var pair_val: Array = []
+				for child in children:
+					pair_val.append(child.to_dict())
+				d["Value"] = pair_val
+			else:
+				d["Value"] = value
 		"SoftObject":
 			d["Value"] = value
 		_:
@@ -303,6 +351,17 @@ func get_display_value() -> String:
 			return str(value) if value else "(empty)"
 		"Enum":
 			return str(value)
+		"Map":
+			return "[map] %d entries" % children.size()
+		"MapPair":
+			if children.size() >= 1:
+				var key := children[0]
+				if key.prop_type == "Struct":
+					var tag_child := key.find_child("TagName")
+					if tag_child:
+						return str(tag_child.value) if tag_child.value != null else ""
+				return key.get_display_value()
+			return "?"
 		_:
 			return str(value) if value != null else "null"
 
@@ -332,4 +391,17 @@ static func _make_raw_child(d: Dictionary, asset: UAssetFile = null) -> UAssetPr
 	p.prop_name = d.get("Name", d.get("ObjectName", ""))
 	p.prop_type = "Raw"
 	p.value = d
+	return p
+
+
+## Wrap a raw [key, value] pair array (UAssetAPI MapPropertyData Value element)
+## into a "MapPair" property whose children are the parsed key and value.
+static func _make_map_pair(pair_dict: Array, asset: UAssetFile = null) -> UAssetProperty:
+	var p := UAssetProperty.new()
+	p.raw = {"$type": "MapPair", "Value": pair_dict}
+	p.prop_type = "MapPair"
+	if asset:
+		p.set_asset(asset)
+	p.children.append(UAssetProperty.from_dict(pair_dict[0] as Dictionary, asset))
+	p.children.append(UAssetProperty.from_dict(pair_dict[1] as Dictionary, asset))
 	return p

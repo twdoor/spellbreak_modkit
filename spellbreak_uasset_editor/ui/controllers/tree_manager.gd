@@ -58,7 +58,7 @@ func build_tree() -> void:
 		# Lazily add property sub-items — only build them when the user expands this item.
 		var complex_props: Array = expo.properties.filter(
 				func(p: UAssetProperty) -> bool:
-					return p.prop_type in ["Struct", "Array", "GameplayTagContainer"])
+					return p.prop_type in ["Struct", "Array", "Map", "GameplayTagContainer"])
 		if not complex_props.is_empty():
 			_add_lazy_placeholder(ei, func() -> void:
 				for prop: UAssetProperty in complex_props:
@@ -83,7 +83,7 @@ func build_tree() -> void:
 								_item_map[ri] = {"dt_row": row, "expo": expo}
 								var complex_children: Array = row.children.filter(
 										func(c: UAssetProperty) -> bool:
-											return c.prop_type in ["Struct", "Array", "GameplayTagContainer"])
+											return c.prop_type in ["Struct", "Array", "Map", "GameplayTagContainer"])
 								if not complex_children.is_empty():
 									_add_lazy_placeholder(ri, func() -> void:
 										for child: UAssetProperty in complex_children:
@@ -166,7 +166,7 @@ func refresh_item_text(prop: UAssetProperty) -> void:
 		if _item_map[item] is StringName:
 			continue
 		if _item_map[item] == prop:
-			if prop.prop_type not in ["Struct", "Array"]:
+			if prop.prop_type not in ["Struct", "Array", "Map"]:
 				var val_str := prop.get_display_value()
 				if val_str.length() > 40:
 					val_str = val_str.left(37) + "..."
@@ -223,16 +223,30 @@ func _add_property_to_tree(parent: TreeItem, prop: UAssetProperty) -> TreeItem:
 		"Struct":
 			item.set_text(0, "%s [%s]" % [prop.prop_name, prop.struct_type])
 			for child in prop.children:
-				if child.prop_type in ["Struct", "Array", "GameplayTagContainer"]:
+				if child.prop_type in ["Struct", "Array", "Map", "GameplayTagContainer"]:
 					_add_property_to_tree(item, child)
 		"Array":
 			item.set_text(0, "%s [%d items]" % [prop.prop_name, prop.children.size()])
 			for i in prop.children.size():
 				var child := prop.children[i]
-				if child.prop_type in ["Struct", "Array", "GameplayTagContainer"]:
+				if child.prop_type in ["Struct", "Array", "Map", "GameplayTagContainer"]:
 					var ci := _add_property_to_tree(item, child)
 					if child.prop_name.is_empty() or child.prop_name == prop.prop_name:
 						ci.set_text(0, "[%d] %s" % [i, ci.get_text(0)])
+		"Map":
+			item.set_text(0, "%s [map · %d entries]" % [prop.prop_name, prop.children.size()])
+			for i in prop.children.size():
+				var pair := prop.children[i]
+				if pair.prop_type != "MapPair":
+					continue
+				var pi := _tree.create_item(item)
+				_item_map[pi] = pair
+				var key_summary := PropertyDetail._map_pair_key_summary(pair)
+				pi.set_text(0, "[%d] %s" % [i, key_summary])
+				for child in pair.children:
+					if child.prop_type in ["Struct", "Array", "Map", "GameplayTagContainer"] \
+							and not child.children.is_empty():
+						_add_property_to_tree(pi, child)
 		"GameplayTagContainer":
 			var count: int = prop.value.size() if prop.value is Array else 0
 			item.set_text(0, "%s [%d tags]" % [prop.prop_name, count])

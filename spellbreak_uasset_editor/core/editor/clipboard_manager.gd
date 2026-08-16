@@ -203,16 +203,23 @@ static func paste(context: AssetEditorContext, current_data: Variant,
 			_remap_raw_package_indices(raw, asset, _clipboard.get("source_package", {}), {},
 					warnings)
 			var new_prop := UAssetProperty.from_dict(raw, asset)
+			var is_map_pair := str(raw.get("$type", "")) == "MapPair"
 			var paste_into: Array = []
 			var show_after: Variant = null
 
-			# Priority: explicit array_context (set when an array item is selected) >
-			#           current_data is the array > detail stack > export top-level
+			# Priority: explicit array_context (set when an array/map item is selected) >
+			#           current_data is the array/map > detail stack > export top-level
 			var array_ctx: Variant = array_context
-			if array_ctx is UAssetProperty and (array_ctx as UAssetProperty).prop_type == "Array":
+			if array_ctx is UAssetProperty \
+					and (array_ctx as UAssetProperty).prop_type in ["Array", "Map"]:
 				paste_into = (array_ctx as UAssetProperty).children
 				show_after = array_ctx
-			elif current_data is UAssetProperty and current_data.prop_type == "Array":
+			elif current_data is UAssetProperty \
+					and (current_data as UAssetProperty).prop_type == "Array":
+				paste_into = current_data.children
+				show_after = current_data
+			elif is_map_pair and current_data is UAssetProperty \
+					and current_data.prop_type == "Map":
 				paste_into = current_data.children
 				show_after = current_data
 			else:
@@ -222,6 +229,13 @@ static func paste(context: AssetEditorContext, current_data: Variant,
 						paste_into = d.children
 						show_after = d
 						break
+					if is_map_pair and d is UAssetProperty and d.prop_type == "Map":
+						paste_into = d.children
+						show_after = d
+						break
+
+			if show_after == null and is_map_pair:
+				return  # a copied map entry can only land inside its map
 
 			if show_after == null:
 				var expo := _find_context_export(current_data, detail_stack)
@@ -241,6 +255,48 @@ static func paste(context: AssetEditorContext, current_data: Variant,
 			context.show_detail.call(show_after)
 
 		"property_array":
+			var all_map_pairs := true
+			for raw_item in _clipboard["items"]:
+				if str((raw_item as Dictionary).get("$type", "")) != "MapPair":
+					all_map_pairs = false
+					break
+			if all_map_pairs:
+				var map_ctx: Variant = null
+				var arr_ctx: Variant = array_context
+				if arr_ctx is UAssetProperty and (arr_ctx as UAssetProperty).prop_type == "Map":
+					map_ctx = arr_ctx
+				elif current_data is UAssetProperty and current_data.prop_type == "Map":
+					map_ctx = current_data
+				else:
+					for i in range(detail_stack.size() - 1, -1, -1):
+						var d = detail_stack[i]["data"]
+						if d is UAssetProperty and d.prop_type == "Map":
+							map_ctx = d
+							break
+				if map_ctx == null:
+					return  # copied map entries can only land inside their map
+				var map_paste_into: Array = (map_ctx as UAssetProperty).children
+				var map_insert_at := map_paste_into.size()
+				if current_data is UAssetProperty and map_paste_into.has(current_data):
+					map_insert_at = map_paste_into.find(current_data)
+				var map_added: Array[UAssetProperty] = []
+				var map_warnings: Array[String] = []
+				for raw_item in _clipboard["items"]:
+					var raw_item_copy := (raw_item as Dictionary).duplicate(true)
+					_remap_raw_package_indices(raw_item_copy, asset,
+							_clipboard.get("source_package", {}), {}, map_warnings)
+					map_added.append(UAssetProperty.from_dict(raw_item_copy, asset))
+				context.execute("Paste map entries",
+					func() -> void:
+						for i in map_added.size():
+							map_paste_into.insert(map_insert_at + i, map_added[i]),
+					func() -> void:
+						for prop in map_added:
+							map_paste_into.erase(prop))
+				context.rebuild_tree.call()
+				context.show_detail.call(map_ctx)
+				return
+
 			var paste_into: Array = []
 			var show_after: Variant = null
 

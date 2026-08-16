@@ -51,6 +51,7 @@ static func _type_badge(prop: UAssetProperty) -> String:
 				_: return "[%s]" % prop.struct_type
 		"Array": return "[%s]" % prop.array_type
 		"Enum": return "enum"
+		"MapPair": return "entry"
 		"GameplayTagContainer": return "tags"
 		_: return prop.prop_type.to_lower()
 
@@ -222,9 +223,9 @@ static func _create_editor(prop: UAssetProperty, row: PropertyRow, asset: UAsset
 			if asset and asset.game_profile:
 				_tag_list = asset.game_profile.tags
 			match prop.struct_type:
-				"GameplayTag":
+				"GameplayTag", "Generic":
 					var tag_child := prop.find_child("TagName")
-					if tag_child:
+					if tag_child and tag_child.prop_type == "Name":
 						var current := str(tag_child.value) if tag_child.value != null else ""
 						return _make_tag_autocomplete(current, func(new_tag: String):
 							var old_state := prop.capture_state()
@@ -245,6 +246,21 @@ static func _create_editor(prop: UAssetProperty, row: PropertyRow, asset: UAsset
 		"Array":
 			var info := Label.new()
 			info.text = "%d items" % prop.children.size()
+			info.add_theme_color_override("font_color", AppTheme.TEXT_INFO_YELLOW)
+			return info
+
+		"Map":
+			var count := prop.children.size()
+			if count == 0 and prop.value is Array:
+				count = (prop.value as Array).size()
+			var info := Label.new()
+			info.text = "%d entries" % count
+			info.add_theme_color_override("font_color", AppTheme.TEXT_INFO_YELLOW)
+			return info
+
+		"MapPair":
+			var info := Label.new()
+			info.text = prop.get_display_value()
 			info.add_theme_color_override("font_color", AppTheme.TEXT_INFO_YELLOW)
 			return info
 

@@ -137,6 +137,8 @@ func _add_nav_button(prop: UAssetProperty) -> void:
 		"GameplayTagContainer":
 			var count: int = prop.value.size() if prop.value is Array else 0
 			btn.text = "▸ %s  [%d tags]" % [prop.prop_name, count]
+		"Map":
+			btn.text = "▸ %s  [map · %d entries]" % [prop.prop_name, prop.children.size()]
 		_:
 			btn.text = "▸ %s" % prop.prop_name
 	AppTheme.style_nav_btn(btn)
@@ -226,9 +228,11 @@ func _is_simple_struct(prop: UAssetProperty) -> bool:
 	for child in prop.children:
 		if child.prop_type == "Array" and not child.children.is_empty():
 			return false
+		if child.prop_type == "Map" and not child.children.is_empty():
+			return false
 		if child.prop_type == "Struct" and not child.children.is_empty():
 			for gc in child.children:
-				if gc.prop_type in ["Struct", "Array"] and not gc.children.is_empty():
+				if gc.prop_type in ["Struct", "Array", "Map"] and not gc.children.is_empty():
 					return false
 	return true
 
@@ -273,7 +277,7 @@ func _build_children_sorted(children: Array[UAssetProperty]) -> void:
 			simple_rows.append(child)
 		elif child.prop_type == "Struct" and _is_simple_struct(child):
 			inline_structs.append(child)
-		elif child.prop_type in ["Struct", "Array", "GameplayTagContainer"] and not child.children.is_empty():
+		elif child.prop_type in ["Struct", "Array", "Map", "GameplayTagContainer"] and not child.children.is_empty():
 			nav_items.append(child)
 		else:
 			simple_rows.append(child)
@@ -326,7 +330,7 @@ func _build_array_detail(prop: UAssetProperty) -> void:
 			_container = saved
 			content = vbox
 
-		elif child.prop_type in ["Struct", "Array", "GameplayTagContainer"] and not child.children.is_empty():
+		elif child.prop_type in ["Struct", "Array", "Map", "GameplayTagContainer"] and not child.children.is_empty():
 			var vbox := VBoxContainer.new()
 			vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			vbox.add_theme_constant_override("separation", AppTheme.SPACING_TAGS)

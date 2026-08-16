@@ -47,7 +47,7 @@ func _build_impl() -> void:
 	var has_props := false
 	var leaf_props: Array[UAssetProperty] = []
 	for prop in expo.properties:
-		if prop.prop_type not in ["Struct", "Array", "GameplayTagContainer"]:
+		if prop.prop_type not in ["Struct", "Array", "Map", "GameplayTagContainer"]:
 			leaf_props.append(prop)
 	var get_leaves: Callable = func() -> Array: return leaf_props
 	for prop in leaf_props:
