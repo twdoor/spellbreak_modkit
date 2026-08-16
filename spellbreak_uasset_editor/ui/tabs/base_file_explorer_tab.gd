@@ -9,7 +9,6 @@ signal clone_unique_requested(path: String, source_root: String)
 signal open_settings_requested
 signal status_changed(text: String, is_error: bool)
 
-const ALL_SOURCES_ID := "__all_sources__"
 const LAZY_PLACEHOLDER := "__base_explorer_lazy__"
 const MAX_SEARCH_RESULTS := 2500
 const CONTEXT_ADD_TO_MOD := 1
@@ -17,7 +16,8 @@ const CONTEXT_CLONE_UNIQUE := 2
 
 var _cfg: ModConfigManager
 var _background_jobs: BackgroundJobRunner
-var _source_picker: OptionButton
+var _source_menu: MenuButton
+var _checked_source_paths: Dictionary = {}
 var _search_edit: LineEdit
 var _refresh_btn: Button
 var _tree: Tree
@@ -62,11 +62,14 @@ func _build_ui() -> void:
 	var toolbar := HBoxContainer.new()
 	toolbar.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
 
-	_source_picker = OptionButton.new()
-	_source_picker.custom_minimum_size.x = 210
-	_source_picker.tooltip_text = "Choose a configured base/reference source"
-	_source_picker.item_selected.connect(_on_source_selected)
-	toolbar.add_child(_source_picker)
+	_source_menu = MenuButton.new()
+	_source_menu.custom_minimum_size.x = 210
+	_source_menu.tooltip_text = "Show or hide base file sources"
+	var source_popup := _source_menu.get_popup()
+	source_popup.hide_on_checkable_item_selection = false
+	source_popup.id_pressed.connect(_on_source_toggled)
+	AppTheme.apply_theme(source_popup)
+	toolbar.add_child(_source_menu)
 
 	_search_edit = LineEdit.new()
 	_search_edit.placeholder_text = "Search file names or paths…"
@@ -138,34 +141,33 @@ func _build_ui() -> void:
 
 
 func refresh_sources() -> void:
-	if not is_instance_valid(_source_picker):
+	if not is_instance_valid(_source_menu):
 		return
-	var previous_path := _selected_source_path()
 	_cancel_scan()
 	_index_cache.clear()
-	_source_picker.clear()
 
 	var sources := _valid_sources()
-	if sources.size() > 1:
-		_source_picker.add_item("All sources")
-		_source_picker.set_item_metadata(0, ALL_SOURCES_ID)
-	for source in sources:
-		var index := _source_picker.item_count
-		_source_picker.add_item(str(source["name"]))
-		_source_picker.set_item_metadata(index, str(source["path"]))
+	var popup := _source_menu.get_popup()
+	popup.clear()
 
-	if _source_picker.item_count == 0:
+	var checked_state: Dictionary = {}
+	for source in sources:
+		var path := str(source["path"])
+		checked_state[path] = _checked_source_paths.get(path, true)
+		var index := popup.item_count
+		popup.add_check_item(str(source["name"]), index)
+		popup.set_item_metadata(index, path)
+		popup.set_item_checked(index, checked_state[path])
+	_checked_source_paths = checked_state
+
+	if sources.is_empty():
+		_source_menu.disabled = true
+		_source_menu.text = "No sources"
 		_build_browse_tree()
 		return
 
-	var restored := false
-	for index in _source_picker.item_count:
-		if str(_source_picker.get_item_metadata(index)) == previous_path:
-			_source_picker.select(index)
-			restored = true
-			break
-	if not restored:
-		_source_picker.select(0)
+	_source_menu.disabled = false
+	_update_source_menu_text()
 	_update_view()
 
 
@@ -173,9 +175,29 @@ func _on_config_changed() -> void:
 	refresh_sources()
 
 
-func _on_source_selected(_index: int) -> void:
+func _on_source_toggled(id: int) -> void:
+	var popup := _source_menu.get_popup()
+	var index := popup.get_item_index(id)
+	if index < 0:
+		return
+	popup.set_item_checked(index, not popup.is_item_checked(index))
+	var path := str(popup.get_item_metadata(index))
+	_checked_source_paths[path] = popup.is_item_checked(index)
+	_update_source_menu_text()
 	_cancel_scan()
 	_update_view()
+
+
+func _update_source_menu_text() -> void:
+	var popup := _source_menu.get_popup()
+	var checked_count := 0
+	for index in popup.item_count:
+		if popup.is_item_checked(index):
+			checked_count += 1
+	if checked_count == popup.item_count:
+		_source_menu.text = "All sources"
+	else:
+		_source_menu.text = "Sources — %d/%d" % [checked_count, popup.item_count]
 
 
 func _on_search_text_changed(_text: String) -> void:
@@ -195,9 +217,15 @@ func _build_browse_tree() -> void:
 	var root := _tree.create_item()
 	var sources := _selected_sources()
 	if sources.is_empty():
-		_add_message_item(root, "No base sources configured", "Add one with Sources…")
-		_set_status("Add a base source in Settings to browse its files.",
-			AppTheme.StatusKind.WARNING)
+		if _valid_sources().is_empty():
+			_add_message_item(root, "No base sources configured", "Add one with Sources…")
+			_set_status("Add a base source in Settings to browse its files.",
+				AppTheme.StatusKind.WARNING)
+		else:
+			_add_message_item(root, "No sources selected",
+				"Tick the sources you want to browse")
+			_set_status("Tick at least one source in the source menu.",
+				AppTheme.StatusKind.WARNING)
 		return
 
 	var show_source_roots := sources.size() > 1
@@ -505,22 +533,22 @@ func _set_status(text: String, kind: int) -> void:
 	AppTheme.set_status_label(_status_label, text, kind)
 
 
-func _selected_source_path() -> String:
-	if not is_instance_valid(_source_picker) or _source_picker.item_count == 0:
-		return ""
-	return str(_source_picker.get_item_metadata(_source_picker.selected))
-
-
 func _selected_sources() -> Array[Dictionary]:
+	if not is_instance_valid(_source_menu):
+		return []
+	var popup := _source_menu.get_popup()
+	if popup.item_count == 0:
+		return []
 	var sources := _valid_sources()
-	var selected_path := _selected_source_path()
-	if selected_path == ALL_SOURCES_ID:
-		return sources
 	var selected: Array[Dictionary] = []
-	for source in sources:
-		if str(source["path"]) == selected_path:
-			selected.append(source)
-			break
+	for index in popup.item_count:
+		if not popup.is_item_checked(index):
+			continue
+		var path := str(popup.get_item_metadata(index))
+		for source in sources:
+			if str(source["path"]) == path:
+				selected.append(source)
+				break
 	return selected
 
 

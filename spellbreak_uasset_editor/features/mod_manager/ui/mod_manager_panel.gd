@@ -179,13 +179,18 @@ func _save_collapse_state() -> void:
 		var mod_meta: Dictionary = mod_item.get_metadata(0)
 		if mod_meta.get("type") == "mod":
 			_collapsed_mods[(mod_meta["mod"] as ModInfo).name] = mod_item.collapsed
-		var folder_item := mod_item.get_first_child()
-		while folder_item:
-			var meta: Dictionary = folder_item.get_metadata(0)
-			if meta.get("type") == "folder":
-				_collapsed_dirs[meta["key"] as String] = folder_item.collapsed
-			folder_item = folder_item.get_next()
+			_save_folder_collapse_state(mod_item)
 		mod_item = mod_item.get_next()
+
+
+func _save_folder_collapse_state(item: TreeItem) -> void:
+	var child := item.get_first_child()
+	while child:
+		var meta: Dictionary = child.get_metadata(0)
+		if meta.get("type") == "folder":
+			_collapsed_dirs[meta["key"] as String] = child.collapsed
+			_save_folder_collapse_state(child)
+		child = child.get_next()
 
 
 func _build_mod_item(root: TreeItem, mod: ModInfo) -> void:
@@ -219,58 +224,84 @@ func _build_mod_files(mod_item: TreeItem, mod: ModInfo) -> void:
 	var content_root := _cfg.get_game_profile().content_root
 	var files := ModDiscovery.list_mod_file_entries(mod.path, content_root)
 
-	# Group files by relative directory, preserving discovery order.
-	var dir_order: Array    = []
-	var groups:    Dictionary = {}
+	# Build a nested folder segment tree that mirrors the game's real folder
+	# structure, then create folder items (subfolders first, then files) like
+	# the Base Files explorer.
+	var root_node := {"folders": {}, "files": []}
+	var rel_to_node := {"": root_node}
 	for file_entry: ModFileEntry in files:
-		var rel_path := file_entry.relative_path
-		var d: String = rel_path.get_base_dir()
-		if d not in groups:
-			groups[d] = []
-			dir_order.append(d)
-		(groups[d] as Array).append(rel_path)
+		var node := _ensure_folder_node(root_node, rel_to_node,
+				file_entry.relative_path.get_base_dir())
+		(node["files"] as Array).append(file_entry)
 
-	for dir: String in dir_order:
-		var dir_key: String = mod_name + "::" + dir
+	_populate_mod_folder(mod_item, root_node, mod, "", mod_name)
 
-		var dir_item := _mod_tree.create_item(mod_item)
-		dir_item.set_text(0, dir + "/")
-		#dir_item.set_custom_font_size(0, 12)
+
+func _ensure_folder_node(root_node: Dictionary, rel_to_node: Dictionary,
+		rel_dir: String) -> Dictionary:
+	if rel_to_node.has(rel_dir):
+		return rel_to_node[rel_dir]
+	var node := {"folders": {}, "files": []}
+	rel_to_node[rel_dir] = node
+	var parent_dir := rel_dir.get_base_dir()
+	var segment := rel_dir.get_file()
+	if parent_dir == ".":
+		parent_dir = ""
+	var parent := _ensure_folder_node(root_node, rel_to_node, parent_dir)
+	(parent["folders"] as Dictionary)[segment] = node
+	return node
+
+
+func _populate_mod_folder(parent: TreeItem, node: Dictionary, mod: ModInfo,
+		rel_dir: String, mod_name: String) -> void:
+	var folders := node["folders"] as Dictionary
+	var folder_names := folders.keys()
+	folder_names.sort()
+	for folder_name: String in folder_names:
+		var child_rel_dir := folder_name if rel_dir.is_empty() \
+				else rel_dir.path_join(folder_name)
+		var dir_key: String = mod_name + "::" + child_rel_dir
+
+		var dir_item := _mod_tree.create_item(parent)
+		dir_item.set_text(0, folder_name)
 		dir_item.set_custom_color(0, AppTheme.MOD_DIR)
+		dir_item.set_tooltip_text(0, child_rel_dir + "/")
 		dir_item.set_selectable(0, true)
 		dir_item.set_metadata(0, {
 			"type": "folder", "key": dir_key,
-			"mod": mod, "rel_dir": dir
+			"mod": mod, "rel_dir": child_rel_dir
 		})
-		dir_item.collapsed = _collapsed_dirs.get(dir_key, false)
+		dir_item.collapsed = _collapsed_dirs.get(dir_key, true)
+		_populate_mod_folder(dir_item, folders[folder_name], mod,
+				child_rel_dir, mod_name)
 
-		for rel_path: String in (groups[dir] as Array):
-			var full_path: String = mod.path.path_join(rel_path)
-			var is_uasset := rel_path.ends_with(".uasset")
+	for file_entry: ModFileEntry in node["files"]:
+		var rel_path := file_entry.relative_path
+		var full_path: String = file_entry.full_path
+		var is_uasset := rel_path.ends_with(".uasset")
 
-			var file_item := _mod_tree.create_item(dir_item)
-			file_item.set_text(0, rel_path.get_file())
-			#file_item.set_custom_font_size(0, 13)
-			file_item.set_tooltip_text(0, rel_path)
-			file_item.set_custom_color(0,
-				AppTheme.MOD_FILE_UASSET if is_uasset else AppTheme.MOD_FILE_OTHER)
-			file_item.set_selectable(0, true)
-			file_item.set_metadata(0, {
-				"type": "file", "mod": mod,
-				"rel_path": rel_path, "full_path": full_path
-			})
+		var file_item := _mod_tree.create_item(parent)
+		file_item.set_text(0, rel_path.get_file())
+		file_item.set_tooltip_text(0, rel_path)
+		file_item.set_custom_color(0,
+			AppTheme.MOD_FILE_UASSET if is_uasset else AppTheme.MOD_FILE_OTHER)
+		file_item.set_selectable(0, true)
+		file_item.set_metadata(0, {
+			"type": "file", "mod": mod,
+			"rel_path": rel_path, "full_path": full_path
+		})
 
-			if _is_text_file_path(rel_path):
-				var open_icon := _icon("Edit")
-				if not open_icon:
-					open_icon = _icon("File")
-				if open_icon:
-					file_item.add_button(0, open_icon, _BTN_OPEN_EXTERNAL, false,
-						"Open with system default app")
+		if _is_text_file_path(rel_path):
+			var open_icon := _icon("Edit")
+			if not open_icon:
+				open_icon = _icon("File")
+			if open_icon:
+				file_item.add_button(0, open_icon, _BTN_OPEN_EXTERNAL, false,
+					"Open with system default app")
 
-			var del_icon := _icon("Remove")
-			if del_icon:
-				file_item.add_button(0, del_icon, _BTN_DEL, false, "Remove from mod")
+		var del_icon := _icon("Remove")
+		if del_icon:
+			file_item.add_button(0, del_icon, _BTN_DEL, false, "Remove from mod")
 
 
 # ── Tree signal handlers ───────────────────────────────────────────────────────
