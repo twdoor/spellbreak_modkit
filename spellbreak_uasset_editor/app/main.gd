@@ -39,6 +39,7 @@ var _background_jobs: BackgroundJobRunner
 var _checking_for_updates := false
 var _keymap_config: Dictionary = {}
 var _keymap_tab: KeymapSettingsTab
+var _explorer_tab: BaseFileExplorerTab
 
 const _TAB_CLOSE_GAP := "   "
 const _TAB_MAX_WIDTH := 190
@@ -127,8 +128,8 @@ func _process(_delta: float) -> void:
 		_delete_selection()
 	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_CANCEL):
 		_cancel_selection()
-	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_CREATE):
-		_create_file()
+	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_EXPLORER):
+		_open_explorer_tab()
 	elif Input.is_action_just_pressed(KeymapSettingsTab.ACTION_COMPARE):
 		_compare_current_tab()
 
@@ -229,17 +230,40 @@ func _setup_mod_tab() -> void:
 	var explorer := BASE_FILE_EXPLORER_TAB.new().setup(_cfg, _background_jobs)
 	tab_cont.add_child(explorer)
 	tab_cont.move_child(explorer, 4)
+	_explorer_tab = explorer
 	tab_cont.set_tab_title(4, "Base Files")
+	tab_cont.set_tab_hidden(4, true)
 	explorer.open_asset_requested.connect(_on_file_selected)
 	explorer.add_to_mod_requested.connect(panel.add_source_file_to_mod)
 	explorer.clone_unique_requested.connect(panel.clone_source_file_to_mod)
 	panel.clone_created.connect(_on_file_selected)
+	panel.open_explorer_requested.connect(_open_explorer_tab)
 	explorer.open_settings_requested.connect(func() -> void:
 		settings.refresh()
 		tab_cont.set_tab_hidden(1, false)
 		tab_cont.current_tab = 1
 	)
 	explorer.status_changed.connect(_on_mod_status_changed)
+	_refresh_tab_titles()
+
+
+func _open_explorer_tab() -> void:
+	if not is_instance_valid(_explorer_tab):
+		return
+	var tab_idx := tab_cont.get_tab_idx_from_control(_explorer_tab)
+	if tab_idx < 0:
+		return
+	tab_cont.set_tab_hidden(tab_idx, false)
+	tab_cont.current_tab = tab_idx
+
+
+func _close_explorer_tab() -> void:
+	if not is_instance_valid(_explorer_tab):
+		return
+	var tab_idx := tab_cont.get_tab_idx_from_control(_explorer_tab)
+	if tab_idx >= 0:
+		tab_cont.set_tab_hidden(tab_idx, true)
+	tab_cont.current_tab = 0
 
 
 func _on_mod_status_changed(text: String, is_error: bool) -> void:
@@ -614,6 +638,8 @@ func _refresh_tab_titles() -> void:
 		elif tab is AssetDiffTab:
 			var diff_tab := tab as AssetDiffTab
 			_set_managed_tab_title(i, diff_tab.get_tab_title(), true)
+		elif tab is BaseFileExplorerTab:
+			_set_managed_tab_title(i, "Base Files", true)
 		else:
 			tab_cont.set_tab_button_icon(i, null)
 
@@ -761,6 +787,8 @@ func _close_current_tab() -> void:
 		_request_close_tab(tab)
 	elif tab is AssetDiffTab:
 		tab.queue_free()
+	elif tab is BaseFileExplorerTab:
+		_close_explorer_tab()
 
 
 func _on_tab_button_pressed(tab_idx: int) -> void:
@@ -780,6 +808,8 @@ func _close_tab_at_index(tab_idx: int) -> void:
 		_request_close_tab(tab)
 	elif tab is AssetDiffTab:
 		tab.queue_free()
+	elif tab is BaseFileExplorerTab:
+		_close_explorer_tab()
 
 
 func _request_close_tab(tab: UassetFileTab) -> void:
@@ -850,14 +880,6 @@ func _delete_selection() -> void:
 		tab.delete_selection()
 	elif tab is ModManagerPanel:
 		(tab as ModManagerPanel).delete_selection()
-
-
-func _create_file() -> void:
-	if _text_control_focused():
-		return
-	var tab := tab_cont.get_current_tab_control()
-	if tab is ModManagerPanel:
-		(tab as ModManagerPanel).create_file()
 
 
 func _compare_current_tab() -> void:

@@ -53,6 +53,12 @@ layout_mode = 2
 tooltip_text = "Check paths, tools, and writable folders"
 text = "Health"
 
+[node name="BaseFilesButton" type="Button" parent="ToolbarMargin/Toolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Browse reference base files"
+text = "Base Files"
+
 [node name="SettingsButton" type="Button" parent="ToolbarMargin/Toolbar"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -88,6 +94,7 @@ theme_override_constants/margin_bottom = 6
 [connection signal="pressed" from="ToolbarMargin/Toolbar/LaunchButton" to="." method="_on_launch_pressed"]
 [connection signal="pressed" from="ToolbarMargin/Toolbar/NewModButton" to="." method="_on_new_mod_pressed"]
 [connection signal="pressed" from="ToolbarMargin/Toolbar/DiagnosticsButton" to="." method="_on_diagnostics_pressed"]
+[connection signal="pressed" from="ToolbarMargin/Toolbar/BaseFilesButton" to="." method="_on_base_files_pressed"]
 [connection signal="pressed" from="ToolbarMargin/Toolbar/SettingsButton" to="." method="_on_settings_pressed"]
 [connection signal="button_clicked" from="ModTree" to="." method="_on_tree_button_clicked"]
 [connection signal="empty_clicked" from="ModTree" to="." method="_on_tree_empty_clicked"]

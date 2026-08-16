@@ -7,6 +7,7 @@ class_name ModManagerPanel extends VBoxContainer
 signal open_asset_requested(path: String)
 signal open_settings_requested
 signal open_diagnostics_requested
+signal open_explorer_requested
 signal status_changed(text: String, is_error: bool)
 signal clone_created(path: String)
 
@@ -46,6 +47,7 @@ const _BTN_OPEN_EXTERNAL := 1
 @onready var _launch_btn: Button = %LaunchButton
 @onready var _new_mod_btn: Button = %NewModButton
 @onready var _diagnostics_btn: Button = %DiagnosticsButton
+@onready var _base_files_btn: Button = %BaseFilesButton
 @onready var _settings_btn: Button = %SettingsButton
 @onready var _operation_feedback_wrapper: MarginContainer = %OperationFeedbackWrapper
 
@@ -95,6 +97,8 @@ func _configure_scene_ui() -> void:
 	_new_mod_btn.add_theme_color_override("font_color", AppTheme.BTN_NEW_MOD)
 	_diagnostics_btn.icon = _icon("StatusWarning")
 	AppTheme.style_muted_btn(_diagnostics_btn)
+	_base_files_btn.icon = _icon("FileTree")
+	AppTheme.style_muted_btn(_base_files_btn)
 	_settings_btn.icon = _icon("Tools")
 	AppTheme.style_muted_btn(_settings_btn)
 
@@ -111,6 +115,10 @@ func _on_diagnostics_pressed() -> void:
 
 func _on_settings_pressed() -> void:
 	open_settings_requested.emit()
+
+
+func _on_base_files_pressed() -> void:
+	open_explorer_requested.emit()
 
 
 func _on_tree_empty_clicked(_position: Vector2, _mouse_button_index: int) -> void:
@@ -434,20 +442,6 @@ func _get_selected_mod() -> Variant:
 	return null
 
 
-## Return a source-relative folder from the first selected folder/file item.
-func _get_selected_source_dir() -> String:
-	var item := _mod_tree.get_next_selected(null)
-	while item:
-		var meta: Dictionary = item.get_metadata(0)
-		match meta.get("type"):
-			"folder":
-				return meta.get("rel_dir", "") as String
-			"file":
-				return (meta.get("rel_path", "") as String).get_base_dir()
-		item = _mod_tree.get_next_selected(item)
-	return ""
-
-
 # ── Public clipboard / action API (called from main.gd) ───────────────────────
 
 func copy_selection() -> void:
@@ -573,15 +567,6 @@ func delete_selection() -> void:
 
 func clear_selection() -> void:
 	_mod_tree.deselect_all()
-
-
-## Open the Add Files dialog for the selected mod (or the mod owning the selection).
-func create_file() -> void:
-	var mod: Variant = _get_selected_mod()
-	if mod == null:
-		_set_status("Select a mod first", true)
-		return
-	_on_add_files_pressed(mod as ModInfo, _get_selected_source_dir())
 
 
 # ── File management ────────────────────────────────────────────────────────────

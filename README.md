@@ -91,7 +91,7 @@ Select files with `Click`, `Ctrl+Click` (toggle), or `Shift+Click` (range).
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+E` | Import files from sources |
+| `Ctrl+E` | Open the Base Files explorer |
 | `Ctrl+C` | Copy selected files |
 | `Ctrl+X` | Cut selected files |
 | `Ctrl+V` | Paste into target mod (preserves `g3/Content/...` folder structure) |
@@ -102,6 +102,7 @@ Select files with `Click`, `Ctrl+Click` (toggle), or `Shift+Click` (range).
 | Button | Action |
 |--------|--------|
 | **New Mod** | Create a new mod folder |
+| **Base Files** | Open the Base Files explorer |
 | **Settings** | Open the Settings tab |
 | **Pack** | Pack all enabled mods into a Spellbreak patch pak |
 | **Watch** | Toggle auto-pack on file save |

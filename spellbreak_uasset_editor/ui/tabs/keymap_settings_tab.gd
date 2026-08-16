@@ -20,7 +20,7 @@ const ACTION_CUT := &"cut_selection"
 const ACTION_UNDO := &"undo"
 const ACTION_DELETE := &"delete_selection"
 const ACTION_CANCEL := &"cancel"
-const ACTION_CREATE := &"add_files_from_sources"
+const ACTION_EXPLORER := &"open_base_explorer"
 const ACTION_COMPARE := &"compare_file"
 
 var _working_config: Dictionary = {}
@@ -56,7 +56,7 @@ static func action_definitions() -> Array[Dictionary]:
 				_key(KEY_A, true), _key(KEY_LEFT, true)),
 		_definition(ACTION_NEXT_TAB, "Next Tab", "Navigation",
 				_key(KEY_F, true), _key(KEY_RIGHT, true)),
-		_definition(ACTION_CREATE, "Add Files from Sources", "Mod Manager",
+		_definition(ACTION_EXPLORER, "Open Base Files", "Navigation",
 				_key(KEY_E, true)),
 	]
 
