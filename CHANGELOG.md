@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.12.0-beta.1 — Editor Preview (Pre-release) — 2026-08-12
+## 0.12.0 — 2026-08-20
 
 - Replaced the editor's legacy update checker with the reusable Version Manager plugin, including semantic-version release selection and export-time repository metadata.
 - Added one-click in-app updates for direct AppImage, Linux executable, and Windows executable release assets, with download progress, SHA-256 verification, staged replacement, backup, and restart.
@@ -8,7 +8,14 @@
 - Added cross-filesystem-safe staged installs, typed operation/mod results, a shared background-service lifecycle, symlink-safe discovery, and lighter watcher fingerprints for large assets.
 - Consolidated installed and save-as pak creation into one transactional packing pipeline.
 - Replaced the bundled GUIDE input framework with native Godot `InputMap` actions and JSON-backed editable key bindings.
-- Added a Reuse As workflow for cloning complete binary asset packages, automatically rewriting their internal asset identity and regenerating companion files.
+- Added complete binary asset cloning with regenerated companion files, fresh package GUIDs, package-path rewriting, and transactional rollback.
+- Added unique custom-asset cloning backed by automatic Spellbreak `AssetRegistry.bin` patching during pak creation.
+- Added structured editing and clipboard support for Unreal map properties.
+- Made imports, exports, and property names NameMap-backed, including correct numbered `FName` base/suffix handling, rename propagation, deletion safety, and save recovery for missing names.
+- Reworked Base Files into a closable `Ctrl+E` tab with multi-source checkboxes, background search, and add/clone actions.
+- Reworked the Mod Manager file browser into a nested folder tree while preserving selection and collapse state.
+- Added workspace manifests that track source copies and unique custom assets for reproducible packing.
+- Added package-index validation and safer index remapping for import/export/property clipboard operations.
 
 ## 0.11.0 - 2026-07-17
 

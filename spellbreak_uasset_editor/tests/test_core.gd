@@ -752,6 +752,67 @@ func _test_name_map_fname_sync() -> void:
 	_expect(asset.index_of_name("DoesNotExist", false) == -1,
 		"index_of_name reports missing names without creating them")
 
+	# UAssetAPI displays numbered FNames as Base_N, but the NameMap contains
+	# only Base. All modeled fields must retain the suffix while referencing Base.
+	var suffix_asset := UAssetFile.new()
+	suffix_asset.name_map = PackedStringArray(["Numbered"])
+	var suffix_export := UAssetExport.from_dict({
+		"$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI",
+		"ObjectName": "Numbered_2",
+		"OuterIndex": 0, "ClassIndex": 0, "SuperIndex": 0, "TemplateIndex": 0,
+		"SerialSize": 0, "SerialOffset": 0,
+		"Data": [{
+			"$type": "UAssetAPI.PropertyTypes.Objects.IntPropertyData, UAssetAPI",
+			"Name": "Numbered_3", "ArrayIndex": 0, "IsZero": false, "Value": 1,
+		}],
+	}, suffix_asset)
+	var suffix_import := UAssetImport.from_dict({
+		"$type": "UAssetAPI.Import, UAssetAPI",
+		"ObjectName": "Numbered_4", "ClassName": "Numbered_5",
+		"ClassPackage": "Numbered_6", "PackageName": "Numbered_7",
+		"OuterIndex": 0, "bImportOptional": false,
+	}, 0, suffix_asset)
+	suffix_asset.exports = [suffix_export]
+	suffix_asset.imports = [suffix_import]
+	_expect(suffix_asset.name_map == PackedStringArray(["Numbered"]),
+		"numbered FNames bind to their base without synthetic NameMap entries")
+	_expect(suffix_export.object_name == "Numbered_2"
+			and suffix_export.properties[0].prop_name == "Numbered_3"
+			and suffix_import.object_name == "Numbered_4"
+			and suffix_import.class_name_str == "Numbered_5"
+			and suffix_import.class_package == "Numbered_6"
+			and suffix_import.package_name == "Numbered_7",
+		"modeled FName fields reconstruct their numeric suffixes")
+	suffix_asset.rename_name("Numbered", "Renamed")
+	_expect(suffix_export.object_name == "Renamed_2"
+			and suffix_export.to_dict()["ObjectName"] == "Renamed_2"
+			and suffix_export.to_dict()["Data"][0]["Name"] == "Renamed_3"
+			and suffix_import.to_dict()["ObjectName"] == "Renamed_4",
+		"base renames propagate through numbered modeled and raw FNames")
+	_expect(0 in suffix_asset.plan_name_removal([0])["kept"],
+		"numbered FNames protect their base NameMap entry")
+	var raw_only_asset := UAssetFile.new()
+	raw_only_asset.name_map = PackedStringArray(["Owner", "RawOnly"])
+	var raw_only_export := UAssetExport.from_dict({
+		"$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI",
+		"ObjectName": "Owner",
+		"OuterIndex": 0, "ClassIndex": 0, "SuperIndex": 0, "TemplateIndex": 0,
+		"SerialSize": 0, "SerialOffset": 0, "Data": [],
+		"Table": {"Rows": [{
+			"$type": "UAssetAPI.PropertyTypes.Objects.IntPropertyData, UAssetAPI",
+			"Name": "RawOnly_8", "Value": 1,
+		}]},
+	}, raw_only_asset)
+	raw_only_asset.exports = [raw_only_export]
+	_expect(1 in raw_only_asset.plan_name_removal([1])["kept"],
+		"raw-only numbered FNames protect their base NameMap entry")
+	var reattach_asset := UAssetFile.new()
+	reattach_asset.name_map = PackedStringArray()
+	suffix_export.set_asset(reattach_asset)
+	_expect(suffix_export.object_name == "Renamed_2"
+			and reattach_asset.name_map == PackedStringArray(["Renamed"]),
+		"reattaching a linked object preserves its resolved numbered name")
+
 	# Inserting map entries shifts index references in lockstep.
 	var before_insert := expo.object_name
 	var insert_idx := asset.index_of_name("Unrelated")
@@ -785,6 +846,27 @@ func _test_name_map_fname_sync() -> void:
 			and asset.name_map[insert_idx + 1] == "InsertMe2"
 			and asset.index_of_name(kept_name) == kept_idx,
 		"restore_removed_names restores the map and remaps references back")
+
+	# Non-contiguous deletions require each restored gap to affect comparison
+	# against the next gap. Adjacent-only coverage does not catch this case.
+	var noncontiguous := UAssetFile.new()
+	noncontiguous.name_map = PackedStringArray(["A", "Unused1", "B", "Unused2", "Target"])
+	var target_export := UAssetExport.from_dict({
+		"$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI",
+		"ObjectName": "Target",
+		"OuterIndex": 0, "ClassIndex": 0, "SuperIndex": 0, "TemplateIndex": 0,
+		"SerialSize": 0, "SerialOffset": 0, "Data": [],
+	}, noncontiguous)
+	noncontiguous.exports.append(target_export)
+	var noncontiguous_plan := noncontiguous.remove_names([1, 3])
+	_expect(target_export.object_name == "Target"
+			and noncontiguous.index_of_name("Target") == 2,
+		"non-contiguous name deletion remaps surviving references")
+	noncontiguous.restore_removed_names(
+		noncontiguous_plan["removed"], noncontiguous_plan["deleted"])
+	_expect(target_export.object_name == "Target"
+			and noncontiguous.index_of_name("Target") == 4,
+		"undo restores references across non-contiguous name gaps")
 
 
 func _test_fname_split_base() -> void:
@@ -839,13 +921,33 @@ func _test_dummy_fname_save_heuristics() -> void:
 	}
 	_expect(asset._ensure_all_fnames(data),
 		"_ensure_all_fnames reports added names")
-	_expect(asset.has_name(full), "full suffixed name is ensured")
+	_expect(not asset.has_name(full), "full suffixed display name is not added to the NameMap")
 	_expect(asset.has_name("/Game/Blueprints/Effects/Potion/BP_Effect_Potion_Armor_Tier"),
 		"parsed FName base is ensured (the converter looks up the base)")
 	_expect(asset.has_name("NewRef"), "property name is ensured")
+	_expect(not asset.has_name("Existing") or asset.name_map.count("Existing") == 1,
+		"existing names are not duplicated")
 	_expect(not asset.has_name("UAssetAPI.ExportTypes.NormalExport, UAssetAPI")
 			and not asset.has_name("UAssetAPI.PropertyTypes.Objects.NamePropertyData, UAssetAPI"),
 		"$type serializer names are skipped")
+	var ordinary_strings := {
+		"Info": "NotAnFName_2",
+		"Exports": [{
+			"$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI",
+			"ObjectName": "Existing",
+			"ObjectFlags": "RF_Public, RF_Standalone",
+			"Data": [{
+				"$type": "UAssetAPI.PropertyTypes.Objects.StrPropertyData, UAssetAPI",
+				"Name": "Caption", "Value": "ordinary user text_4",
+			}],
+		}],
+	}
+	asset._ensure_all_fnames(ordinary_strings)
+	_expect(asset.has_name("Caption")
+			and not asset.has_name("NotAnFName")
+			and not asset.has_name("ordinary user text")
+			and not asset.has_name("RF_Public, RF_Standalone"),
+		"FName discovery ignores ordinary JSON strings")
 	_expect(not asset._ensure_all_fnames(data),
 		"_ensure_all_fnames is idempotent")
 	var map_before: Array = asset.name_map

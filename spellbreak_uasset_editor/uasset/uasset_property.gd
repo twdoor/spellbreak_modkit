@@ -42,6 +42,7 @@ var source_string: String = ""      # TextProperty (HistoryType = 0, localized b
 ## Owning asset (weak) — resolves the index-backed prop_name against the NameMap.
 var _asset_weak: WeakRef
 var _prop_name_index: int = -1
+var _prop_name_suffix: String = ""
 var _prop_name_fallback: String = ""
 
 
@@ -50,13 +51,15 @@ var _prop_name_fallback: String = ""
 var prop_name: String:
 	get:
 		var asset := _get_asset()
-		return asset.resolve_name(_prop_name_index) if asset else _prop_name_fallback
+		return asset.resolve_name(_prop_name_index) + _prop_name_suffix \
+				if asset else _prop_name_fallback
 	set(v):
 		var asset := _get_asset()
 		if asset:
-			_prop_name_index = asset.index_of_name(v)
-		else:
-			_prop_name_fallback = v
+			var parts := UAssetFile.split_fname(v)
+			_prop_name_index = asset.index_of_name(parts["base"])
+			_prop_name_suffix = parts["suffix"]
+		_prop_name_fallback = v
 		if raw.has("Name"):
 			raw["Name"] = v
 
@@ -66,9 +69,10 @@ var prop_name: String:
 func set_asset(asset: UAssetFile) -> void:
 	if _asset_weak and _asset_weak.get_ref() == asset:
 		return  # already linked
+	var name := prop_name
 	_asset_weak = weakref(asset)
-	var name := _prop_name_fallback
 	_prop_name_index = -1
+	_prop_name_suffix = ""
 	if not name.is_empty():
 		prop_name = name
 	for child in children:
@@ -220,6 +224,7 @@ func restore_state(state: Dictionary) -> void:
 	var restored := UAssetProperty.from_dict(state.duplicate(true), _get_asset())
 	raw = restored.raw
 	_prop_name_index = restored._prop_name_index
+	_prop_name_suffix = restored._prop_name_suffix
 	_prop_name_fallback = restored._prop_name_fallback
 	prop_type = restored.prop_type
 	prop_type_full = restored.prop_type_full

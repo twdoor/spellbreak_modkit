@@ -22,6 +22,7 @@ var properties: Array[UAssetProperty] = []
 ## Owning asset (weak) — resolves the index-backed ObjectName against the NameMap.
 var _asset_weak: WeakRef
 var _object_name_index: int = -1
+var _object_name_suffix: String = ""
 var _object_name_fallback: String = ""
 
 
@@ -30,13 +31,15 @@ var _object_name_fallback: String = ""
 var object_name: String:
 	get:
 		var asset := _get_asset()
-		return asset.resolve_name(_object_name_index) if asset else _object_name_fallback
+		return asset.resolve_name(_object_name_index) + _object_name_suffix \
+				if asset else _object_name_fallback
 	set(v):
 		var asset := _get_asset()
 		if asset:
-			_object_name_index = asset.index_of_name(v)
-		else:
-			_object_name_fallback = v
+			var parts := UAssetFile.split_fname(v)
+			_object_name_index = asset.index_of_name(parts["base"])
+			_object_name_suffix = parts["suffix"]
+		_object_name_fallback = v
 		if raw.has("ObjectName"):
 			raw["ObjectName"] = v
 
@@ -46,9 +49,10 @@ var object_name: String:
 func set_asset(asset: UAssetFile) -> void:
 	if _asset_weak and _asset_weak.get_ref() == asset:
 		return  # already linked
+	var obj := object_name
 	_asset_weak = weakref(asset)
-	var obj := _object_name_fallback
 	_object_name_index = -1
+	_object_name_suffix = ""
 	if not obj.is_empty():
 		object_name = obj
 	for prop in properties:

@@ -864,6 +864,11 @@ func _show_clone_unique_mod_picker(source_path: String, source_root: String,
 
 func _perform_unique_clone(source_path: String, _source_root: String,
 		mod: ModInfo, destination_path: String) -> void:
+	var destination_files := _clone_package_files(destination_path)
+	for path in destination_files:
+		if FileAccess.file_exists(path):
+			_set_status("Clone destination package already exists: %s" % path.get_file(), true)
+			return
 	var described := ModManifest.describe_unique_clone(source_path, destination_path, _cfg)
 	if not described.ok:
 		_set_status(described.message, true)
@@ -881,14 +886,32 @@ func _perform_unique_clone(source_path: String, _source_root: String,
 		return
 	var manifest_result := ModManifest.record_unique_clone(described.value, _cfg)
 	if not manifest_result.ok:
-		_set_status("Cloned %s, but %s" % [destination_path.get_file(),
-				manifest_result.message], true)
-	else:
-		_set_status("Cloned %s as a unique asset in %s (%d names updated)" % [
-			destination_path.get_file(), mod.name,
-			int(result.metadata.get("renamed_name_entries", 0))])
+		var cleanup_errors: Array[String] = []
+		for path in destination_files:
+			if FileAccess.file_exists(path):
+				var cleanup_error := DirAccess.remove_absolute(path)
+				if cleanup_error != OK:
+					cleanup_errors.append("%s (error %d)" % [path.get_file(), cleanup_error])
+		var cleanup_suffix := ""
+		if not cleanup_errors.is_empty():
+			cleanup_suffix = "; cleanup failed for " + ", ".join(cleanup_errors)
+		_set_status("Clone was rolled back because %s%s" % [
+			manifest_result.message, cleanup_suffix], true)
+		_refresh_mods()
+		return
+	_set_status("Cloned %s as a unique asset in %s (%d names updated)" % [
+		destination_path.get_file(), mod.name,
+		int(result.metadata.get("renamed_name_entries", 0))])
 	_refresh_mods()
 	clone_created.emit(destination_path)
+
+
+static func _clone_package_files(uasset_path: String) -> Array[String]:
+	var stem := uasset_path.get_basename()
+	var paths: Array[String] = []
+	for extension in ["uasset", "uexp", "ubulk", "uptnl"]:
+		paths.append(stem + "." + extension)
+	return paths
 
 
 static func _clone_destination_path(mod: ModInfo, relative_path: String,

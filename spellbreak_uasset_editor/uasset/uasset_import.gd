@@ -16,6 +16,10 @@ var _object_name_index: int = -1
 var _class_name_index: int = -1
 var _class_package_index: int = -1
 var _package_name_index: int = -1
+var _object_name_suffix: String = ""
+var _class_name_suffix: String = ""
+var _class_package_suffix: String = ""
+var _package_name_suffix: String = ""
 
 ## Fallback strings used when no asset is attached (tests / detached objects).
 var _object_name_fallback: String = ""
@@ -29,13 +33,15 @@ var _package_name_fallback: String = ""
 var object_name: String:
 	get:
 		var asset := _get_asset()
-		return asset.resolve_name(_object_name_index) if asset else _object_name_fallback
+		return asset.resolve_name(_object_name_index) + _object_name_suffix \
+				if asset else _object_name_fallback
 	set(v):
 		var asset := _get_asset()
 		if asset:
-			_object_name_index = asset.index_of_name(v)
-		else:
-			_object_name_fallback = v
+			var parts := UAssetFile.split_fname(v)
+			_object_name_index = asset.index_of_name(parts["base"])
+			_object_name_suffix = parts["suffix"]
+		_object_name_fallback = v
 		if raw.has("ObjectName"):
 			raw["ObjectName"] = v
 
@@ -44,13 +50,15 @@ var object_name: String:
 var class_name_str: String:
 	get:
 		var asset := _get_asset()
-		return asset.resolve_name(_class_name_index) if asset else _class_name_fallback
+		return asset.resolve_name(_class_name_index) + _class_name_suffix \
+				if asset else _class_name_fallback
 	set(v):
 		var asset := _get_asset()
 		if asset:
-			_class_name_index = asset.index_of_name(v)
-		else:
-			_class_name_fallback = v
+			var parts := UAssetFile.split_fname(v)
+			_class_name_index = asset.index_of_name(parts["base"])
+			_class_name_suffix = parts["suffix"]
+		_class_name_fallback = v
 		if raw.has("ClassName"):
 			raw["ClassName"] = v
 
@@ -59,13 +67,15 @@ var class_name_str: String:
 var class_package: String:
 	get:
 		var asset := _get_asset()
-		return asset.resolve_name(_class_package_index) if asset else _class_package_fallback
+		return asset.resolve_name(_class_package_index) + _class_package_suffix \
+				if asset else _class_package_fallback
 	set(v):
 		var asset := _get_asset()
 		if asset:
-			_class_package_index = asset.index_of_name(v)
-		else:
-			_class_package_fallback = v
+			var parts := UAssetFile.split_fname(v)
+			_class_package_index = asset.index_of_name(parts["base"])
+			_class_package_suffix = parts["suffix"]
+		_class_package_fallback = v
 		if raw.has("ClassPackage"):
 			raw["ClassPackage"] = v
 
@@ -74,13 +84,15 @@ var class_package: String:
 var package_name: String:
 	get:
 		var asset := _get_asset()
-		return asset.resolve_name(_package_name_index) if asset else _package_name_fallback
+		return asset.resolve_name(_package_name_index) + _package_name_suffix \
+				if asset else _package_name_fallback
 	set(v):
 		var asset := _get_asset()
 		if asset:
-			_package_name_index = asset.index_of_name(v)
-		else:
-			_package_name_fallback = v
+			var parts := UAssetFile.split_fname(v)
+			_package_name_index = asset.index_of_name(parts["base"])
+			_package_name_suffix = parts["suffix"]
+		_package_name_fallback = v
 		if raw.has("PackageName"):
 			raw["PackageName"] = v
 
@@ -90,15 +102,19 @@ var package_name: String:
 func set_asset(asset: UAssetFile) -> void:
 	if _asset_weak and _asset_weak.get_ref() == asset:
 		return  # already linked
+	var obj := object_name
+	var cls := class_name_str
+	var pkg := class_package
+	var pname := package_name
 	_asset_weak = weakref(asset)
-	var obj := _object_name_fallback
-	var cls := _class_name_fallback
-	var pkg := _class_package_fallback
-	var pname := _package_name_fallback
 	_object_name_index = -1
 	_class_name_index = -1
 	_class_package_index = -1
 	_package_name_index = -1
+	_object_name_suffix = ""
+	_class_name_suffix = ""
+	_class_package_suffix = ""
+	_package_name_suffix = ""
 	if not obj.is_empty():
 		object_name = obj
 	if not cls.is_empty():

@@ -911,17 +911,42 @@ static func _fname_split_base(name: String) -> String:
 	return name.substr(0, i)
 
 
-## Ensure every string in the JSON data (except "$type" serializer names), plus
-## its parsed FName base, exists in the NameMap. Returns true if the map changed.
+## Split UAssetAPI's display form into the NameMap base and numeric suffix.
+## "Foo_2" is FName(base="Foo", number=3), while leading-zero endings are
+## literal names and remain unsplit.
+static func split_fname(name: String) -> Dictionary:
+	var base := _fname_split_base(name)
+	if base.is_empty():
+		return {"base": name, "suffix": ""}
+	return {"base": base, "suffix": name.substr(base.length())}
+
+
+const _FNAME_FIELD_KEYS := {
+	"ObjectName": true,
+	"ClassName": true,
+	"ClassPackage": true,
+	"PackageName": true,
+	"AssetName": true,
+	"Name": true,
+	"StructType": true,
+	"ArrayType": true,
+	"EnumType": true,
+	"EnumValue": true,
+	"ByteType": true,
+	"KeyType": true,
+	"ValueType": true,
+	"PropertyTypeName": true,
+}
+
+
+## Ensure known serialized FName fields have their BASE string in the NameMap.
+## Converter-error retries remain the fallback for uncommon UAssetAPI fields.
 func _ensure_all_fnames(data: Variant) -> bool:
 	var names: Array[String] = []
 	_collect_fname_strings(data, names)
 	var added := false
 	for name in names:
-		if not has_name(name):
-			ensure_name(name)
-			added = true
-		var base := _fname_split_base(name)
+		var base := str(split_fname(name)["base"])
 		if not base.is_empty() and not has_name(base):
 			ensure_name(base)
 			added = true
@@ -930,22 +955,29 @@ func _ensure_all_fnames(data: Variant) -> bool:
 
 func _collect_fname_strings(value: Variant, out: Array[String]) -> void:
 	if value is Dictionary:
+		var dictionary := value as Dictionary
 		for key: Variant in value:
 			if key == "$type":
 				continue
 			var child: Variant = value[key]
 			if child is String:
-				if not child.is_empty():
+				if not child.is_empty() and _dictionary_value_is_fname(dictionary, str(key)):
 					out.append(child)
 			elif child is Dictionary or child is Array:
 				_collect_fname_strings(child, out)
 	elif value is Array:
 		for child: Variant in value:
-			if child is String:
-				if not child.is_empty():
-					out.append(child)
-			elif child is Dictionary or child is Array:
+			if child is Dictionary or child is Array:
 				_collect_fname_strings(child, out)
+
+
+static func _dictionary_value_is_fname(dictionary: Dictionary, key: String) -> bool:
+	if _FNAME_FIELD_KEYS.has(key):
+		return true
+	if key != "Value":
+		return false
+	var type_name := str(dictionary.get("$type", ""))
+	return "NamePropertyData" in type_name or "EnumPropertyData" in type_name
 
 
 ## Check if a name exists in the NameMap
@@ -981,11 +1013,10 @@ func index_of_name(name: String, create: bool = true) -> int:
 	return -1
 
 
-## Rename a NameMap entry and propagate the exact whole-string replacement
-## through every import/export raw dict so serialized JSON stays consistent.
+## Rename a NameMap base and propagate exact strings plus numbered FName display
+## forms through every import/export raw dict so serialized JSON stays consistent.
 ## References in the object model are index-backed and follow automatically.
-## Returns stats: {"renames": N}. Exact-match only — safe for substring
-## collisions like GE_Stone -> GE_StoneSkin.
+## Returns stats: {"renames": N}. Ordinary substring collisions remain untouched.
 func rename_name(old_name: String, new_name: String) -> Dictionary:
 	var stats := {"renames": 0}
 	if old_name.is_empty() or old_name == new_name:
@@ -1017,6 +1048,11 @@ static func _rename_raw_strings(value: Variant, old_name: String,
 				if child == old_name:
 					dictionary[key] = new_name
 					count += 1
+				elif _dictionary_value_is_fname(dictionary, str(key)):
+					var parts := split_fname(child)
+					if str(parts["base"]) == old_name:
+						dictionary[key] = new_name + str(parts["suffix"])
+						count += 1
 			elif child is Dictionary or child is Array or child is PackedStringArray:
 				count += _rename_raw_strings(child, old_name, new_name)
 		return count
@@ -1146,11 +1182,14 @@ func restore_removed_names(removed: Array, indices: Array) -> void:
 	for i in removed.size():
 		name_map.insert(int(indices[i]), str(removed[i]))
 	var inverse := func(value: int) -> int:
-		var shift := 0
+		var restored := value
 		for d in indices:
-			if int(d) <= value:
-				shift += 1
-		return value + shift
+			# Each restored gap changes the coordinate space used to compare the
+			# next gap. This matters for non-contiguous deletions: [1, 3] maps an
+			# old index 4 to 2, whose inverse must advance past both gaps to 4.
+			if int(d) <= restored:
+				restored += 1
+		return restored
 	_remap_name_indices(inverse)
 
 
@@ -1194,7 +1233,15 @@ static func _collect_raw_strings_into(value: Variant, strings: Dictionary) -> vo
 		for key in dictionary.keys():
 			if str(key) == "$type":
 				continue
-			_collect_raw_strings_into(dictionary[key], strings)
+			var child: Variant = dictionary[key]
+			if child is String:
+				strings[child] = true
+				if _dictionary_value_is_fname(dictionary, str(key)):
+					var base := str(split_fname(child)["base"])
+					if not base.is_empty():
+						strings[base] = true
+			else:
+				_collect_raw_strings_into(child, strings)
 	elif value is Array:
 		var array := value as Array
 		for child in array:
