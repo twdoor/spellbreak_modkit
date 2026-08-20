@@ -29,7 +29,7 @@ Everything is bundled inside the single binary:
 
 Optional:
 - **[umodel](https://www.gildor.org/en/projects/umodel)** (UE Viewer) — required for 3D mesh and animation preview (StaticMesh / SkeletalMesh / AnimSequence assets). Download a prebuilt binary or [build from source](https://github.com/gildor2/UEViewer). Set the path in **Settings > umodel (3D Preview)**.
-- **Godot 4.6+** — only if building the editor from source (no .NET support needed)
+- **Godot 4.7.1+** — only if building the editor from source (no .NET support needed)
 
 ---
 
@@ -41,7 +41,9 @@ Optional:
 
 Go to the [releases](https://github.com/twdoor/spellbreak_modkit/releases) page, click on the latest version and download the file for your platform.
 
-Release artifacts are packaged as `linux.zip` and `win.zip`.
+- **Linux:** `sbue.AppImage` (recommended) or the standalone `sbue.x86_64`
+- **Windows:** `sbue.exe`
+- `SHA256SUMS` contains hashes for verifying each download.
 
 #### OR: Build from source
 
@@ -50,7 +52,7 @@ git clone https://github.com/twdoor/spellbreak_modkit
 cd spellbreak_modkit
 ```
 
-Open `spellbreak_uasset_editor/` in Godot 4.6+, then **Project > Export > Linux/Windows**. All dependencies (converter, u4pak, ue4_dds_tools) are bundled automatically.
+Open `spellbreak_uasset_editor/` in Godot 4.7.1+, then **Project > Export > Linux/Windows**. All dependencies (converter, u4pak, the Asset Registry patcher, and ue4_dds_tools) are bundled automatically.
 
 ### 2. Configure the editor
 
@@ -81,6 +83,7 @@ The Mod Manager tab is pinned and always visible. It shows all mod folders found
 |--------|--------|
 | **Left-click a mod** | Expand / collapse it |
 | **Right-click a mod** | Toggle enabled / disabled |
+| **Middle-click a mod** | Export only that mod to a chosen `.pak` path with a matching `.sig` |
 | **Double-click a `.uasset`** | Open it in the asset editor |
 | **Double-click any other file** | Open with the configured editor or system default app |
 | **Open button on text/config files** | Open `.txt`, `.cfg`, `.json`, `.ini`, `.md`, and similar files externally |
@@ -127,6 +130,11 @@ In **Settings > Sources**, **Generate from Pak** can build a source directly fro
 
 When importing from sources in the Mod Manager, selecting a folder or file inside a mod opens the matching path inside the chosen source if it exists. If it does not exist, the file dialog falls back to the source root.
 
+Open **Base Files** from the Mod Manager toolbar or with `Ctrl+E`. Its source
+menu can show any combination of configured sources, folders expand lazily, and
+search indexing runs in the background. Right-click a file to copy it into a mod
+or, for binary assets, clone it as a unique package.
+
 ### Asset editor tabs
 
 Open `.uasset` or `.json` files via `Ctrl+Space`, drag-and-drop, or double-click from the mod list.
@@ -137,26 +145,33 @@ Open `.uasset` or `.json` files via `Ctrl+Space`, drag-and-drop, or double-click
 |----------|--------|
 | `Ctrl+Space` | Open file |
 | `Ctrl+S` | Save |
-| `Ctrl+Shift+S` | Reuse the current binary asset under another asset name |
+| `Ctrl+Shift+S` | Clone the current binary asset under another asset name |
 | `Ctrl+Q` | Close tab |
 | `Ctrl+C / V / X` | Copy / Paste / Cut |
 | `Del / Ctrl+D` | Delete selected item |
 | `Ctrl+Z` | Undo |
 | `Ctrl+A / F` | Previous / Next tab |
+| `Esc` | Clear selection / cancel edit |
 
-Use **Reuse As...** on an open binary asset to choose a new or existing
+Use **Clone Asset As** (`Ctrl+Shift+S`) on an open binary asset to choose a new or existing
 `.uasset` destination. The editor clones the complete package, regenerates its
 required companion files, and replaces the old asset identity throughout the
 NameMap, object names, generated-class names, and package paths. The source
 asset remains unchanged.
-| `Esc` | Clear selection / cancel edit |
+
+Use **Clone Unique to Mod...** from the Base Files context menu when the clone
+must exist alongside its source as a new Unreal package. Choose a target mod and
+new object name; the editor rewrites the package identity, generates a fresh
+package GUID, records the declaration in the mod's workspace manifest, and
+updates `AssetRegistry.bin` automatically when that mod is packed. Unique clones
+must remain under the mod's `g3/Content/` tree.
 
 **What you can edit:**
 
-- **Export properties** — structs, arrays, scalars, enums, text, object references, SoftObject paths
-- **Array items** — multi-select with Ctrl/Shift+click; copy/paste/delete supported
+- **Export properties** — structs, arrays, maps, scalars, enums, text, object references, SoftObject paths
+- **Array and map items** — structured editing plus Ctrl/Shift multi-select; copy/paste/delete supported
 - **Import table** — all fields editable inline; multi-select supported
-- **Name map** — add, edit, delete entries
+- **Name map** — add, rename, and safely delete entries with numbered `FName` references preserved
 - **DataTable rows** — view, edit, copy/paste/delete rows
 - **StringTable exports** — namespace and all key/value entries
 
@@ -213,6 +228,17 @@ This modkit creates `zzz_mods_P.pak` inside Spellbreak's `g3/Content/Paks/` fold
 - A `.sig` file is copied from an existing game pak (UE4 requires a signature file)
 - The base game is **never modified**
 
+Each mod workspace also contains `spellbreak_mod_manifest.json`. It records the
+profile, current files, source-copy provenance, and unique custom-asset
+declarations. The manifest stays outside `g3/Content`, so it documents the
+workspace without being included in the pak.
+
+When enabled mods contain unique custom assets, the packer starts from a
+configured source's `g3/AssetRegistry.bin`, clones the source registry records
+to their new object paths, and stages the patched registry into the generated
+pak. Packing fails safely if a declaration is incomplete, duplicated, missing
+its cloned file, or references a source object absent from the base registry.
+
 Your mod files must mirror Spellbreak's internal folder structure:
 
 ```
@@ -262,6 +288,7 @@ spellbreak-modkit/
     │       └── ui/                 Mod Manager and Settings scenes
     ├── converter/                  Bundled UAssetAPI DLLs (pre-compiled)
     ├── u4pak/                      Bundled u4pak (pak packing tool)
+    ├── asset_registry/             AssetRegistry.bin custom-asset patcher
     ├── ue4_dds_tools/              Bundled UE4-DDS-Tools + libtexconv
     ├── game_profiles/              Spellbreak profile data
     │   └── spellbreak/             Profile, base enums, enums, tags, constants
