@@ -64,12 +64,26 @@ Launch the app, click **Settings**, and fill in:
 - **.uasset file association** — optional, registers the editor and its custom asset icon for `.uasset` files. Linux can set it as the default directly; Windows opens Default Apps for the final choice.
 - **umodel path** — optional, path to the umodel binary for 3D mesh and animation preview
 - **Sources** — extracted asset directories for reference. Use **Generate from Pak** to select a game `.pak`, choose an output folder, unpack it, and add the extracted folder as a source.
+- **Theme** — opens a compact visual editor with shared palette colors, text sizes, spacing, padding, and roundness. Related UI roles are derived automatically; changes preview live and can be saved or canceled.
 
 Settings are saved atomically to `settings.cfg` in the operating system's
 per-user configuration directory (`~/.config/spellbreak-modkit` on Linux,
 `%APPDATA%\spellbreak-modkit` on Windows, and
 `~/Library/Application Support/spellbreak-modkit` on macOS). The Settings tab
 can open the exact folder.
+
+On first launch the app also creates compact `colors.json` and `theme.json`
+files in that folder. `colors.json` contains 12 shared palette colors, while
+`theme.json` contains 10 text-size, spacing, padding, and roundness values.
+Detailed UI roles are derived from those shared values. Both files are watched
+while the app is running, so saving a valid edit applies it without a restart.
+Colors accept Godot-compatible HTML hex strings such as `#ffbf36ff`. Unknown
+keys are ignored, and an invalid file leaves the last valid theme active. Older
+expanded theme files are migrated to the compact format automatically.
+The `bars_and_popups` color is shared by the top tab strip, bottom status bar,
+popup menus, and dialog backgrounds.
+The same values can be edited without touching JSON through **Settings > Edit
+Theme**.
 
 ---
 

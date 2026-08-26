@@ -207,11 +207,15 @@ func _ensure_default_properties() -> void:
 				continue  # already present
 			# Inject into both the parsed properties and the raw data
 			ensure_name(prop_name)
-			var prop := UAssetProperty.from_dict(default_raw, self)
+			# _DEFAULT_PROPERTIES is constant, so its nested dictionaries are
+			# read-only. Parse and store the same writable copy: property setters
+			# intentionally keep their raw dictionary synchronized in-place.
+			var writable_raw: Dictionary = default_raw.duplicate(true)
+			var prop := UAssetProperty.from_dict(writable_raw, self)
 			expo.properties.append(prop)
 			var data_arr: Variant = expo.raw.get("Data")
 			if data_arr is Array:
-				(data_arr as Array).append(default_raw.duplicate(true))
+				(data_arr as Array).append(writable_raw)
 
 
 func validate_for_save() -> Array[Dictionary]:

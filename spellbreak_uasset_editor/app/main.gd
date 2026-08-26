@@ -4,6 +4,7 @@ const BASE_FILE_EXPLORER_TAB := preload("res://ui/tabs/base_file_explorer_tab.gd
 const MOD_SETTINGS_TAB_SCENE := preload(
 	"res://features/mod_manager/ui/mod_settings_tab.tscn")
 const KEYMAP_SETTINGS_TAB_SCENE := preload("res://ui/tabs/keymap_settings_tab.tscn")
+const THEME_SETTINGS_TAB_SCENE := preload("res://ui/tabs/theme_settings_tab.tscn")
 
 @onready var open_file_popup: FileDialog = %OpenFilePopup
 @onready var tab_cont: TabContainer = %TabCont
@@ -16,6 +17,7 @@ const KEYMAP_SETTINGS_TAB_SCENE := preload("res://ui/tabs/keymap_settings_tab.ts
 @onready var _update_progress_bar: ProgressBar = %UpdateProgressBar
 @onready var _tab_title_scroll_timer: Timer = %TabTitleScrollTimer
 @onready var _status_label: Label = %StatusLabel
+@onready var _status_bar: PanelContainer = %StatusBar
 
 var _tab_pending_close: UassetFileTab
 var _tab_close_icon: Texture2D
@@ -67,6 +69,7 @@ func _configure_scene_ui() -> void:
 	AppTheme.apply_theme(_close_dialog)
 	AppTheme.apply_theme(_update_dialog)
 	AppTheme.style_muted(_status_label)
+	_status_bar.add_theme_stylebox_override("panel", AppTheme.make_chrome_style())
 
 	_close_dialog.add_button("Save & Close", false, "save_close")
 	_update_release_button = _update_dialog.add_button(
@@ -82,6 +85,14 @@ func _configure_tab_close_controls() -> void:
 	_tab_close_icon = tab_bar.get_theme_icon("close", "TabBar") if tab_bar else _make_tab_close_icon()
 	tab_cont.tab_button_pressed.connect(_on_tab_button_pressed)
 	if tab_bar:
+		var bar_background := Panel.new()
+		bar_background.name = "ChromeBackground"
+		bar_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bar_background.show_behind_parent = true
+		bar_background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		bar_background.add_theme_stylebox_override(
+			"panel", AppTheme.make_chrome_background_style())
+		tab_bar.add_child(bar_background)
 		tab_bar.set("max_tab_width", _TAB_MAX_WIDTH)
 		tab_bar.set("scrolling_enabled", true)
 		tab_bar.tab_rmb_clicked.connect(_on_tab_rmb_clicked)
@@ -207,20 +218,40 @@ func _setup_mod_tab() -> void:
 	)
 	keymap.status_changed.connect(_on_mod_status_changed)
 
+	var theme_manager := get_node_or_null("/root/AppThemeManager")
+	if theme_manager != null:
+		var theme_settings := THEME_SETTINGS_TAB_SCENE.instantiate() as ThemeSettingsTab
+		theme_settings.setup(theme_manager)
+		tab_cont.add_child(theme_settings)
+		tab_cont.move_child(theme_settings, 3)
+		tab_cont.set_tab_title(3, "Theme")
+		tab_cont.set_tab_hidden(3, true)
+
+		settings.open_theme_requested.connect(func() -> void:
+			theme_settings.refresh()
+			tab_cont.set_tab_hidden(3, false)
+			tab_cont.current_tab = 3
+		)
+		theme_settings.close_requested.connect(func() -> void:
+			tab_cont.set_tab_hidden(3, true)
+			tab_cont.current_tab = 1 if not tab_cont.is_tab_hidden(1) else 0
+		)
+		theme_settings.status_changed.connect(_on_mod_status_changed)
+
 	var diagnostics := DiagnosticsTab.new().setup(panel.get_config())
 	tab_cont.add_child(diagnostics)
-	tab_cont.move_child(diagnostics, 3)
-	tab_cont.set_tab_title(3, "Diagnostics")
-	tab_cont.set_tab_hidden(3, true)
+	tab_cont.move_child(diagnostics, 4)
+	tab_cont.set_tab_title(4, "Diagnostics")
+	tab_cont.set_tab_hidden(4, true)
 
 	panel.open_diagnostics_requested.connect(func() -> void:
 		diagnostics.refresh()
-		tab_cont.set_tab_hidden(3, false)
-		tab_cont.current_tab = 3
+		tab_cont.set_tab_hidden(4, false)
+		tab_cont.current_tab = 4
 	)
 
 	diagnostics.close_requested.connect(func() -> void:
-		tab_cont.set_tab_hidden(3, true)
+		tab_cont.set_tab_hidden(4, true)
 		tab_cont.current_tab = 1 if not tab_cont.is_tab_hidden(1) else 0
 	)
 	diagnostics.status_changed.connect(_on_mod_status_changed)
@@ -229,10 +260,10 @@ func _setup_mod_tab() -> void:
 	# visible position beside Mod Manager.
 	var explorer := BASE_FILE_EXPLORER_TAB.new().setup(_cfg, _background_jobs)
 	tab_cont.add_child(explorer)
-	tab_cont.move_child(explorer, 4)
+	tab_cont.move_child(explorer, 5)
 	_explorer_tab = explorer
-	tab_cont.set_tab_title(4, "Base Files")
-	tab_cont.set_tab_hidden(4, true)
+	tab_cont.set_tab_title(5, "Base Files")
+	tab_cont.set_tab_hidden(5, true)
 	explorer.open_asset_requested.connect(_on_file_selected)
 	explorer.add_to_mod_requested.connect(panel.add_source_file_to_mod)
 	explorer.clone_unique_requested.connect(panel.clone_source_file_to_mod)

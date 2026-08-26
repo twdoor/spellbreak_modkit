@@ -1,59 +1,60 @@
 class_name AppTheme
-## Centralized theme constants for the entire application.
+## Centralized, runtime-editable theme values for the entire application.
 ## All semantic color roles, font sizes, and spacing values live here
 ## so the UI stays consistent and is easy to tweak from one place.
 ##
 ## Usage:  label.add_theme_color_override("font_color", AppTheme.TEXT_MUTED)
 
 # ── Background / Panel ────────────────────────────────────────────────────────
-const BG_PRIMARY     := Color(0.09, 0.09, 0.09, 1.0)   # main window bg
-const BG_PANEL       := Color(0.125, 0.125, 0.125, 1.0) # panels, popups
-const BG_FIELD       := Color(0.1, 0.1, 0.1, 0.6)       # input fields
-const BG_HOVER       := Color(0.225, 0.225, 0.225, 0.6)  # hovered controls
-const BG_TOAST       := Color(0.1, 0.1, 0.1, 0.93)       # toast notification
-const BG_SELECTION   := Color(0.15, 0.38, 0.70, 0.55)    # selected row
+static var BG_PRIMARY := Color(0.09, 0.09, 0.09, 1.0)   # main window bg
+static var BG_PANEL := Color(0.125, 0.125, 0.125, 1.0) # panels, popups
+static var BG_FIELD := Color(0.1, 0.1, 0.1, 0.6)       # input fields
+static var BG_HOVER := Color(0.225, 0.225, 0.225, 0.6)  # hovered controls
+static var BG_TOAST := Color(0.1, 0.1, 0.1, 0.93)       # toast notification
+static var BG_SELECTION := Color(0.15, 0.38, 0.70, 0.55)    # selected row
+static var BG_CHROME := Color(0.2, 0.2, 0.2, 1.0)       # bars, popups, dialogs
 
 # ── Accent (from the icon palette) ───────────────────────────────────────────
-const ACCENT         := Color(1.0, 0.749, 0.212)         # FFBF36 gold from icon
-const ACCENT_DIM     := Color(0.698, 0.737, 0.761)       # B2BCC2 silver from icon
+static var ACCENT := Color(1.0, 0.749, 0.212)         # FFBF36 gold from icon
+static var ACCENT_DIM := Color(0.698, 0.737, 0.761)       # B2BCC2 silver from icon
 
 # ── Text colors ──────────────────────────────────────────────────────────────
-const TEXT_PRIMARY   := Color(0.875, 0.875, 0.875, 1.0)  # default text
-const TEXT_HEADING   := Color(0.9, 0.9, 0.9, 1.0)        # headers / titles
-const TEXT_DIM       := Color(0.6, 0.6, 0.6, 1.0)        # field labels, info text
-const TEXT_MUTED     := Color(0.5, 0.5, 0.5, 1.0)        # type badges, status, hints
-const TEXT_VERY_MUTED := Color(0.45, 0.45, 0.45, 1.0)    # index numbers
-const TEXT_SUBTLE    := Color(0.55, 0.55, 0.55, 1.0)     # key text in text editor
-const TEXT_SECTION   := Color(0.7, 0.7, 0.4, 1.0)        # section labels (yellow accent)
-const TEXT_INFO_YELLOW := Color(0.8, 0.8, 0.4, 1.0)      # struct/array child counts
-const TEXT_TOAST     := Color(0.92, 0.92, 0.92, 1.0)     # toast message text
+static var TEXT_PRIMARY := Color(0.875, 0.875, 0.875, 1.0)  # default text
+static var TEXT_HEADING := Color(0.9, 0.9, 0.9, 1.0)        # headers / titles
+static var TEXT_DIM := Color(0.6, 0.6, 0.6, 1.0)        # field labels, info text
+static var TEXT_MUTED := Color(0.5, 0.5, 0.5, 1.0)        # type badges, status, hints
+static var TEXT_VERY_MUTED := Color(0.45, 0.45, 0.45, 1.0)    # index numbers
+static var TEXT_SUBTLE := Color(0.55, 0.55, 0.55, 1.0)     # key text in text editor
+static var TEXT_SECTION := Color(0.7, 0.7, 0.4, 1.0)        # section labels (yellow accent)
+static var TEXT_INFO_YELLOW := Color(0.8, 0.8, 0.4, 1.0)      # struct/array child counts
+static var TEXT_TOAST := Color(0.92, 0.92, 0.92, 1.0)     # toast message text
 
 # ── Semantic button colors ───────────────────────────────────────────────────
-const BTN_NAV        := Color(0.5, 0.7, 1.0, 1.0)        # navigation / link
-const BTN_NAV_HOVER  := Color(0.7, 0.85, 1.0, 1.0)
-const BTN_DELETE     := Color(0.9, 0.4, 0.4, 1.0)        # delete / danger
-const BTN_DELETE_HOVER := Color(1.0, 0.5, 0.5, 1.0)
-const BTN_ADD        := Color(0.4, 0.8, 0.4, 1.0)        # add / success
-const BTN_ADD_HOVER  := Color(0.6, 1.0, 0.6, 1.0)
-const BTN_MUTED      := Color(0.6, 0.6, 0.6, 1.0)        # secondary actions
-const BTN_MUTED_HOVER := Color(0.9, 0.9, 0.9, 1.0)
-const BTN_PACK       := Color(0.952, 0.646, 0.564, 1.0)  # pack action (warm)
-const BTN_LAUNCH     := Color(0.9, 0.7, 0.3, 1.0)        # launch action (gold)
-const BTN_NEW_MOD    := Color(0.6, 0.85, 0.6, 1.0)       # new mod (green)
-const BTN_REMOVE     := Color(0.8, 0.3, 0.3, 1.0)        # remove / warning
-const BTN_SAVE       := Color(0.4, 0.85, 0.4, 1.0)       # save button
+static var BTN_NAV := Color(0.5, 0.7, 1.0, 1.0)        # navigation / link
+static var BTN_NAV_HOVER := Color(0.7, 0.85, 1.0, 1.0)
+static var BTN_DELETE := Color(0.9, 0.4, 0.4, 1.0)        # delete / danger
+static var BTN_DELETE_HOVER := Color(1.0, 0.5, 0.5, 1.0)
+static var BTN_ADD := Color(0.4, 0.8, 0.4, 1.0)        # add / success
+static var BTN_ADD_HOVER := Color(0.6, 1.0, 0.6, 1.0)
+static var BTN_MUTED := Color(0.6, 0.6, 0.6, 1.0)        # secondary actions
+static var BTN_MUTED_HOVER := Color(0.9, 0.9, 0.9, 1.0)
+static var BTN_PACK := Color(0.952, 0.646, 0.564, 1.0)  # pack action (warm)
+static var BTN_LAUNCH := Color(0.9, 0.7, 0.3, 1.0)        # launch action (gold)
+static var BTN_NEW_MOD := Color(0.6, 0.85, 0.6, 1.0)       # new mod (green)
+static var BTN_REMOVE := Color(0.8, 0.3, 0.3, 1.0)        # remove / warning
+static var BTN_SAVE := Color(0.4, 0.85, 0.4, 1.0)       # save button
 
 # ── Reference / import links ────────────────────────────────────────────────
-const REF_COLOR      := Color(0.45, 0.65, 0.9, 1.0)      # object reference labels
-const REF_LINE_COLOR := Color(0.5, 0.7, 1.0, 1.0)        # soft-object line edits
+static var REF_COLOR := Color(0.45, 0.65, 0.9, 1.0)      # object reference labels
+static var REF_LINE_COLOR := Color(0.5, 0.7, 1.0, 1.0)        # soft-object line edits
 
 # ── Status colors ────────────────────────────────────────────────────────────
-const STATUS_SUCCESS := Color(0.4, 0.8, 0.4, 1.0)
-const STATUS_ERROR   := Color(0.8, 0.4, 0.4, 1.0)
-const STATUS_WARNING := Color(0.86, 0.68, 0.32, 1.0)
-const STATUS_ACTIVE  := Color(0.3, 0.9, 0.3, 1.0)        # watch-mode active
-const STATUS_IDLE    := Color(0.5, 0.5, 0.5, 1.0)
-const STATUS_WORKING := Color(0.698, 0.737, 0.761, 1.0)
+static var STATUS_SUCCESS := Color(0.4, 0.8, 0.4, 1.0)
+static var STATUS_ERROR := Color(0.8, 0.4, 0.4, 1.0)
+static var STATUS_WARNING := Color(0.86, 0.68, 0.32, 1.0)
+static var STATUS_ACTIVE := Color(0.3, 0.9, 0.3, 1.0)        # watch-mode active
+static var STATUS_IDLE := Color(0.5, 0.5, 0.5, 1.0)
+static var STATUS_WORKING := Color(0.698, 0.737, 0.761, 1.0)
 
 enum StatusKind {
 	IDLE,
@@ -64,57 +65,59 @@ enum StatusKind {
 }
 
 # ── Font sizes ───────────────────────────────────────────────────────────────
-const FONT_HEADER    := 16
-const FONT_TOAST     := 15
-const FONT_REF       := 15
-const FONT_DEFAULT   := 14  # Godot default
-const FONT_STATUS    := 13
-const FONT_SECTION   := 12
-const FONT_SMALL     := 12
-const FONT_BADGE     := 11
-const FONT_STATUS_BAR := 11
-const FONT_TINY      := 10
+static var FONT_HEADER := 16
+static var FONT_TOAST := 15
+static var FONT_REF := 15
+static var FONT_DEFAULT := 14  # Godot default
+static var FONT_STATUS := 13
+static var FONT_SECTION := 12
+static var FONT_SMALL := 12
+static var FONT_BADGE := 11
+static var FONT_STATUS_BAR := 11
+static var FONT_TINY := 10
 
 # ── Spacing ──────────────────────────────────────────────────────────────────
-const SPACING_ROW    := 8   # horizontal separation inside a property row
-const SPACING_FIELD  := 6   # horizontal separation inside compact rows
-const SPACING_TAGS   := 3   # vertical separation inside tag lists
-const SPACING_TIGHT  := 4   # minimal separation
+static var SPACING_ROW := 8   # horizontal separation inside a property row
+static var SPACING_FIELD := 6   # horizontal separation inside compact rows
+static var SPACING_TAGS := 3   # vertical separation inside tag lists
+static var SPACING_TIGHT := 4   # minimal separation
 
 # ── Margins ──────────────────────────────────────────────────────────────────
-const MARGIN_TOOLBAR_H := 8
-const MARGIN_TOOLBAR_TOP := 6
-const MARGIN_TOOLBAR_BOTTOM := 4
-const MARGIN_STATUS_H := 10
-const MARGIN_STATUS_V := 3
-const MARGIN_LOG_H := 10
-const MARGIN_LOG_TOP := 2
-const MARGIN_LOG_BOTTOM := 6
-const MARGIN_SETTINGS_H := 20
-const MARGIN_SETTINGS_V := 16
-const MARGIN_SELECTABLE_H_L := 6
-const MARGIN_SELECTABLE_H_R := 4
-const MARGIN_SELECTABLE_V := 3
+static var MARGIN_TOOLBAR_H := 8
+static var MARGIN_TOOLBAR_TOP := 6
+static var MARGIN_TOOLBAR_BOTTOM := 4
+static var MARGIN_STATUS_H := 10
+static var MARGIN_STATUS_V := 3
+static var MARGIN_LOG_H := 10
+static var MARGIN_LOG_TOP := 2
+static var MARGIN_LOG_BOTTOM := 6
+static var MARGIN_SETTINGS_H := 20
+static var MARGIN_SETTINGS_V := 16
+static var MARGIN_SELECTABLE_H_L := 6
+static var MARGIN_SELECTABLE_H_R := 4
+static var MARGIN_SELECTABLE_V := 3
 
 # ── Corner radius ────────────────────────────────────────────────────────────
-const CORNER_RADIUS  := 3
-const CORNER_TOAST   := 8
+static var CORNER_RADIUS := 3
+static var CORNER_TOAST := 8
 
 # ── Tree ─────────────────────────────────────────────────────────────────────
-const TREE_FONT_COLOR := Color(0.7, 0.7, 0.7, 1.0)
-const TREE_SELECTED   := Color(0.234, 0.234, 0.234, 1.0)
+static var TREE_FONT_COLOR := Color(0.7, 0.7, 0.7, 1.0)
+static var TREE_SELECTED := Color(0.234, 0.234, 0.234, 1.0)
 
 # ── Mod tree item colors ────────────────────────────────────────────────────
-const MOD_ENABLED     := Color(0.45, 0.9, 0.45, 1.0)     # enabled mod name
-const MOD_DISABLED    := Color(0.82, 0.82, 0.82, 1.0)     # disabled mod name
-const MOD_PLACEHOLDER := Color(0.45, 0.45, 0.45, 1.0)     # "no mods found" hint
-const MOD_DIR         := Color(0.5, 0.5, 0.58, 1.0)       # directory entries
-const MOD_FILE_UASSET := Color(0.5, 0.75, 1.0, 1.0)       # .uasset file entries
-const MOD_FILE_OTHER  := Color(0.62, 0.62, 0.62, 1.0)     # other file entries
+static var MOD_ENABLED := Color(0.45, 0.9, 0.45, 1.0)     # enabled mod name
+static var MOD_DISABLED := Color(0.82, 0.82, 0.82, 1.0)     # disabled mod name
+static var MOD_PLACEHOLDER := Color(0.45, 0.45, 0.45, 1.0)     # "no mods found" hint
+static var MOD_DIR := Color(0.5, 0.5, 0.58, 1.0)       # directory entries
+static var MOD_FILE_UASSET := Color(0.5, 0.75, 1.0, 1.0)       # .uasset file entries
+static var MOD_FILE_OTHER := Color(0.62, 0.62, 0.62, 1.0)     # other file entries
 
 # ── Shared theme resource ────────────────────────────────────────────────────
 ## Preloaded once so every Window can reference it without a separate preload.
 static var _theme: Theme = preload("res://app/main_theme.tres")
+static var _chrome_background_style: StyleBoxFlat
+static var _dialog_styles: Array[WeakRef] = []
 
 # ── Convenience factory methods ──────────────────────────────────────────────
 
@@ -124,8 +127,16 @@ static var _theme: Theme = preload("res://app/main_theme.tres")
 static func apply_theme(win: Window) -> void:
 	win.theme = _theme
 	win.transparent = false
-	win.transparent_bg = false
+	# Embedded windows otherwise clear their viewport with Godot's default
+	# background color, hiding the themed panel placed behind their contents.
+	win.transparent_bg = true
 	win.extend_to_title = false
+	_add_window_background(win)
+	win.about_to_popup.connect(_add_window_background.bind(win))
+	if win.is_node_ready():
+		_add_window_background.call_deferred(win)
+	else:
+		win.ready.connect(_add_window_background.bind(win), CONNECT_ONE_SHOT)
 
 
 ## Standard file picker setup. Native OS pickers are often application-modal,
@@ -242,3 +253,58 @@ static func make_toast_style() -> StyleBoxFlat:
 	style.content_margin_top = 12
 	style.content_margin_bottom = 12
 	return style
+
+
+## Shared application chrome used by bars outside the main content area.
+static func make_chrome_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = BG_CHROME
+	style.content_margin_left = MARGIN_STATUS_H
+	style.content_margin_right = MARGIN_STATUS_H
+	style.content_margin_top = MARGIN_STATUS_V
+	style.content_margin_bottom = MARGIN_STATUS_V
+	return style
+
+
+## Flat chrome fill without content padding, for tabs and popup backplates.
+static func make_chrome_background_style() -> StyleBoxFlat:
+	if _chrome_background_style == null:
+		_chrome_background_style = StyleBoxFlat.new()
+	_chrome_background_style.bg_color = BG_CHROME
+	return _chrome_background_style
+
+
+static func refresh_dynamic_styles() -> void:
+	if _chrome_background_style != null:
+		_chrome_background_style.bg_color = BG_CHROME
+	for index in range(_dialog_styles.size() - 1, -1, -1):
+		var style := _dialog_styles[index].get_ref() as StyleBoxFlat
+		if style == null:
+			_dialog_styles.remove_at(index)
+			continue
+		style.bg_color = BG_CHROME
+
+
+static func _add_window_background(win: Window) -> void:
+	# AcceptDialog and its subclasses create a private, full-size Panel which is
+	# drawn above ordinary Window children. Style it directly; otherwise Godot's
+	# default dialog gray hides the chrome background beneath it.
+	for child in win.get_children(true):
+		var internal_panel := child as Panel
+		if internal_panel != null and internal_panel.name != "_AppThemeChromeBackground":
+			var dialog_style := StyleBoxFlat.new()
+			dialog_style.bg_color = BG_CHROME
+			internal_panel.add_theme_stylebox_override("panel", dialog_style)
+			_dialog_styles.append(weakref(dialog_style))
+	var existing := win.get_node_or_null("_AppThemeChromeBackground") as Panel
+	if existing != null:
+		existing.add_theme_stylebox_override("panel", make_chrome_background_style())
+		return
+	var background := Panel.new()
+	background.name = "_AppThemeChromeBackground"
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	background.z_index = -1000
+	background.add_theme_stylebox_override("panel", make_chrome_background_style())
+	win.add_child(background)
+	win.move_child(background, 0)

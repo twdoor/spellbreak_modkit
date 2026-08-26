@@ -37,12 +37,9 @@ metadata/_tab_name = "Mods"
 [node name="StatusSeparator" type="HSeparator" parent="Panel/VBoxContainer" unique_id=1379137803]
 layout_mode = 2
 
-[node name="StatusBar" type="MarginContainer" parent="Panel/VBoxContainer" unique_id=1645314012]
+[node name="StatusBar" type="PanelContainer" parent="Panel/VBoxContainer" unique_id=1645314012]
+unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/margin_left = 10
-theme_override_constants/margin_top = 3
-theme_override_constants/margin_right = 10
-theme_override_constants/margin_bottom = 3
 
 [node name="StatusLabel" type="Label" parent="Panel/VBoxContainer/StatusBar" unique_id=50218792]
 unique_name_in_owner = true

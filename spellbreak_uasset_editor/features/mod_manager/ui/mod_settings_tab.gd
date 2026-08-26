@@ -6,6 +6,7 @@ class_name ModSettingsTab extends VBoxContainer
 
 signal close_requested
 signal open_keymap_requested
+signal open_theme_requested
 signal status_changed(text: String, is_error: bool)
 
 var _cfg: ModConfigManager
@@ -184,6 +185,10 @@ func _on_umodel_browse_pressed() -> void:
 
 func _on_edit_keymap_pressed() -> void:
 	open_keymap_requested.emit()
+
+
+func _on_edit_theme_pressed() -> void:
+	open_theme_requested.emit()
 
 
 # ── Sources list ──────────────────────────────────────────────────────────────

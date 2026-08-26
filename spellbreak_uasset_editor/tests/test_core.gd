@@ -57,6 +57,7 @@ func _run() -> void:
 	_test_clipboard_export_cross_file_remaps_imports()
 	_test_clipboard_export_group_preserves_internal_refs()
 	_test_property_state_restore()
+	_test_double_property_editor()
 	_test_byte_enum_property_round_trip()
 	_test_map_property_parse_round_trip()
 	_test_map_property_edits_and_state()
@@ -81,6 +82,7 @@ func _run() -> void:
 	_test_file_watcher_deferred_pack_starts_packer()
 	_test_atomic_file_install()
 	_test_mod_discovery_models_and_symlinks()
+	_test_mod_git_helpers()
 	_test_mod_manifest()
 	_test_mod_preflight()
 	_test_clone_helpers()
@@ -1132,6 +1134,26 @@ func _test_property_state_restore() -> void:
 	prop.restore_state(after)
 	_expect(prop.children[0].value == "After" and prop.to_dict() == after,
 		"property snapshots can be reapplied for redo")
+
+
+func _test_double_property_editor() -> void:
+	var prop := UAssetProperty.from_dict({
+		"$type": "UAssetAPI.PropertyTypes.Objects.DoublePropertyData, UAssetAPI",
+		"Name": "PreciseValue",
+		"Value": 1.23456789,
+	})
+	_expect(prop.prop_type == "Double" and is_equal_approx(prop.value, 1.23456789),
+		"double property parses as an editable numeric type")
+
+	var row := PropertyRow.create(prop)
+	_expect(row.editor_control is SpinBox,
+		"double property uses a numeric editor")
+	(row.editor_control as SpinBox).value_changed.emit(9.876543)
+	_expect(is_equal_approx(float(prop.value), 9.876543),
+		"double property editor updates the property value")
+	_expect(is_equal_approx(float(prop.to_dict().get("Value")), 9.876543),
+		"edited double property round-trips through serialization")
+	row.free()
 
 
 func _test_byte_enum_property_round_trip() -> void:
@@ -2370,6 +2392,39 @@ func _test_clone_helpers() -> void:
 		"clone name validation rejects dots")
 	_expect(not ModManagerPanel._valid_clone_name("", "BP_Thing"),
 		"clone name validation rejects an empty name")
+
+
+func _test_mod_git_helpers() -> void:
+	var root := OS.get_temp_dir().path_join(
+			"sb_test_mod_git_%d" % Time.get_ticks_usec())
+	DirAccess.make_dir_recursive_absolute(root)
+	var git := ProcessUtils.find_executable(["git"])
+	if not git.is_empty():
+		OS.execute(git, ["-C", root, "init"], [], true, false)
+		OS.execute(git, ["-C", root, "config", "user.name", "Modkit Test"], [], true, false)
+		OS.execute(git, ["-C", root, "config", "user.email", "modkit@example.invalid"], [], true, false)
+	else:
+		DirAccess.make_dir_recursive_absolute(root.path_join(".git"))
+	_expect(ModGitService.is_repository(root),
+			"mod Git service detects repository directory markers")
+	if not git.is_empty():
+		FileUtils.write_bytes_atomic(root.path_join("change.txt"), "team work".to_utf8_buffer())
+		var changed := ModGitService.status(root)
+		_expect(changed.success and changed.changed == 1
+				and "New: change.txt" in changed.changes,
+				"mod Git service reports beginner-friendly changed files")
+		var committed := ModGitService.commit_all(root, "Add team work")
+		_expect(committed.success and ModGitService.status(root).changed == 0,
+				"mod Git service stages and commits workspace changes")
+	_expect(ModGitService.browser_url("git@github.com:team/mod.git")
+			== "https://github.com/team/mod",
+			"mod Git service converts SSH remotes to browser URLs")
+	_expect(ModGitService.browser_url("https://gitlab.com/team/mod.git/")
+			== "https://gitlab.com/team/mod",
+			"mod Git service normalizes HTTPS remotes")
+	_expect(ModGitService.browser_url("file:///tmp/mod.git").is_empty(),
+			"mod Git service rejects non-browser remotes")
+	FileUtils.remove_dir_recursive(root)
 
 
 func _test_mod_preflight() -> void:

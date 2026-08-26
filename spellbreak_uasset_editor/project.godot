@@ -29,6 +29,7 @@ config/icon="uid://ci3kbtj31kgky"
 
 VersionManager="*res://addons/version_manager/version_manager_runtime.gd"
 AppSettings="*res://addons/app_settings/app_settings_runtime.gd"
+AppThemeManager="*res://app/app_theme_manager.gd"
 
 [display]
 

@@ -115,11 +115,16 @@ static func _create_editor(prop: UAssetProperty, row: PropertyRow, asset: UAsset
 				_attach_constant_helper(spin, asset.game_profile.constants, true)
 			return spin
 
-		"Float":
+		"Float", "Double":
 			var spin := SpinBox.new()
-			spin.min_value = -999999.0
-			spin.max_value = 999999.0
-			spin.step = 0.01
+			if prop.prop_type == "Double":
+				spin.min_value = -1.7976931348623157e308
+				spin.max_value = 1.7976931348623157e308
+				spin.step = 0.000001
+			else:
+				spin.min_value = -999999.0
+				spin.max_value = 999999.0
+				spin.step = 0.01
 			spin.value = float(prop.value) if prop.value != null else 0.0
 			spin.value_changed.connect(func(v): _on_change(row, v))
 			if asset and asset.game_profile and not asset.game_profile.constants.is_empty():
@@ -348,7 +353,7 @@ static func is_color_struct(prop: UAssetProperty) -> bool:
 
 
 static func _is_color_component(prop: UAssetProperty) -> bool:
-	if prop.prop_type not in ["Float", "Int", "Byte"]:
+	if prop.prop_type not in ["Float", "Double", "Int", "Byte"]:
 		return false
 	if prop.value is String:
 		return false
@@ -683,7 +688,7 @@ static func _vector_type_label(prop: UAssetProperty) -> String:
 
 
 static func _is_vector_component(prop: UAssetProperty) -> bool:
-	if prop.prop_type not in ["Float", "Int", "Byte"]:
+	if prop.prop_type not in ["Float", "Double", "Int", "Byte"]:
 		return false
 	return _is_numeric_value(prop.value)
 

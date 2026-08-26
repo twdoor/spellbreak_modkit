@@ -34,9 +34,11 @@ var _clipboard_is_cut:  bool  = false
 var _watch_toggle_locked := false
 var _pending_new_mod_from_pak := ""
 var _pending_new_mod_from_pak_path := ""
+var _git_badge_icon: ImageTexture
 
 # Tree button IDs
 const _BTN_ADD := 0
+const _BTN_GIT := 1
 const _BTN_DEL := 0
 const _BTN_OPEN_EXTERNAL := 1
 
@@ -224,6 +226,13 @@ func _build_mod_item(root: TreeItem, mod: ModInfo) -> void:
 	if add_icon:
 		item.add_button(0, add_icon, _BTN_ADD, false, "Add files to this mod")
 
+	if ModGitService.is_repository(mod.path):
+		var git_status := ModGitService.status(mod.path)
+		item.add_button(0, _get_git_badge_icon(), _BTN_GIT, false,
+				_git_status_tooltip(git_status))
+		item.set_button_color(0, item.get_button_count(0) - 1,
+				_git_status_color(git_status))
+
 	_build_mod_files(item, mod)
 
 
@@ -314,13 +323,16 @@ func _populate_mod_folder(parent: TreeItem, node: Dictionary, mod: ModInfo,
 
 # ── Tree signal handlers ───────────────────────────────────────────────────────
 
-## Double-click a file → open .uasset in the editor, everything else with the OS default app.
+## Double-click a branch → expand/collapse; double-click a file → open it.
 ## Using activated (double-click) so single-click safely builds multi-selection.
 func _on_tree_item_activated() -> void:
 	var item := _mod_tree.get_selected()
 	if not item:
 		return
 	var meta: Dictionary = item.get_metadata(0)
+	if meta.get("type") in ["mod", "folder"]:
+		item.collapsed = not item.collapsed
+		return
 	if meta.get("type") != "file":
 		return
 	var path: String = meta["full_path"]
@@ -373,6 +385,8 @@ func _on_tree_button_clicked(item: TreeItem, _column: int, id: int, mouse_button
 		"mod":
 			if id == _BTN_ADD:
 				_on_add_files_pressed(meta["mod"] as ModInfo)
+			elif id == _BTN_GIT:
+				_show_git_status.call_deferred(meta["mod"] as ModInfo)
 		"file":
 			if id == _BTN_OPEN_EXTERNAL:
 				_open_external_file(meta["full_path"] as String)
@@ -381,6 +395,312 @@ func _on_tree_button_clicked(item: TreeItem, _column: int, id: int, mouse_button
 				var mod_ref := meta["mod"] as ModInfo
 				var path_ref: String    = meta["full_path"]
 				(func() -> void: _remove_mod_file(mod_ref, path_ref)).call_deferred()
+
+
+func _git_status_color(info: Dictionary) -> Color:
+	if not bool(info.success):
+		return AppTheme.STATUS_ERROR
+	if int(info.ahead) > 0 and int(info.behind) > 0:
+		return Color(0.72, 0.48, 0.92)
+	if int(info.behind) > 0:
+		return AppTheme.STATUS_WARNING
+	if int(info.ahead) > 0:
+		return Color(0.4, 0.68, 1.0)
+	if int(info.changed) > 0:
+		return Color(0.95, 0.78, 0.3)
+	if not bool(info.has_upstream):
+		return AppTheme.STATUS_IDLE
+	return AppTheme.STATUS_SUCCESS
+
+
+## EditorIcons are unavailable in exported builds, so the repository indicator
+## uses a tiny runtime-generated white circle that TreeItem can tint by status.
+func _get_git_badge_icon() -> ImageTexture:
+	if _git_badge_icon:
+		return _git_badge_icon
+	const ICON_SIZE := 12
+	const CENTER := Vector2(5.5, 5.5)
+	const RADIUS := 4.5
+	var image := Image.create(ICON_SIZE, ICON_SIZE, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	for y in range(ICON_SIZE):
+		for x in range(ICON_SIZE):
+			var distance := Vector2(x, y).distance_to(CENTER)
+			if distance <= RADIUS:
+				var alpha := clampf(RADIUS + 0.75 - distance, 0.0, 1.0)
+				image.set_pixel(x, y, Color(1.0, 1.0, 1.0, alpha))
+	_git_badge_icon = ImageTexture.create_from_image(image)
+	return _git_badge_icon
+
+
+func _git_status_label(info: Dictionary) -> String:
+	if not bool(info.success):
+		return "Repository error"
+	if int(info.ahead) > 0 and int(info.behind) > 0:
+		return "%d ahead, %d behind" % [info.ahead, info.behind]
+	if int(info.behind) > 0:
+		return "%d commit(s) to pull" % info.behind
+	if int(info.ahead) > 0:
+		return "%d commit(s) to push" % info.ahead
+	if int(info.changed) > 0:
+		return "%d changed file(s)" % info.changed
+	if not bool(info.has_upstream):
+		return "No upstream configured"
+	return "Clean and synchronized"
+
+
+func _git_status_tooltip(info: Dictionary) -> String:
+	if not bool(info.success):
+		return "Git repository · %s" % str(info.error)
+	return "%s · %s\nClick for repository details" % [
+		str(info.branch), _git_status_label(info)]
+
+
+func _show_git_status(mod: ModInfo) -> void:
+	var info := ModGitService.status(mod.path)
+	var dialog := AcceptDialog.new()
+	dialog.title = "%s · Team Repository" % mod.name
+	dialog.ok_button_text = "Close"
+	var dialog_size := Vector2i(660, 540)
+	dialog.min_size = dialog_size
+	dialog.max_size = dialog_size
+	dialog.unresizable = true
+	AppTheme.apply_theme(dialog)
+	add_child(dialog)
+
+	var outer := MarginContainer.new()
+	outer.add_theme_constant_override("margin_left", 16)
+	outer.add_theme_constant_override("margin_top", 12)
+	outer.add_theme_constant_override("margin_right", 16)
+	outer.add_theme_constant_override("margin_bottom", 10)
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 10)
+	outer.add_child(content)
+
+	var status_panel := PanelContainer.new()
+	status_panel.add_theme_stylebox_override("panel",
+			_git_menu_card_style(_git_status_color(info)))
+	var status_box := VBoxContainer.new()
+	status_box.add_theme_constant_override("separation", 4)
+	status_panel.add_child(status_box)
+	content.add_child(status_panel)
+
+	var state_label := Label.new()
+	AppTheme.style_header(state_label)
+	status_box.add_child(state_label)
+
+	var summary_label := Label.new()
+	summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	status_box.add_child(summary_label)
+
+	var branch_label := Label.new()
+	branch_label.add_theme_font_size_override("font_size", AppTheme.FONT_SMALL)
+	AppTheme.style_muted(branch_label)
+	status_box.add_child(branch_label)
+
+	var sync_panel := PanelContainer.new()
+	sync_panel.add_theme_stylebox_override("panel", _git_menu_card_style())
+	var sync_box := VBoxContainer.new()
+	sync_box.add_theme_constant_override("separation", 6)
+	sync_panel.add_child(sync_box)
+	content.add_child(sync_panel)
+	var sync_title := Label.new()
+	sync_title.text = "TEAM SYNC"
+	AppTheme.style_section(sync_title)
+	sync_box.add_child(sync_title)
+	var sync_row := HBoxContainer.new()
+	sync_row.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
+	var fetch_button := Button.new()
+	fetch_button.text = "Check for Updates"
+	fetch_button.tooltip_text = "Fetch remote information without changing your files"
+	AppTheme.style_muted_btn(fetch_button)
+	sync_row.add_child(fetch_button)
+	var pull_button := Button.new()
+	pull_button.text = "Get Team Changes"
+	pull_button.tooltip_text = "Git pull (fast-forward only)"
+	AppTheme.style_nav_btn(pull_button)
+	sync_row.add_child(pull_button)
+	var push_button := Button.new()
+	push_button.text = "Share My Commits"
+	push_button.tooltip_text = "Git push"
+	AppTheme.style_add_btn(push_button)
+	sync_row.add_child(push_button)
+	sync_box.add_child(sync_row)
+
+	var changes_panel := PanelContainer.new()
+	changes_panel.add_theme_stylebox_override("panel", _git_menu_card_style())
+	var changes_box := VBoxContainer.new()
+	changes_box.add_theme_constant_override("separation", 6)
+	changes_panel.add_child(changes_box)
+	content.add_child(changes_panel)
+	var changes_title := Label.new()
+	changes_title.text = "MY CHANGES"
+	AppTheme.style_section(changes_title)
+	changes_box.add_child(changes_title)
+	var changes_list := RichTextLabel.new()
+	changes_list.custom_minimum_size = Vector2(0, 72)
+	changes_list.fit_content = false
+	changes_list.scroll_active = true
+	changes_list.selection_enabled = true
+	changes_list.add_theme_color_override("default_color", AppTheme.TEXT_DIM)
+	changes_box.add_child(changes_list)
+
+	var commit_row := HBoxContainer.new()
+	commit_row.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
+	var commit_message := LineEdit.new()
+	commit_message.placeholder_text = "Briefly describe what you changed"
+	commit_message.tooltip_text = "This becomes the Git commit message"
+	commit_message.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	commit_row.add_child(commit_message)
+	var commit_button := Button.new()
+	commit_button.text = "Save Changes"
+	commit_button.tooltip_text = "Stage all changed files and create a Git commit"
+	AppTheme.style_add_btn(commit_button)
+	commit_row.add_child(commit_button)
+	changes_box.add_child(commit_row)
+
+	var feedback := AppTheme.make_status_label(
+			"", AppTheme.StatusKind.IDLE, AppTheme.FONT_STATUS)
+	feedback.autowrap_mode = TextServer.AUTOWRAP_WORD
+	feedback.custom_minimum_size = Vector2(0, 20)
+	content.add_child(feedback)
+
+	var safety_hint := Label.new()
+	safety_hint.text = (
+			"Safe mode: getting changes never creates a merge commit, and this menu "
+			+ "never discards files. Remote status is updated when you check for updates."
+	)
+	safety_hint.autowrap_mode = TextServer.AUTOWRAP_WORD
+	safety_hint.add_theme_font_size_override("font_size", AppTheme.FONT_SMALL)
+	AppTheme.style_muted(safety_hint)
+	content.add_child(safety_hint)
+	dialog.add_child(outer)
+
+	var remote_url := ModGitService.browser_url(str(info.remote_url))
+	dialog.add_button("Open Folder", false, "folder")
+	var remote_button := dialog.add_button("Open Repository", false, "remote")
+	remote_button.disabled = remote_url.is_empty()
+	AppTheme.style_nav_btn(remote_button)
+
+	var refs := {
+		"panel": status_panel, "state": state_label,
+		"summary": summary_label, "branch": branch_label,
+		"changes": changes_list, "commit": commit_button,
+		"fetch": fetch_button, "pull": pull_button, "push": push_button,
+	}
+	_update_git_menu(info, refs)
+	# Lambdas capture local values, so keep refreshed status in a mutable box.
+	var current_info := {"value": info}
+
+	var refresh_after_action := func(result: Dictionary, success_text: String) -> void:
+		if bool(result.success):
+			AppTheme.set_status_label(feedback, success_text, AppTheme.StatusKind.SUCCESS)
+		else:
+			var output := str(result.output).strip_edges()
+			AppTheme.set_status_label(feedback,
+					output if not output.is_empty() else "Git could not complete that action.",
+					AppTheme.StatusKind.ERROR)
+		_refresh_mods()
+		current_info["value"] = ModGitService.status(mod.path)
+		_update_git_menu(current_info["value"], refs)
+
+	fetch_button.pressed.connect(func() -> void:
+		AppTheme.set_status_label(feedback, "Checking the remote…", AppTheme.StatusKind.WORKING)
+		refresh_after_action.call(ModGitService.fetch(mod.path), "Repository status updated."))
+	pull_button.pressed.connect(func() -> void:
+		AppTheme.set_status_label(feedback, "Getting team changes…", AppTheme.StatusKind.WORKING)
+		refresh_after_action.call(ModGitService.pull(mod.path), "Team changes are now on this computer."))
+	push_button.pressed.connect(func() -> void:
+		var latest: Dictionary = current_info["value"]
+		AppTheme.set_status_label(feedback, "Sharing commits…", AppTheme.StatusKind.WORKING)
+		refresh_after_action.call(ModGitService.push(
+				mod.path, str(latest.branch), bool(latest.has_upstream)),
+				"Your commits were shared with the team."))
+	var commit_changes := func() -> void:
+		if commit_message.text.strip_edges().is_empty():
+			AppTheme.set_status_label(feedback, "Describe your changes before saving them.",
+					AppTheme.StatusKind.WARNING)
+			commit_message.grab_focus()
+			return
+		refresh_after_action.call(ModGitService.commit_all(mod.path, commit_message.text),
+				"Changes saved as a commit. Share it when you are ready.")
+		var latest: Dictionary = current_info["value"]
+		if int(latest.changed) == 0:
+			commit_message.clear()
+	commit_button.pressed.connect(commit_changes)
+	commit_message.text_submitted.connect(func(_text: String) -> void: commit_changes.call())
+	dialog.custom_action.connect(func(action: StringName) -> void:
+		if str(action) == "folder":
+			ExternalFileLauncher.open(mod.path)
+		elif str(action) == "remote" and not remote_url.is_empty():
+			OS.shell_open(remote_url)
+	)
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.confirmed.connect(dialog.queue_free)
+	dialog.popup_centered(dialog_size)
+
+
+func _git_menu_card_style(accent: Color = Color.TRANSPARENT) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = AppTheme.BG_FIELD
+	style.corner_radius_top_left = 6
+	style.corner_radius_top_right = 6
+	style.corner_radius_bottom_left = 6
+	style.corner_radius_bottom_right = 6
+	style.content_margin_left = 12
+	style.content_margin_top = 9
+	style.content_margin_right = 12
+	style.content_margin_bottom = 9
+	if accent.a > 0.0:
+		style.border_width_left = 3
+		style.border_color = accent
+	return style
+
+
+func _update_git_menu(info: Dictionary, refs: Dictionary) -> void:
+	(refs.panel as PanelContainer).add_theme_stylebox_override(
+			"panel", _git_menu_card_style(_git_status_color(info)))
+	var state := refs.state as Label
+	state.text = _git_status_label(info)
+	state.add_theme_color_override("font_color", _git_status_color(info))
+	(refs.branch as Label).text = "Branch: %s    •    %d changed    •    %d to share    •    %d to get" % [
+		info.branch, info.changed, info.ahead, info.behind]
+
+	var summary := refs.summary as Label
+	if not bool(info.success):
+		summary.text = str(info.error)
+	elif int(info.ahead) > 0 and int(info.behind) > 0:
+		summary.text = "Your work and the team's work have diverged. Use a Git client or ask an experienced teammate to combine them safely."
+	elif int(info.behind) > 0 and int(info.changed) > 0:
+		summary.text = "The team has newer commits, but you also have unsaved local changes. Save your changes first, then get the team changes."
+	elif int(info.behind) > 0:
+		summary.text = "The team has newer commits available. Get them before starting more work."
+	elif int(info.ahead) > 0 and int(info.changed) > 0:
+		summary.text = "You have commits ready to share and additional unsaved changes. Save the remaining changes before sharing."
+	elif int(info.ahead) > 0:
+		summary.text = "You have saved commits that have not been shared with the team yet."
+	elif int(info.changed) > 0:
+		summary.text = "You have local file changes. Describe and save them when this piece of work is ready."
+	elif not bool(info.has_upstream):
+		summary.text = "This branch has not been published to the shared repository yet."
+	else:
+		summary.text = "Your files match the latest remote information available locally."
+
+	var change_lines := info.changes as PackedStringArray
+	(refs.changes as RichTextLabel).text = (
+			"No uncommitted file changes." if change_lines.is_empty()
+			else "\n".join(change_lines))
+	(refs.commit as Button).disabled = not bool(info.success) or int(info.changed) == 0
+	(refs.fetch as Button).disabled = not bool(info.success) or str(info.remote_url).is_empty()
+	(refs.pull as Button).disabled = (
+			not bool(info.success) or not bool(info.has_upstream)
+			or int(info.changed) > 0 or int(info.behind) == 0 or int(info.ahead) > 0)
+	(refs.push as Button).disabled = (
+			not bool(info.success) or str(info.remote_url).is_empty()
+			or (bool(info.has_upstream) and int(info.ahead) == 0)
+			or int(info.behind) > 0 or int(info.changed) > 0)
+	(refs.push as Button).text = (
+			"Share My Commits" if bool(info.has_upstream) else "Publish This Branch")
 
 
 # ── Selection helpers ──────────────────────────────────────────────────────────
@@ -984,6 +1304,8 @@ func _show_source_picker(mod: ModInfo, sources: Array, preferred_rel_dir: String
 
 	var background := PanelContainer.new()
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	background.add_theme_stylebox_override(
+		"panel", AppTheme.make_chrome_background_style())
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", AppTheme.SPACING_ROW * 2)

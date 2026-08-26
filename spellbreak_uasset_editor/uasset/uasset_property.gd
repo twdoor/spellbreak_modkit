@@ -118,7 +118,7 @@ static func from_dict(d: Dictionary, asset: UAssetFile = null) -> UAssetProperty
 	
 	# Type-specific parsing
 	match p.prop_type:
-		"Int", "Float", "Bool", "Name", "Str":
+		"Int", "Float", "Double", "Bool", "Name", "Str":
 			p.value = d.get("Value")
 
 		"Byte":
@@ -264,7 +264,7 @@ func to_dict() -> Dictionary:
 	match prop_type:
 		"Int":
 			d["Value"] = int(value) if value != null else 0
-		"Float":
+		"Float", "Double":
 			d["Value"] = float(value) if value != null else 0.0
 		"Bool":
 			d["Value"] = bool(value) if value != null else false

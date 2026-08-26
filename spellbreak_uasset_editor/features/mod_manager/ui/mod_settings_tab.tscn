@@ -222,6 +222,24 @@ text = "Edit Keymap"
 layout_mode = 2
 text = "Customize editor shortcuts using native Godot input actions."
 
+[node name="ThemeHeader" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="ThemeTitle" type="Label" parent="SettingsScroll/ContentMargin/Content/ThemeHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Theme"
+
+[node name="EditThemeButton" type="Button" parent="SettingsScroll/ContentMargin/Content/ThemeHeader"]
+layout_mode = 2
+text = "Edit Theme"
+
+[node name="ThemeHint" type="Label" parent="SettingsScroll/ContentMargin/Content"]
+layout_mode = 2
+text = "Customize colors, font sizes, spacing, margins, and corner radii with a live preview."
+
 [node name="FooterSeparator" type="HSeparator" parent="."]
 layout_mode = 2
 
@@ -258,5 +276,6 @@ layout_mode = 2
 [connection signal="pressed" from="SettingsScroll/ContentMargin/Content/SourceActions/GenerateSourceButton" to="." method="_on_generate_base_source_pressed"]
 [connection signal="pressed" from="SettingsScroll/ContentMargin/Content/ConfigFileRow/OpenConfigButton" to="." method="_open_config_folder"]
 [connection signal="pressed" from="SettingsScroll/ContentMargin/Content/KeyMappingsHeader/EditKeymapButton" to="." method="_on_edit_keymap_pressed"]
+[connection signal="pressed" from="SettingsScroll/ContentMargin/Content/ThemeHeader/EditThemeButton" to="." method="_on_edit_theme_pressed"]
 [connection signal="pressed" from="FooterMargin/Footer/SaveButton" to="." method="_on_save"]
 [connection signal="pressed" from="FooterMargin/Footer/CloseOrRevertButton" to="." method="_on_close_or_revert"]
