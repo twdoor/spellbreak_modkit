@@ -12,6 +12,8 @@ signal tab_title_changed(tab: UassetFileTab)
 
 @export var tree: Tree
 @export var detail_panel: VBoxContainer
+@export var tree_filter: LineEdit
+@export var tree_filter_status: Label
 
 var tab_asset: UAssetFile
 var _base_name: String = ""       ## Short stem used for duplicate detection ("MyFile")
@@ -37,6 +39,7 @@ var _sound_service: SoundService
 var _mesh_service: MeshService
 var _background_jobs: BackgroundJobRunner
 var _detail_context: AssetEditorContext
+var _filter_revision := 0
 
 
 static func setup(uasset: UAssetFile, texture_service: TextureService = null,
@@ -98,11 +101,35 @@ func _ready() -> void:
 	tree.empty_clicked.connect(func(_pos: Vector2, _btn: int) -> void: clear_selection())
 	tree.columns = 1
 	tree.hide_root = true
+	tree_filter.text_changed.connect(_on_tree_filter_changed)
 
 	# Track current_data from selection changes
 	_selection.selection_changed.connect(_on_selection_changed)
 
 	_tree_manager.build_tree()
+	_update_filter_status()
+
+
+func _on_tree_filter_changed(_text: String) -> void:
+	_filter_revision += 1
+	var revision := _filter_revision
+	# Debounce typing: rebuilding a match tree for every keystroke is distracting
+	# and wasteful on the very large WidgetBlueprint packages this is for.
+	await get_tree().create_timer(0.18).timeout
+	if revision != _filter_revision or not is_instance_valid(tree_filter):
+		return
+	_tree_manager.set_filter(tree_filter.text)
+	_tree_manager.build_tree()
+	_update_filter_status()
+
+
+func _update_filter_status() -> void:
+	if not tree_filter_status or not _tree_manager:
+		return
+	var visible_count: int = _tree_manager.get_visible_export_count()
+	var total := tab_asset.exports.size() if tab_asset else 0
+	tree_filter_status.text = "%d/%d" % [visible_count, total] if visible_count != total else str(total)
+	tree_filter_status.tooltip_text = "%d of %d exports shown" % [visible_count, total]
 
 
 func _exit_tree() -> void:
@@ -174,6 +201,7 @@ func _set_asset(asset: UAssetFile) -> void:
 	_document.replace_asset(asset)
 	_tree_manager.set_asset(tab_asset)
 	_tree_manager.build_tree()
+	_update_filter_status()
 
 
 # ── Tree events ────────────────────────────────────────────────────────────────
@@ -214,6 +242,11 @@ func _navigate_back() -> void:
 
 func _show_detail(data: Variant) -> void:
 	_current_data = data
+	# UI Designer owns the full tab (hierarchy + canvas + inspector). Keeping the
+	# raw package navigator beside it duplicates navigation and crushes the canvas.
+	var tree_pane := tree.get_parent()
+	if tree_pane:
+		tree_pane.visible = not (data is StringName and data == &"ui_designer")
 	# Update selection to match, so single-click navigation keeps selection in sync
 	if data is UAssetExport or data is UAssetImport or data is UAssetProperty:
 		_selection.set_selection([data])

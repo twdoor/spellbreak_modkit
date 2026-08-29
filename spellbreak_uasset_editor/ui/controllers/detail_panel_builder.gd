@@ -70,5 +70,6 @@ func _resolve_item(data: Variant) -> DetailItem:
 		match data:
 			&"namemap":   return NamemapDetail.new()
 			&"importmap": return ImportDetail.new()
+			&"ui_designer": return UmgDesignerDetail.new()
 			&"exports":   return null  # list view removed (performance)
 	return null

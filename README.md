@@ -189,6 +189,29 @@ must remain under the mod's `g3/Content/` tree.
 - **DataTable rows** — view, edit, copy/paste/delete rows
 - **StringTable exports** — namespace and all key/value entries
 
+Large assets use a lazy ownership navigator based on Unreal's `OuterIndex`, so a
+WidgetBlueprint is shown as its real object hierarchy instead of one flat export
+table. Broad levels are grouped by UObject class (such as buttons, text blocks,
+functions, and properties). Use the search box above the asset tree to filter by
+export name, export type, or nested property name; matching objects retain their
+ancestor path. Space-separated terms are combined (for example,
+`health opacity`), and `#1842` jumps directly to one-based export index 1842.
+
+WidgetBlueprint assets also expose **UI Designer** in the asset tree. It rebuilds
+the visual hierarchy from `WidgetTree` and panel-slot references, previews the
+layout on a 1920×1080 canvas, and allows CanvasPanel children to be selected and
+dragged. Position edits update the cooked `CanvasPanelSlot.LayoutData` and use
+the normal undo/save pipeline. Embedded widget templates can be selected from
+the tree picker at the top of the designer. Designer mode uses the full asset
+workspace with hierarchy, canvas, and inspector panes. Mouse wheel zooms,
+middle-drag pans, **Fit** resets the view, and the inspector exposes numeric
+Left/Top/Right/Bottom slot geometry. Containers are kept as unobtrusive layout
+bounds while text, buttons, images, and other leaf widgets provide the visual
+preview. Texture2D Slate brushes are extracted asynchronously from the current
+Content tree or configured sources and rendered with their real artwork.
+Material-instance brushes use their best matching referenced color texture as a
+preview approximation; the toolbar reports texture-loading progress.
+
 ### Texture support
 
 When opening a texture `.uasset` (Texture2D, TextureCube, etc.), the detail panel shows:
