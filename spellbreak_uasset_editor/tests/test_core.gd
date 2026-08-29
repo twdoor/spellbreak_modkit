@@ -101,10 +101,52 @@ func _run() -> void:
 	_test_file_association_metadata()
 	_test_native_keymap_configuration()
 	_test_base_file_explorer_search()
+	_test_large_export_tree_search()
 	_test_explorer_add_to_mod_path()
 	_test_source_package_companion_discovery()
 	_test_base_source_generation()
 	_test_packing_transaction()
+
+
+func _test_large_export_tree_search() -> void:
+	var asset := UAssetFile.new()
+	asset.name_map = ["RootPanel", "HealthText", "Other", "RenderOpacity"]
+	var root_export := UAssetExport.from_dict({
+		"$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI",
+		"ObjectName": "RootPanel",
+		"Data": [{
+			"$type": "UAssetAPI.PropertyTypes.Objects.FloatPropertyData, UAssetAPI",
+			"Name": "RenderOpacity",
+			"Value": 1.0,
+		}],
+	}, asset)
+	var health_export := UAssetExport.from_dict({
+		"$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI",
+		"ObjectName": "HealthText",
+		"Data": [],
+	}, asset)
+	var other_export := UAssetExport.from_dict({
+		"$type": "UAssetAPI.ExportTypes.RawExport, UAssetAPI",
+		"ObjectName": "Other",
+		"Data": [],
+	}, asset)
+	asset.exports = [root_export, health_export, other_export]
+
+	_expect(TreeManager.find_export_indices(asset, "health") == [1],
+		"export navigator searches object names")
+	_expect(TreeManager.find_export_indices(asset, "root opacity") == [0],
+		"export navigator AND-matches property names")
+	_expect(TreeManager.find_export_indices(asset, "#3") == [2],
+		"export navigator supports direct one-based index jumps")
+	_expect(TreeManager.find_export_indices(asset, "#99").is_empty(),
+		"export navigator rejects out-of-range direct indices")
+	health_export.outer_index = 1
+	other_export.outer_index = 2
+	var hierarchy: Dictionary = TreeManager.build_export_hierarchy(asset)
+	_expect(hierarchy["roots"] == [0],
+		"export navigator uses package ownership roots")
+	_expect(hierarchy["children"][0] == [1] and hierarchy["children"][1] == [2],
+		"export navigator represents nested OuterIndex ownership")
 
 
 func _test_export_insert() -> void:

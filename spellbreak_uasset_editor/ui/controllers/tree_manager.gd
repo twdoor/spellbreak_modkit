@@ -10,7 +10,8 @@ var _item_map: Dictionary = {}
 ## Items whose property children haven't been built yet (lazy load on expand).
 ## Maps TreeItem → Callable that builds the real children.
 var _lazy_items: Dictionary = {}
-
+var _filter := ""
+var _visible_export_count := 0
 
 func setup(tree: Tree, asset: UAssetFile) -> TreeManager:
 	_tree = tree
@@ -29,6 +30,14 @@ func get_item_map() -> Dictionary:
 	return _item_map
 
 
+func set_filter(value: String) -> void:
+	_filter = value.strip_edges()
+
+
+func get_visible_export_count() -> int:
+	return _visible_export_count
+
+
 # ── Build ──────────────────────────────────────────────────────────────────────
 
 func build_tree() -> void:
@@ -45,60 +54,192 @@ func build_tree() -> void:
 	var imports_item := _add_section(root, "Imports [%d]" % _asset.imports.size())
 	_item_map[imports_item] = &"importmap"
 
-	var exports_item := _add_section(root, "Exports [%d]" % _asset.exports.size())
+	if UmgDesignerModel.supports(_asset):
+		var designer_item := _add_section(root, "UI Designer")
+		designer_item.collapsed = false
+		_item_map[designer_item] = &"ui_designer"
+
+	var matching_indices := find_export_indices(_asset, _filter)
+	_visible_export_count = matching_indices.size()
+	var exports_label := "Exports [%d]" % _asset.exports.size()
+	if not _filter.is_empty():
+		exports_label = "Exports [%d matches / %d]" % [matching_indices.size(), _asset.exports.size()]
+	var exports_item := _add_section(root, exports_label)
 	_item_map[exports_item] = &"exports"
+	exports_item.collapsed = false
 
-	for i in _asset.exports.size():
-		var expo := _asset.exports[i]
-		var ei := _tree.create_item(exports_item)
-		ei.set_text(0, "[%d] %s" % [i + 1, expo.object_name])
-		ei.collapsed = true
-		_item_map[ei] = expo
+	var hierarchy := build_export_hierarchy(_asset)
+	var children: Dictionary = hierarchy["children"]
+	var visible: Dictionary = _visible_hierarchy_indices(_asset, matching_indices)
+	_add_export_collection(exports_item, hierarchy["roots"], children, visible, {})
 
-		# Lazily add property sub-items — only build them when the user expands this item.
-		var complex_props: Array = expo.properties.filter(
-				func(p: UAssetProperty) -> bool:
-					return p.prop_type in ["Struct", "Array", "Map", "GameplayTagContainer"])
-		if not complex_props.is_empty():
-			_add_lazy_placeholder(ei, func() -> void:
-				for prop: UAssetProperty in complex_props:
-					_add_property_to_tree(ei, prop))
 
-		# DataTable exports: rows go directly into the tree (RenderHint = BOTH)
-		if expo.export_type == "DataTableExport":
-			var table_raw: Variant = expo.raw.get("Table")
-			if table_raw is Dictionary:
-				var rows_raw: Variant = table_raw.get("Data")
-				if rows_raw is Array and not (rows_raw as Array).is_empty():
-					var table_item := _tree.create_item(ei)
-					table_item.set_text(0, "Table [%d rows]" % (rows_raw as Array).size())
-					table_item.collapsed = true
-					_add_lazy_placeholder(table_item, func() -> void:
-						for row_dict: Variant in (rows_raw as Array):
-							if row_dict is Dictionary:
-								var row := UAssetProperty.from_dict(row_dict, _asset)
-								var ri := _tree.create_item(table_item)
-								ri.set_text(0, row.prop_name)
-								ri.collapsed = true
-								_item_map[ri] = {"dt_row": row, "expo": expo}
-								var complex_children: Array = row.children.filter(
-										func(c: UAssetProperty) -> bool:
-											return c.prop_type in ["Struct", "Array", "Map", "GameplayTagContainer"])
-								if not complex_children.is_empty():
-									_add_lazy_placeholder(ri, func() -> void:
-										for child: UAssetProperty in complex_children:
-											_add_property_to_tree(ri, child)))
+func _add_export_collection(parent: TreeItem, indices: Array, children: Dictionary,
+		visible: Dictionary, ancestors: Dictionary) -> void:
+	var shown := indices.filter(func(index: int) -> bool: return visible.has(index))
+	# Broad ownership levels are grouped by UObject class, which is useful
+	# information (Button, TextBlock, Function, Property...) rather than an
+	# arbitrary range of serialization indices.
+	if _filter.is_empty() and shown.size() > 100:
+		var by_kind := {}
+		for index: int in shown:
+			var kind := _export_kind(_asset.exports[index])
+			if not by_kind.has(kind):
+				by_kind[kind] = []
+			(by_kind[kind] as Array).append(index)
+		var kinds := by_kind.keys()
+		kinds.sort()
+		for kind: String in kinds:
+			var group := _tree.create_item(parent)
+			var members: Array = by_kind[kind]
+			group.set_text(0, "%s [%d]" % [kind, members.size()])
+			group.collapsed = true
+			_add_lazy_placeholder(group, func() -> void:
+				for index: int in members:
+					_add_export_to_tree(group, index, children, visible, ancestors))
+		return
+	for index: int in shown:
+		_add_export_to_tree(parent, index, children, visible, ancestors)
 
-		# StringTable exports: show entry count node (clicking opens StringTableDetail)
-		if expo.export_type == "StringTableExport":
-			var table_raw: Variant = expo.raw.get("Table")
-			if table_raw is Dictionary:
-				var entries: Variant = table_raw.get("Value", [])
-				var count: int = (entries as Array).size() if entries is Array else 0
-				var st_item := _tree.create_item(ei)
-				st_item.set_text(0, "StringTable [%d entries]" % count)
-				st_item.collapsed = false
-				_item_map[st_item] = expo  # clicking navigates to StringTableDetail
+
+func _export_kind(expo: UAssetExport) -> String:
+	var resolved_class := _asset.get_export_class_name(expo)
+	if not resolved_class.is_empty() and resolved_class != "?":
+		return resolved_class.trim_suffix("_C")
+	return expo.export_type.trim_suffix("Export")
+
+
+func _add_export_to_tree(parent: TreeItem, i: int, children: Dictionary,
+		visible: Dictionary, ancestors: Dictionary) -> void:
+	if ancestors.has(i):
+		return
+	var expo := _asset.exports[i]
+	var ei := _tree.create_item(parent)
+	ei.set_text(0, "%s  ·  %s" % [expo.object_name, expo.export_type.trim_suffix("Export")])
+	ei.set_tooltip_text(0, "Export #%d · OuterIndex %d" % [i + 1, expo.outer_index])
+	ei.collapsed = true
+	_item_map[ei] = expo
+
+	var owned: Array = children.get(i, [])
+	var complex_props: Array = expo.properties.filter(
+			func(p: UAssetProperty) -> bool:
+				return p.prop_type in ["Struct", "Array", "Map", "GameplayTagContainer"])
+	var has_visible_owned := owned.any(func(child_index: int) -> bool: return visible.has(child_index))
+	if has_visible_owned or not complex_props.is_empty() \
+			or expo.export_type in ["DataTableExport", "StringTableExport"]:
+		var next_ancestors := ancestors.duplicate()
+		next_ancestors[i] = true
+		_add_lazy_placeholder(ei, func() -> void:
+			_add_export_collection(ei, owned, children, visible, next_ancestors)
+			for prop: UAssetProperty in complex_props:
+				_add_property_to_tree(ei, prop)
+			_add_special_export_children(ei, expo))
+
+	# A filtered tree should expose the ownership path immediately.
+	if not _filter.is_empty() and has_visible_owned:
+		ei.collapsed = false
+		_expand_lazy_item(ei)
+
+
+func _add_special_export_children(ei: TreeItem, expo: UAssetExport) -> void:
+
+	# DataTable exports: rows go directly into the tree (RenderHint = BOTH)
+	if expo.export_type == "DataTableExport":
+		var table_raw: Variant = expo.raw.get("Table")
+		if table_raw is Dictionary:
+			var rows_raw: Variant = table_raw.get("Data")
+			if rows_raw is Array and not (rows_raw as Array).is_empty():
+				var table_item := _tree.create_item(ei)
+				table_item.set_text(0, "Table [%d rows]" % (rows_raw as Array).size())
+				table_item.collapsed = true
+				_add_lazy_placeholder(table_item, func() -> void:
+					for row_dict: Variant in (rows_raw as Array):
+						if row_dict is Dictionary:
+							var row := UAssetProperty.from_dict(row_dict, _asset)
+							var ri := _tree.create_item(table_item)
+							ri.set_text(0, row.prop_name)
+							ri.collapsed = true
+							_item_map[ri] = {"dt_row": row, "expo": expo}
+							var complex_children: Array = row.children.filter(
+									func(c: UAssetProperty) -> bool:
+										return c.prop_type in ["Struct", "Array", "Map", "GameplayTagContainer"])
+							if not complex_children.is_empty():
+								_add_lazy_placeholder(ri, func() -> void:
+									for child: UAssetProperty in complex_children:
+										_add_property_to_tree(ri, child)))
+
+	# StringTable exports: show entry count node (clicking opens StringTableDetail)
+	if expo.export_type == "StringTableExport":
+		var table_raw: Variant = expo.raw.get("Table")
+		if table_raw is Dictionary:
+			var entries: Variant = table_raw.get("Value", [])
+			var count: int = (entries as Array).size() if entries is Array else 0
+			var st_item := _tree.create_item(ei)
+			st_item.set_text(0, "StringTable [%d entries]" % count)
+			st_item.collapsed = false
+			_item_map[st_item] = expo  # clicking navigates to StringTableDetail
+
+
+## Returns the actual UObject ownership graph encoded by each export's
+## one-based OuterIndex. Orphans and invalid/cyclic owners remain top-level.
+static func build_export_hierarchy(asset: UAssetFile) -> Dictionary:
+	var children: Dictionary = {}
+	var roots: Array[int] = []
+	for i in asset.exports.size():
+		children[i] = []
+	for i in asset.exports.size():
+		var parent := asset.exports[i].outer_index - 1
+		if parent >= 0 and parent < asset.exports.size() and parent != i:
+			(children[parent] as Array).append(i)
+		else:
+			roots.append(i)
+	return {"roots": roots, "children": children}
+
+
+static func _visible_hierarchy_indices(asset: UAssetFile, matches: Array[int]) -> Dictionary:
+	var visible := {}
+	for match_index in matches:
+		var current: int = match_index
+		var visited := {}
+		while current >= 0 and current < asset.exports.size() and not visited.has(current):
+			visible[current] = true
+			visited[current] = true
+			var outer := asset.exports[current].outer_index
+			current = outer - 1 if outer > 0 else -1
+	return visible
+
+
+## Fast, UI-independent matching kept static so it can be regression-tested.
+## Terms are ANDed. `#123` jumps to a one-based export index.
+static func find_export_indices(asset: UAssetFile, query: String) -> Array[int]:
+	var result: Array[int] = []
+	var normalized := query.strip_edges().to_lower()
+	if normalized.begins_with("#") and normalized.substr(1).is_valid_int():
+		var requested := normalized.substr(1).to_int() - 1
+		if requested >= 0 and requested < asset.exports.size():
+			result.append(requested)
+		return result
+	var terms := normalized.split(" ", false)
+	for i in asset.exports.size():
+		var expo := asset.exports[i]
+		var haystack := (expo.object_name + " " + expo.export_type).to_lower()
+		for prop in expo.properties:
+			haystack += " " + _property_search_text(prop)
+		var matches := true
+		for term in terms:
+			if not haystack.contains(term):
+				matches = false
+				break
+		if matches:
+			result.append(i)
+	return result
+
+
+static func _property_search_text(prop: UAssetProperty) -> String:
+	var text := (prop.prop_name + " " + prop.prop_type + " " + prop.struct_type).to_lower()
+	for child in prop.children:
+		text += " " + _property_search_text(child)
+	return text
 
 
 ## Rebuild the tree while preserving the user's expanded/selected state.

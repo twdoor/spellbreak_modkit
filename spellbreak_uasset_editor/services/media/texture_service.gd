@@ -54,6 +54,27 @@ func get_preview_image(uasset_path: String) -> Image:
 	return img
 
 
+## Resolve a /Game/... package to an extracted .uasset. Prefer the source that
+## owns the open widget, then fall back to configured reference roots.
+func find_package_asset(package_path: String, near_asset: String = "") -> String:
+	if not package_path.begins_with("/Game/"):
+		return ""
+	var relative := package_path.trim_prefix("/Game/") + ".uasset"
+	var candidates: Array[String] = []
+	var normalized_near := near_asset.replace("\\", "/")
+	var marker_index := normalized_near.find("/Content/")
+	if marker_index >= 0:
+		candidates.append(normalized_near.substr(0, marker_index + 9).path_join(relative))
+	for root in _reference_roots():
+		var content_root := _cfg.get_game_profile().content_root
+		candidates.append(root.path_join(content_root).path_join("Content").path_join(relative))
+		candidates.append(root.path_join("Content").path_join(relative))
+	for candidate in candidates:
+		if FileAccess.file_exists(candidate):
+			return candidate
+	return ""
+
+
 # ── Tool availability checks ─────────────────────────────────────────────────
 
 
