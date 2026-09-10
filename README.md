@@ -119,6 +119,7 @@ Select files with `Click`, `Ctrl+Click` (toggle), or `Shift+Click` (range).
 | Button | Action |
 |--------|--------|
 | **New Mod** | Create a new mod folder |
+| **Clone Skin** | Clone a skin blueprint and its editable art into a mod |
 | **Base Files** | Open the Base Files explorer |
 | **Settings** | Open the Settings tab |
 | **Pack** | Pack all enabled mods into a Spellbreak patch pak |
@@ -148,6 +149,49 @@ Open **Base Files** from the Mod Manager toolbar or with `Ctrl+E`. Its source
 menu can show any combination of configured sources, folders expand lazily, and
 search indexing runs in the background. Right-click a file to copy it into a mod
 or, for binary assets, clone it as a unique package.
+
+### Cloning skins
+
+1. Add a complete extracted base source in Settings and create a target mod.
+2. Click **Clone Skin**, choose a configured **Source** from the dropdown, and
+   select a `BP_Cosmetic_Skin_*.uasset`. Sources without a skin blueprint folder
+   are shown disabled.
+3. Choose the target mod, enter a unique `BP_Cosmetic_Skin_YourName` asset name,
+   and optionally set its display name. Leave **Clone skin chain** checked.
+4. Open the cloned colour textures or icons in the mod tree, export PNGs, edit
+   them, and use **Import PNG** to apply your artwork. Pack the mod as usual.
+
+The same workflow is available through **Base Files > Clone Unique to Mod**
+when selecting a skin blueprint. The clone includes the skin data and the mesh
+and material dependencies leading to `_ChrTBC` colour maps, headshots, and
+fullbody icons, including numbered colour maps such as `_ChrTBC_1`. Missing
+optional icons are reported and retain their original references; missing required
+skin dependencies still stop the clone. Other dependencies, including normal maps and animations, stay
+shared with the original. Each clone lives under
+`g3/Content/Blueprints/Cosmetics/Skins/<YourSkin>/`, with its cosmetic blueprint
+and `Meshes`, `Materials`, `Textures`, and `Icons` subfolders. Skin data lives in
+`g3/Content/Data/Skins/<YourSkin>/`, where the game scans its `RawSkin` assets;
+putting it inside the cosmetics folder prevents its model-loading bundle from
+being registered. The manifest links both locations as one skin. Names use
+your skin name, for example `Twdoor_SKIN_ChrTBC_1`, instead of hashes. The bundled
+texture tool repairs package and mip offsets when relocating textures and
+verifies that all mip pixels are unchanged. The workspace manifest maps each
+clone back to its source. Display name and description text receive
+independent localization keys.
+
+Cloning runs in the background and stages the complete chain before installing
+it. Failed conversions leave no cloned packages in the mod. Every new package
+is declared for the existing Asset Registry packing workflow, which requires
+`g3/AssetRegistry.bin` in a configured source. Packing also retargets each skin's Asset Registry loading bundles to its cloned
+skin data, meshes, and icons while preserving references to shared game assets.
+The original skin stays intact.
+
+The workflow prepares client assets; granting or unlocking the new cosmetic
+still depends on your Community Edition server. It does not deploy server grants.
+
+This workflow was informed by the sibling modding toolkit's `local/utils/skinkit`
+reference-chain discovery, implemented here
+with the modkit's native UI, asset editor, workspace manifests, and packer.
 
 ### Asset editor tabs
 
@@ -346,6 +390,12 @@ Run the parser check and regression suite with Godot 4.7.1+:
 ```bash
 ./scripts/test.sh
 ```
+
+To also clone and verify the Hollow skin against a local extracted game source,
+set `SPELLBREAK_SKIN_TEST_SOURCE=/path/to/source` when running the suite. This
+optional test uses a temporary mod workspace and leaves the source unchanged.
+Set `SPELLBREAK_SKIN_TEST_NAME=Arcane_Trickster` to exercise missing optional
+icons and numbered texture references instead.
 
 The suite covers package-index remapping, undo restoration, transactional file
 replacement, subprocess argument handling, and pak creation/failure recovery.

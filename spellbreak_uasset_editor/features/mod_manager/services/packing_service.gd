@@ -217,7 +217,8 @@ func _stage_custom_asset_registry(mods: Array, merged: String, tmp_dir: String,
 				return OperationResult.failed(
 						"Unique asset file is missing in '%s': %s" % [mod.name, relative_file])
 			targets[target] = mod.name
-			declarations.append({"source": source, "target": target})
+			declarations.append({"source": source, "target": target,
+				"reference_group": str(declaration.get("reference_group", ""))})
 	if declarations.is_empty():
 		return OperationResult.succeeded()
 

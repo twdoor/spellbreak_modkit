@@ -96,35 +96,44 @@ static func describe_unique_clone(source_path: String, destination_path: String,
 ## Persist a validated description returned by describe_unique_clone().
 static func record_unique_clone(description: Dictionary,
 		cfg: ModConfigManager) -> OperationResult:
-	var mod := description.get("mod") as ModInfo
-	if mod == null:
-		return OperationResult.failed("unique clone has no destination mod")
-	var file_path := str(description.get("file", ""))
-	var source := str(description.get("source", ""))
-	var target := str(description.get("target", ""))
-	if file_path.is_empty() or source.is_empty() or target.is_empty():
-		return OperationResult.failed("unique clone declaration is incomplete")
+	return record_unique_clones([description], cfg)
 
+
+## Commit all skin declarations in one atomic manifest write.
+static func record_unique_clones(descriptions: Array, cfg: ModConfigManager) -> OperationResult:
+	if descriptions.is_empty():
+		return OperationResult.failed("No unique assets supplied")
+	var mod := descriptions[0].get("mod") as ModInfo
+	if mod == null:
+		return OperationResult.failed("Unique clone has no destination mod")
 	var manifest := _load_or_new(mod)
 	_refresh_metadata(manifest, mod, cfg)
 	_merge_current_files(manifest, mod, cfg)
+	var by_target := {}
+	for entry: Dictionary in manifest.get("custom_assets", []):
+		var target := str(entry.get("target", ""))
+		if not target.is_empty():
+			by_target[target] = entry
+	for description: Dictionary in descriptions:
+		if description.get("mod") != mod:
+			return OperationResult.failed("Unique clones must belong to one mod")
+		for key in ["file", "source", "target"]:
+			if str(description.get(key, "")).is_empty():
+				return OperationResult.failed("Unique clone declaration is incomplete")
+		by_target[str(description.target)] = {"file": description.file,
+			"source": description.source, "target": description.target}
+		if not str(description.get("reference_group", "")).is_empty():
+			by_target[str(description.target)]["reference_group"] = str(description.reference_group)
+	var keys := by_target.keys()
+	keys.sort()
 	var custom_assets: Array = []
-	for value in manifest.get("custom_assets", []):
-		if value is Dictionary and str(value.get("target", "")) != target:
-			custom_assets.append((value as Dictionary).duplicate(true))
-	custom_assets.append({
-		"file": file_path,
-		"source": source,
-		"target": target,
-	})
-	custom_assets.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return str(a.get("target", "")) < str(b.get("target", "")))
+	for key in keys:
+		custom_assets.append(by_target[key])
 	manifest["custom_assets"] = custom_assets
 	var error := _write_manifest(mod, manifest)
 	if error != OK:
-		return OperationResult.failed(
-				"could not update the mod manifest (error %d)" % error)
-	return OperationResult.succeeded("Recorded unique clone", manifest_path(mod))
+		return OperationResult.failed("Could not update the mod manifest (error %d)" % error)
+	return OperationResult.succeeded("Recorded unique clones", manifest_path(mod))
 
 
 static func _load_or_new(mod: ModInfo) -> Dictionary:

@@ -17,7 +17,7 @@ const U4PAK_FILES := ["u4pak.py"]
 const ASSET_REGISTRY_FILES := ["patch_asset_registry.py"]
 
 const DDS_TOOLS_FILES := [
-	"main.py", "util.py", "config.json", "LICENSE",
+	"main.py", "clone_texture.py", "util.py", "config.json", "LICENSE",
 	"unreal/archive.py", "unreal/city_hash.py", "unreal/crc.py",
 	"unreal/data_resource.py", "unreal/file_summary.py",
 	"unreal/import_export.py", "unreal/uasset.py", "unreal/umipmap.py",

@@ -182,8 +182,45 @@ def encode_fname(value: str, names: list[str], name_to_index: dict[str, int],
     return struct.pack("<ii", name_to_index[base], number)
 
 
+def skin_reference_group(operation: dict) -> str:
+    """Infer groups for existing skin manifests as well as newly created ones."""
+    if operation.get("reference_group"):
+        return str(operation["reference_group"])
+    package = str(operation["target"]).rsplit(".", 1)[0]
+    root = "/Game/Blueprints/Cosmetics/Skins/"
+    if package.startswith(root) and "/" in package[len(root):]:
+        return root + package[len(root):].split("/", 1)[0]
+    return str(operation["target"])
+
+
+def rewrite_bundle_references(value: str, references: dict[str, str]) -> str:
+    # Bundle entries are complete object paths. Never replace bare leaf names:
+    # shared meshes can contain the donor name without being part of the clone.
+    return re.sub(r"/Game/[^\s,()\"']+",
+                  lambda match: references.get(match.group(0), match.group(0)), value)
+
+
+def validate_primary_asset_location(data: bytes, record: AssetRecord,
+                                    names: list[str], target: str) -> None:
+    off = record.start
+    for _ in range(5):
+        _, off = parse_fname(data, off, record.end, names)
+    count = i32(data, off)
+    off += 4
+    for _ in range(count):
+        key, off = parse_fname(data, off, record.end, names)
+        value, off = read_fstring(data, off, record.end)
+        if key == "PrimaryAssetType" and value == "RawSkin":
+            package = target.rsplit(".", 1)[0]
+            if not package.startswith(("/Game/Data/Skins/", "/Game/Developers/")):
+                raise RegistryError(
+                    f"RawSkin target is outside the game's asset-manager scan paths: {target}. "
+                    "Place skin data under /Game/Data/Skins/<skin>/.")
+
+
 def clone_record(data: bytes, record: AssetRecord, names: list[str], old: str, new: str,
-                 name_to_index: dict[str, int], added_names: list[str]) -> bytes:
+                 name_to_index: dict[str, int], added_names: list[str],
+                 references: dict[str, str] | None = None) -> bytes:
     off = record.start
     output = bytearray()
     for _field in range(5):
@@ -200,7 +237,8 @@ def clone_record(data: bytes, record: AssetRecord, names: list[str], old: str, n
         string_start = off
         was_wide = i32(data, off) < 0
         value, off = read_fstring(data, off, record.end)
-        rewritten = rewrite_identity(value, old, new)
+        rewritten = (rewrite_bundle_references(value, references or {old: new})
+                     if key == "AssetBundleData" else rewrite_identity(value, old, new))
         output += data[string_start:off] if rewritten == value else encode_fstring(rewritten, was_wide)
     output += data[off : record.end]
     return bytes(output)
@@ -231,6 +269,7 @@ def patch_registry_many(source: Path, output: Path,
             raise RegistryError("every operation needs source and target ObjectPaths")
         if old not in by_path:
             raise RegistryError(f"source asset was not found: '{old}'")
+        validate_primary_asset_location(data, by_path[old], names, new)
         if new in by_path:
             raise RegistryError(f"target asset already exists: '{new}'")
         if new in targets:
@@ -238,11 +277,19 @@ def patch_registry_many(source: Path, output: Path,
         targets.add(new)
         normalized.append((old, new))
 
+    groups: dict[str, dict[str, str]] = {}
+    for operation, (old, new) in zip(operations, normalized):
+        references = groups.setdefault(skin_reference_group(operation), {})
+        if old in references and references[old] != new:
+            raise RegistryError(f"ambiguous clone reference in one skin group: {old}")
+        references[old] = new
+        references[old + "_C"] = new + "_C"
+
     name_to_index = {name: index for index, name in enumerate(names)}
     added_names: list[str] = []
     clones = b"".join(clone_record(data, by_path[old], names, old, new,
-                                   name_to_index, added_names)
-                      for old, new in normalized)
+                                   name_to_index, added_names, groups[skin_reference_group(operation)])
+                      for operation, (old, new) in zip(operations, normalized))
     new_entries = b"".join(encode_fstring(name) + name_hashes(name) for name in added_names)
     out = bytearray(data[:assets_end] + clones + data[assets_end:name_offset])
     out += struct.pack("<i", len(names) + len(added_names))

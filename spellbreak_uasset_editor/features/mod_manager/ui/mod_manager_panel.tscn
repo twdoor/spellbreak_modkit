@@ -47,6 +47,11 @@ layout_mode = 2
 tooltip_text = "Create a new mod folder"
 text = "New Mod"
 
+[node name="CloneSkinButton" type="Button" parent="ToolbarMargin/Toolbar"]
+layout_mode = 2
+tooltip_text = "Clone a skin and its editable art into a mod"
+text = "Clone Skin"
+
 [node name="DiagnosticsButton" type="Button" parent="ToolbarMargin/Toolbar"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -101,3 +106,5 @@ theme_override_constants/margin_bottom = 6
 [connection signal="gui_input" from="ModTree" to="." method="_on_mod_tree_gui_input"]
 [connection signal="item_activated" from="ModTree" to="." method="_on_tree_item_activated"]
 [connection signal="item_mouse_selected" from="ModTree" to="." method="_on_tree_item_mouse_selected"]
+
+[connection signal="pressed" from="ToolbarMargin/Toolbar/CloneSkinButton" to="." method="_on_clone_skin_pressed"]
