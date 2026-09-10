@@ -142,6 +142,7 @@ func _on_clone_skin_pressed() -> void:
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
 	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	dialog.filters = PackedStringArray(["BP_Cosmetic_Skin_*.uasset ; Skin blueprints"])
+	AppTheme.apply_theme(dialog)
 	dialog.use_native_dialog = false
 	var source_row := HBoxContainer.new()
 	var source_label := Label.new()

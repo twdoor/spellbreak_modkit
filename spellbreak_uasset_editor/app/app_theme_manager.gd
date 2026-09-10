@@ -418,6 +418,7 @@ func _update_chrome_theme_styles(theme: Theme) -> bool:
 		["TabContainer", "tab_disabled", _with_alpha(color.darkened(0.18), 0.5)],
 		["PopupMenu", "panel", color],
 		["PopupPanel", "panel", color],
+		["TooltipPanel", "panel", color],
 		["Window", "embedded_border", color],
 		["Window", "embedded_unfocused_border", color.darkened(0.18)],
 	]
@@ -428,6 +429,13 @@ func _update_chrome_theme_styles(theme: Theme) -> bool:
 			continue
 		style.bg_color = entry[2]
 		changed = true
+	# FileDialog uses these roles for its built-in file/folder icons.
+	for entry: Array in [
+		["folder_icon_color", _current_colors.BTN_NAV],
+		["file_icon_color", primary_text],
+		["file_disabled_color", _with_alpha(secondary_text, 0.5)],
+	]:
+		changed = _set_theme_color(theme, "FileDialog", entry[0], entry[1]) or changed
 	for type_name in ["TabContainer", "TabBar"]:
 		changed = _set_theme_color(theme, type_name, "font_selected_color",
 			primary_text.lightened(0.12)) or changed

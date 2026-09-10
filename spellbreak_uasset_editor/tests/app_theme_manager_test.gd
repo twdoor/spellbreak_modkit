@@ -54,6 +54,16 @@ func _run() -> void:
 	var main_scene: Node = load("res://app/main.tscn").instantiate()
 	get_root().add_child(main_scene)
 	await process_frame
+	var file_dialog := FileDialog.new()
+	AppTheme.apply_theme(file_dialog)
+	file_dialog.use_native_dialog = false
+	file_dialog.exclusive = false
+	get_root().add_child(file_dialog)
+	file_dialog.popup(Rect2i(0, 0, 800, 600))
+	await process_frame
+	var file_lists := file_dialog.get_vbox().find_children("*", "ItemList", true, false)
+	assert(not file_lists.is_empty())
+	var file_list := file_lists[0] as ItemList
 	var tab_container := main_scene.find_child("TabCont", true, false) as TabContainer
 	var edit_theme_button := main_scene.find_child("EditThemeButton", true, false) as Button
 	var theme_tab := main_scene.find_child("ThemeSettingsTab", true, false) as ThemeSettingsTab
@@ -133,6 +143,17 @@ func _run() -> void:
 	assert(AppTheme._theme.get_stylebox("tab_selected", "TabContainer").bg_color.is_equal_approx(Color("#445566ff")))
 	assert(AppTheme._theme.get_color("font_selected_color", "TabContainer").is_equal_approx(
 		AppTheme.TEXT_PRIMARY.lightened(0.12)))
+	assert(manager.preview_values({
+		"surface": Color("#345678ff"),
+		"primary_text": Color("#fedcbaff"),
+		"links": Color("#ab3456ff"),
+	}, {}) == OK)
+	await process_frame
+	assert(file_dialog.get_theme_color("folder_icon_color", "FileDialog").is_equal_approx(AppTheme.BTN_NAV))
+	assert(file_list.get_theme_color("font_color").is_equal_approx(AppTheme.TEXT_PRIMARY))
+	assert(file_list.get_theme_stylebox("panel").bg_color.is_equal_approx(AppTheme.BG_FIELD))
+	assert(file_dialog.get_theme_stylebox("panel", "TooltipPanel").bg_color.is_equal_approx(AppTheme.BG_CHROME))
+	file_dialog.queue_free()
 	assert(AppTheme.FONT_DEFAULT == 16)
 	assert(AppTheme.FONT_TOAST == 17)
 	assert(AppTheme.FONT_REF == 17)
