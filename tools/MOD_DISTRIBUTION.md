@@ -87,3 +87,14 @@ The integration test exports real paks using synthetic assets and a synthetic
 registry, composes both packs, disables one, clears all, and checks rejected
 rebuilds preserve the previous pak. An in-game smoke test with real content is still
 needed before deploying this workflow to players.
+
+## Build the standalone release ZIP
+
+From the repository root:
+
+```sh
+python3 tools/build_mod_tools_zip.py dist/0.13.0/spellbreak-mod-tools.zip
+```
+
+The archive includes the three scripts, portable usage instructions, and license
+notices. It does not include game assets or local machine paths.

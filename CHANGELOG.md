@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.13.0 — 2026-09-20
+
+- Added skin cloning with linked cosmetic blueprints, skin data, meshes, materials, editable color textures, and icons, plus independent display text and registry loading bundles.
+- Added a WidgetBlueprint designer with a visual hierarchy, canvas preview, drag-to-position editing, numeric slot geometry, zoom/pan, and texture brush previews through the existing undo/save workflow.
+- Added lazy export hierarchies, multi-term export/property search, and direct export-index navigation for large assets.
+- Added live theme editing through Settings and compact, watched palette/layout files; extended theme styling to built-in file browsers and tooltips.
+- Added mod Git status and controls for fetching, fast-forward pulling, committing, and pushing changes.
+- Added a built-in middle-click export browser with Complete package and Package + manifest modes. Portable exports include a compact sidecar and omit the embedded registry.
+- Added standalone Python tools for exporting mod workspaces and composing one shared Asset Registry pak from enabled mods, with pak hash validation, duplicate-target checks, and per-pack skin reference groups.
+- Added Double property editing and fixed writable default-property initialization.
+- Expanded regression coverage for themes, skin cloning, registry bundle references, transactional exports, and portable mod composition.
+
 ## 0.12.0 — 2026-08-20
 
 - Replaced the editor's legacy update checker with the reusable Version Manager plugin, including semantic-version release selection and export-time repository metadata.
