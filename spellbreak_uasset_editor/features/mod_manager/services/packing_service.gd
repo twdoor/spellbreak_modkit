@@ -33,11 +33,11 @@ func pack(enabled_mods: Array) -> void:
 
 ## Export the selected mod(s) to an explicit .pak path plus a sibling .sig.
 ## This is used by Mod Manager middle-click export and does not install into the game folder.
-func export_to_path(mods: Array, output_pak_path: String) -> void:
+func export_to_path(mods: Array, output_pak_path: String, with_manifest: bool = false) -> void:
 	if mods.is_empty():
 		pack_finished.emit(OperationResult.failed("No mod selected"))
 		return
-	_start_pack_operation(_do_pack_to_path.bind(mods.duplicate(), output_pak_path))
+	_start_pack_operation(_do_pack_to_path.bind(mods.duplicate(), output_pak_path, with_manifest))
 
 
 func _start_pack_operation(task: Callable) -> void:
@@ -71,7 +71,8 @@ func _do_pack(enabled_mods: Array) -> OperationResult:
 
 
 ## Core export logic for explicit save-as packing.
-func _do_pack_to_path(mods: Array, output_pak_path: String) -> OperationResult:
+func _do_pack_to_path(mods: Array, output_pak_path: String,
+		with_manifest: bool = false) -> OperationResult:
 	var pak_path := _normalized_pak_output_path(output_pak_path)
 	if pak_path.is_empty():
 		return OperationResult.failed("Select an output .pak path")
@@ -80,10 +81,11 @@ func _do_pack_to_path(mods: Array, output_pak_path: String) -> OperationResult:
 	if mkdir_error != OK:
 		return OperationResult.failed(
 				"Could not create export folder (error %d)" % mkdir_error)
-	return _pack_mods_to_target(mods, pak_path, "Exported")
+	return _pack_mods_to_target(mods, pak_path, "Exported", with_manifest, true)
 
 
-func _pack_mods_to_target(mods: Array, pak_path: String, verb: String) -> OperationResult:
+func _pack_mods_to_target(mods: Array, pak_path: String, verb: String,
+		with_manifest: bool = false, is_export: bool = false) -> OperationResult:
 	var u4pak_path := _cfg.get_u4pak_path()
 	if not FileAccess.file_exists(u4pak_path):
 		return OperationResult.failed("u4pak.py not found: %s" % u4pak_path)
@@ -107,10 +109,23 @@ func _pack_mods_to_target(mods: Array, pak_path: String, verb: String) -> Operat
 	if not merge_result.ok:
 		FileUtils.remove_dir_recursive(tmp_dir)
 		return merge_result
-	var registry_result := _stage_custom_asset_registry(mods, merged, tmp_dir, python)
-	if not registry_result.ok:
+	var declarations_result := _collect_custom_assets(mods)
+	if not declarations_result.ok:
 		FileUtils.remove_dir_recursive(tmp_dir)
-		return registry_result
+		return declarations_result
+	var declarations: Array = declarations_result.value
+	if with_manifest:
+		var registry_path := merged.path_join(_cfg.get_game_profile().content_root).path_join("AssetRegistry.bin")
+		if FileAccess.file_exists(registry_path):
+			var remove_error := DirAccess.remove_absolute(registry_path)
+			if remove_error != OK:
+				FileUtils.remove_dir_recursive(tmp_dir)
+				return OperationResult.failed("Could not exclude the workspace Asset Registry")
+	else:
+		var registry_result := _stage_custom_asset_registry(declarations, merged, tmp_dir, python)
+		if not registry_result.ok:
+			FileUtils.remove_dir_recursive(tmp_dir)
+			return registry_result
 
 	_emit_log("")
 	_emit_log("Packing...")
@@ -132,14 +147,38 @@ func _pack_mods_to_target(mods: Array, pak_path: String, verb: String) -> Operat
 		return OperationResult.failed(
 				"Could not stage signature file (error %d)" % sig_error)
 
-	var install_result := FileUtils.install_staged_files_with_result([
+	var install_files: Array = [
 		{"source": staged_pak, "target": pak_path},
 		{"source": staged_sig, "target": sig_path},
-	], [], _cfg.keep_pack_backups, "pak-backup")
+	]
+	var manifest_path := pak_path.get_basename() + ".manifest.json"
+	var removed_targets: Array = []
+	if with_manifest:
+		var names := PackedStringArray()
+		for mod: ModInfo in mods:
+			names.append(mod.name)
+		var manifest := {
+			"schema_version": 1, "kind": "spellbreak-distribution",
+			"name": ", ".join(names), "pak": pak_path.get_file(),
+			"pak_sha256": FileAccess.get_sha256(staged_pak), "custom_assets": declarations,
+		}
+		var staged_manifest := FileUtils.unique_sibling_path(manifest_path, "manifest")
+		var manifest_error := FileUtils.write_bytes_atomic(
+				staged_manifest, JSON.stringify(manifest, "  ").to_utf8_buffer())
+		if manifest_error != OK or str(manifest.pak_sha256).is_empty():
+			for staged in [staged_pak, staged_sig, staged_manifest]:
+				_remove_staged_file(staged)
+			return OperationResult.failed("Could not stage the distribution manifest")
+		install_files.append({"source": staged_manifest, "target": manifest_path})
+	elif is_export and FileAccess.file_exists(manifest_path):
+		# A complete export must not leave a stale launcher manifest beside it.
+		removed_targets.append(manifest_path)
+	var install_result := FileUtils.install_staged_files_with_result(
+		install_files, removed_targets, _cfg.keep_pack_backups, "pak-backup")
 	var install_error := int(install_result.get("error", ERR_BUG))
 	if install_error != OK:
-		for staged in [staged_pak, staged_sig]:
-			_remove_staged_file(staged)
+		for pair: Dictionary in install_files:
+			_remove_staged_file(str(pair.source))
 		return OperationResult.failed(
 				"Could not install packed files (error %d)" % install_error)
 
@@ -151,6 +190,8 @@ func _pack_mods_to_target(mods: Array, pak_path: String, verb: String) -> Operat
 	var message := "%s %s + %s (%s)" % [verb,
 		pak_path.get_file(), sig_path.get_file(), ModDiscovery.fmt_size(pak_size)
 	]
+	if with_manifest:
+		message += " + " + manifest_path.get_file()
 	var backups: Array = install_result.get("backups", [])
 	var backup_summary := FileUtils.format_backup_summary(backups)
 	if not backup_summary.is_empty():
@@ -158,6 +199,7 @@ func _pack_mods_to_target(mods: Array, pak_path: String, verb: String) -> Operat
 	return OperationResult.succeeded(message, pak_path, {
 		"pak_path": pak_path,
 		"sig_path": sig_path,
+		"manifest_path": manifest_path if with_manifest else "",
 	}).with_backups(backups)
 
 
@@ -182,8 +224,7 @@ func _merge_mods_to_dir(mods: Array, merged: String) -> OperationResult:
 	return OperationResult.succeeded()
 
 
-func _stage_custom_asset_registry(mods: Array, merged: String, tmp_dir: String,
-		python: String) -> OperationResult:
+func _collect_custom_assets(mods: Array) -> OperationResult:
 	var declarations: Array = []
 	var targets := {}
 	for mod_value in mods:
@@ -196,6 +237,8 @@ func _stage_custom_asset_registry(mods: Array, merged: String, tmp_dir: String,
 		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(manifest_path))
 		if not parsed is Dictionary:
 			return OperationResult.failed("Invalid manifest JSON for '%s'" % mod.name)
+		if not parsed.get("custom_assets", []) is Array:
+			return OperationResult.failed("Invalid custom asset list in '%s'" % mod.name)
 		for value in parsed.get("custom_assets", []):
 			if not value is Dictionary:
 				return OperationResult.failed(
@@ -207,18 +250,31 @@ func _stage_custom_asset_registry(mods: Array, merged: String, tmp_dir: String,
 			if source.is_empty() or target.is_empty() or relative_file.is_empty():
 				return OperationResult.failed(
 						"Incomplete unique asset declaration in '%s'" % mod.name)
-			if targets.has(target):
+			var prefix := _cfg.get_game_profile().content_root + "/Content/"
+			if not relative_file.begins_with(prefix) or "\\" in relative_file \
+					or ".." in relative_file.split("/") or relative_file.get_extension() != "uasset":
+				return OperationResult.failed("Invalid unique asset file in '%s': %s" % [mod.name, relative_file])
+			var package := "/Game/" + relative_file.trim_prefix(prefix).get_basename()
+			if target != package + "." + package.get_file() \
+					or not source.begins_with("/Game/") or not "." in source:
+				return OperationResult.failed("Invalid unique asset ObjectPath in '%s': %s" % [mod.name, target])
+			if targets.has(target.to_lower()):
 				return OperationResult.failed(
 						"Duplicate unique asset target '%s' in '%s' and '%s'" % [
-							target, str(targets[target]), mod.name])
+							target, str(targets[target.to_lower()]), mod.name])
 			var package_file := mod.path.path_join(relative_file)
 			if not FileUtils.is_path_within(package_file, mod.path) \
 					or not FileAccess.file_exists(package_file):
 				return OperationResult.failed(
 						"Unique asset file is missing in '%s': %s" % [mod.name, relative_file])
-			targets[target] = mod.name
-			declarations.append({"source": source, "target": target,
+			targets[target.to_lower()] = mod.name
+			declarations.append({"source": source, "target": target, "file": relative_file,
 				"reference_group": str(declaration.get("reference_group", ""))})
+	return OperationResult.succeeded("", declarations)
+
+
+func _stage_custom_asset_registry(declarations: Array, merged: String, tmp_dir: String,
+		python: String) -> OperationResult:
 	if declarations.is_empty():
 		return OperationResult.succeeded()
 

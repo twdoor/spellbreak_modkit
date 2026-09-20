@@ -1826,7 +1826,26 @@ func _open_export_mod_dialog(mod: ModInfo) -> void:
 	dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
 	dialog.filters = PackedStringArray(["*.pak ; Unreal Pak"])
-	AppTheme.configure_file_dialog(dialog)
+	AppTheme.apply_theme(dialog)
+	dialog.use_native_dialog = false
+	dialog.title = "Export %s" % mod.name
+	var options := VBoxContainer.new()
+	var format_picker := OptionButton.new()
+	format_picker.add_item("Complete package")
+	format_picker.add_item("Package + manifest")
+	options.add_child(format_picker)
+	var explanation := Label.new()
+	explanation.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var update_explanation := func(index: int) -> void:
+		explanation.text = ("Includes the Asset Registry. Ready to use as a standalone mod package."
+				if index == 0 else
+				"Exports a content pak and a small manifest beside it. Your launcher combines the registries.")
+	format_picker.item_selected.connect(update_explanation)
+	update_explanation.call(0)
+	options.add_child(explanation)
+	dialog.get_vbox().add_child(options)
+	dialog.get_vbox().move_child(options, 0)
+	dialog.canceled.connect(dialog.queue_free)
 	dialog.current_file = "%s.pak" % _safe_export_basename(mod.name)
 	var paks_dir := _cfg.get_paks_dir()
 	if DirAccess.dir_exists_absolute(paks_dir):
@@ -1835,18 +1854,18 @@ func _open_export_mod_dialog(mod: ModInfo) -> void:
 		dialog.current_dir = _cfg.mods_dir
 	dialog.file_selected.connect(func(path: String) -> void:
 		dialog.queue_free()
-		_export_mod_to_path(mod, path)
+		_export_mod_to_path(mod, path, format_picker.selected == 1)
 	)
 	get_tree().root.add_child(dialog)
 	dialog.popup_centered(Vector2i(900, 650))
 
 
-func _export_mod_to_path(mod: ModInfo, pak_path: String) -> void:
+func _export_mod_to_path(mod: ModInfo, pak_path: String, with_manifest: bool = false) -> void:
 	if _skin_cloner.is_busy():
 		_set_status("Wait for skin cloning to finish", true)
 		return
 	var mod_name := mod.name
-	_last_pack_operation = func() -> void: _export_mod_to_path(mod, pak_path)
+	_last_pack_operation = func() -> void: _export_mod_to_path(mod, pak_path, with_manifest)
 	_show_operation_feedback("Exporting %s..." % mod_name)
 	_append_log("Exporting %s..." % mod_name)
 	_append_log("Output: %s" % pak_path)
@@ -1854,7 +1873,7 @@ func _export_mod_to_path(mod: ModInfo, pak_path: String) -> void:
 	if not _run_build_preflight([mod]):
 		return
 	_set_status("Exporting %s..." % mod_name)
-	_packer.export_to_path([mod], pak_path)
+	_packer.export_to_path([mod], pak_path, with_manifest)
 
 
 func _safe_export_basename(mod_name: String) -> String:

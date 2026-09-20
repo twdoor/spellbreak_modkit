@@ -2658,6 +2658,44 @@ func _test_packing_transaction() -> void:
 	_expect(FileAccess.get_file_as_string(export_path.get_basename() + ".sig") == "sig-template",
 		"middle-click mod export copies the game signature template")
 
+
+	var asset_file := "g3/Content/Items/New.uasset"
+	FileUtils.write_bytes_atomic(mod_dir.path_join(asset_file), "asset".to_utf8_buffer())
+	FileUtils.write_bytes_atomic(mod_dir.path_join("g3/AssetRegistry.bin"), "old-registry".to_utf8_buffer())
+	var workspace_manifest := {"schema_version": 1, "files": [{"source": "private-path"}],
+		"custom_assets": [{"source": "/Game/Items/Old.Old", "target": "/Game/Items/New.New",
+			"file": asset_file, "reference_group": "skin-group"}]}
+	FileUtils.write_bytes_atomic(ModManifest.manifest_path(mod),
+		JSON.stringify(workspace_manifest).to_utf8_buffer())
+	var portable_result := packer._do_pack_to_path([mod], export_path, true)
+	_expect(portable_result.ok, "manifest export needs no configured base registry")
+	var manifest_path := export_path.get_basename() + ".manifest.json"
+	var portable: Variant = JSON.parse_string(FileAccess.get_file_as_string(manifest_path))
+	_expect(portable is Dictionary and portable.get("kind") == "spellbreak-distribution"
+		and portable.get("pak") == export_path.get_file()
+		and portable.get("pak_sha256") == FileAccess.get_sha256(export_path)
+		and not portable.has("files")
+		and portable.get("custom_assets", []) == workspace_manifest.custom_assets,
+		"manifest export writes compact launcher-compatible declarations and pak hash")
+	var listing: Array = []
+	var list_code := ProcessUtils.run_python_script(ProcessUtils.find_python(), config.get_u4pak_path(),
+		root, ["list", export_path], listing)
+	_expect(list_code == 0 and not "AssetRegistry.bin" in ProcessUtils.output_text(listing)
+		and "New.uasset" in ProcessUtils.output_text(listing),
+		"manifest export includes assets and excludes copied workspace registry")
+	var portable_bytes := FileAccess.get_file_as_bytes(export_path)
+	var portable_manifest_bytes := FileAccess.get_file_as_bytes(manifest_path)
+	var invalid_complete := packer._do_pack_to_path([mod], export_path)
+	_expect(not invalid_complete.ok and FileAccess.get_file_as_bytes(export_path) == portable_bytes
+		and FileAccess.get_file_as_bytes(manifest_path) == portable_manifest_bytes,
+		"failed complete export preserves previous portable bundle")
+	workspace_manifest.custom_assets = []
+	FileUtils.write_bytes_atomic(ModManifest.manifest_path(mod),
+		JSON.stringify(workspace_manifest).to_utf8_buffer())
+	var complete_result := packer._do_pack_to_path([mod], export_path)
+	_expect(complete_result.ok and not FileAccess.file_exists(manifest_path),
+		"complete re-export removes stale distribution manifest")
+
 	if FileAccess.file_exists(pak_path):
 		var previous := FileAccess.get_file_as_bytes(pak_path)
 		var failing_tool_dir := root.path_join("failing_u4pak")

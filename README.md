@@ -97,7 +97,7 @@ The Mod Manager tab is pinned and always visible. It shows all mod folders found
 |--------|--------|
 | **Left-click a mod** | Expand / collapse it |
 | **Right-click a mod** | Toggle enabled / disabled |
-| **Middle-click a mod** | Export only that mod to a chosen `.pak` path with a matching `.sig` |
+| **Middle-click a mod** | Open the built-in export browser; choose **Complete package** or **Package + manifest** |
 | **Double-click a `.uasset`** | Open it in the asset editor |
 | **Double-click any other file** | Open with the configured editor or system default app |
 | **Open button on text/config files** | Open `.txt`, `.cfg`, `.json`, `.ini`, `.md`, and similar files externally |
@@ -319,6 +319,17 @@ configured source's `g3/AssetRegistry.bin`, clones the source registry records
 to their new object paths, and stages the patched registry into the generated
 pak. Packing fails safely if a declaration is incomplete, duplicated, missing
 its cloned file, or references a source object absent from the base registry.
+
+Middle-click a mod to open the themed export browser. **Complete package** includes
+the generated Asset Registry when needed. **Package + manifest** exports a registry-free
+`.pak`, a matching `.sig`, and a compact `<pak-name>.manifest.json` beside them for
+launcher composition. Both modes use the chosen output filename. Re-exporting a
+complete package removes any old distribution sidecar for that filename.
+
+For independently distributed packs and a separate launcher, use the
+[standalone export and registry composition workflow](tools/MOD_DISTRIBUTION.md).
+It exports a content pak with a portable sidecar manifest and builds one shared
+registry pak from the selected manifests without running the editor.
 
 Your mod files must mirror Spellbreak's internal folder structure:
 
