@@ -69,6 +69,7 @@ def main() -> None:
             {"source": "/Game/Items/Old.Old", "target": "/Game/New/LongName.LongName"},
             {"source": "/Game/Items/Old.Old", "target": "/Game/New/Other_6.Other_6"},
             {"source": "/Game/Items/Old.Old", "target": "/Game/Older/Old_New.Old_New"},
+            {"source": "/Game/Items/Old.Old", "target": "/Game/New/Gradient_01.Gradient_01"},
         ]
         patcher.patch_registry_many(source, output, operations)
         data = output.read_bytes()
@@ -76,7 +77,8 @@ def main() -> None:
         names, _ = patcher.parse_names(data, offset)
         records, _ = patcher.parse_assets(data, names, offset)
         paths = {record.object_path for record in records}
-        assert len(records) == 5
+        assert len(records) == 6
+        assert "/Game/New/Gradient_01.Gradient_01" in paths
         assert "/Game/New/LongName.LongName" in paths
         assert "/Game/New/Other_6.Other_6" in paths
         # The target package contains the source asset name as a substring; it

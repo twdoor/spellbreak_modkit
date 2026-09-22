@@ -118,13 +118,18 @@ Select files with `Click`, `Ctrl+Click` (toggle), or `Shift+Click` (range).
 
 | Button | Action |
 |--------|--------|
-| **New Mod** | Create a new mod folder |
-| **Clone Skin** | Clone a skin blueprint and its editable art into a mod |
-| **Base Files** | Open the Base Files explorer |
-| **Settings** | Open the Settings tab |
+| **Create → New Mod** | Create a new mod folder |
+| **Create → Clone Cosmetic** | Clone a cosmetic blueprint and its editable dependencies into a mod |
+| **Tools → Base Files** | Open the Base Files explorer |
+| **Tools → Localization** | Translate mod text and build language files |
+| **Tools → Batch Recipes** | Inspect, preview, and apply reusable numeric/boolean edits |
+| **Tools → Health Check** | Check configured paths and tools |
+| **Tools → Settings** | Open the Settings tab |
 | **Pack** | Pack all enabled mods into a Spellbreak patch pak |
 | **Watch** | Toggle auto-pack on file save |
 | **Launch** | Launch the game |
+
+See [Localization and batch recipes](docs/mod-workflows.md) for the workflow, recipe format, validation, and backup locations.
 
 ### Sources
 
@@ -136,6 +141,11 @@ SourceFolder/
     └── Content/
         └── ...
 ```
+
+In **Settings > Sources**, drag the handle beside a source to reorder the list.
+The first source is marked **Default**; source pickers start with the first
+available source in this order. Click **Save** to keep the order, or **Revert**
+to discard unsaved changes.
 
 In **Settings > Sources**, **Generate from Pak** can build a source directly from a game package:
 
@@ -150,48 +160,53 @@ menu can show any combination of configured sources, folders expand lazily, and
 search indexing runs in the background. Right-click a file to copy it into a mod
 or, for binary assets, clone it as a unique package.
 
-### Cloning skins
+### Cloning cosmetics
 
 1. Add a complete extracted base source in Settings and create a target mod.
-2. Click **Clone Skin**, choose a configured **Source** from the dropdown, and
-   select a `BP_Cosmetic_Skin_*.uasset`. Sources without a skin blueprint folder
-   are shown disabled.
-3. Choose the target mod, enter a unique `BP_Cosmetic_Skin_YourName` asset name,
-   and optionally set its display name. Leave **Clone skin chain** checked.
-4. Open the cloned colour textures or icons in the mod tree, export PNGs, edit
-   them, and use **Import PNG** to apply your artwork. Pack the mod as usual.
+2. Choose **Create → Clone Cosmetic…**, select a **Source** and cosmetic **Type**,
+   then select a `BP_Cosmetic_<Type>_*.uasset` descriptor.
+3. Choose the target mod, enter a unique name keeping the type prefix (for example,
+   `BP_Cosmetic_Artifact_MyArtifact`), and optionally set its display name.
+   Leave **Clone cosmetic dependencies** checked.
+4. Edit the cloned assets in the mod tree and pack the mod as usual. For textures,
+   export PNGs, edit them, then use **Import PNG**.
 
-The same workflow is available through **Base Files > Clone Unique to Mod**
-when selecting a skin blueprint. The clone includes the skin data and the mesh
-and material dependencies leading to `_ChrTBC` colour maps, headshots, and
-fullbody icons, including numbered colour maps such as `_ChrTBC_1`. Missing
-optional icons are reported and retain their original references; missing required
-skin dependencies still stop the clone. Other dependencies, including normal maps and animations, stay
-shared with the original. Each clone lives under
-`g3/Content/Blueprints/Cosmetics/Skins/<YourSkin>/`, with its cosmetic blueprint
-and `Meshes`, `Materials`, `Textures`, and `Icons` subfolders. Skin data lives in
-`g3/Content/Data/Skins/<YourSkin>/`, where the game scans its `RawSkin` assets;
-putting it inside the cosmetics folder prevents its model-loading bundle from
-being registered. The manifest links both locations as one skin. Names use
-your skin name, for example `Twdoor_SKIN_ChrTBC_1`, instead of hashes. The bundled
-texture tool repairs package and mip offsets when relocating textures and
-verifies that all mip pixels are unchanged. The workspace manifest maps each
-clone back to its source. Display name and description text receive
-independent localization keys.
+The same workflow is available through **Base Files > Clone Unique to Mod**.
+Supported types are skins, artifacts, cloudbursts, afterglows, emotes, triumphs,
+cards, badges, and titles.
 
-Cloning runs in the background and stages the complete chain before installing
-it. Failed conversions leave no cloned packages in the mod. Every new package
-is declared for the existing Asset Registry packing workflow, which requires
-`g3/AssetRegistry.bin` in a configured source. Packing also retargets each skin's Asset Registry loading bundles to its cloned
-skin data, meshes, and icons while preserving references to shared game assets.
-The original skin stays intact.
+| Type | Included editable dependencies |
+|------|--------------------------------|
+| Skins | Skin data, meshes and material instances leading to colour maps, headshots and fullbody icons |
+| Artifacts | Artifact actor, meshes, material instances, textures and icons |
+| Cloudbursts and afterglows | Particle systems, meshes, material instances, textures and icons |
+| Emotes and triumphs | Animation montages, associated editable effects and icons |
+| Cards and badges | Artwork textures |
+| Titles | Title descriptor and referenced editable artwork |
+
+Dependencies are discovered from the selected cosmetic's references. Shared base
+materials, skeletons, animation clips, animation blueprints and audio retain their
+original references. Skin cloning retains its existing colour-map policy,
+including numbered `_ChrTBC` maps; normal maps remain shared. Missing optional
+icons are reported, while missing required dependencies stop the clone. Card and
+badge artwork is required.
+
+Each clone lives under `g3/Content/Blueprints/Cosmetics/<Type>/<YourName>/`.
+Skin data instead lives under `g3/Content/Data/Skins/<YourName>/`, and animation
+montages under `g3/Content/Characters/Human/Animations/Cosmetics/<Type>_<YourName>/`,
+so the game can discover these primary assets. The manifest links these locations
+as one cosmetic and declares every cloned package for Asset Registry packing.
+Packing requires `g3/AssetRegistry.bin` in a configured source and retargets loading
+bundles to cloned assets while preserving shared references.
+
+Cloning runs in the background and stages all packages before installing them.
+Converted packages are reopened and checked for stale donor references; the
+texture relocation tool also verifies that mip pixels are unchanged. Display
+names, descriptions and title text receive independent localization keys.
+The original cosmetic stays intact.
 
 The workflow prepares client assets; granting or unlocking the new cosmetic
 still depends on your Community Edition server. It does not deploy server grants.
-
-This workflow was informed by the sibling modding toolkit's `local/utils/skinkit`
-reference-chain discovery, implemented here
-with the modkit's native UI, asset editor, workspace manifests, and packer.
 
 ### Asset editor tabs
 

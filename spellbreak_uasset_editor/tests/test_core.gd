@@ -2264,6 +2264,8 @@ func _test_file_watcher_deferred_pack_starts_packer() -> void:
 	var triggered: Array[int] = []
 	watcher.pack_triggered.connect(func(n: int) -> void: triggered.append(n))
 
+	# Model an active watcher without starting its polling thread.
+	watcher._active = true
 	watcher._emit_pack_triggered_and_pack(4, [ModInfo.new("TestMod", mod_path)])
 
 	_expect(triggered == [4], "file watcher emits pack-trigger status before auto-pack")
@@ -2271,6 +2273,10 @@ func _test_file_watcher_deferred_pack_starts_packer() -> void:
 			and packer.last_mods.size() == 1
 			and (packer.last_mods[0] as ModInfo).name == "TestMod",
 		"file watcher deferred callback starts the packer with enabled mods")
+	watcher.stop()
+	watcher._emit_pack_triggered_and_pack(5, [ModInfo.new("TestMod", mod_path)])
+	_expect(triggered == [4] and packer.pack_calls == 1,
+		"paused watcher discards queued auto-pack during cosmetic cloning")
 	FileUtils.remove_dir_recursive(root)
 
 

@@ -173,7 +173,11 @@ def rewrite_identity(value: str, old: str, new: str) -> str:
 
 def encode_fname(value: str, names: list[str], name_to_index: dict[str, int],
                  added_names: list[str]) -> bytes:
-    suffix = re.fullmatch(r"(.*)_([0-9]+)", value)
+    # Leading-zero suffixes are literal name text, not FName instance numbers.
+    # Converting Texture_01 into (Texture, 2) would silently rename it Texture_1.
+    suffix = re.fullmatch(r"(.+)_(0|[1-9][0-9]*)", value)
+    if suffix and int(suffix.group(2)) >= 0x7FFFFFFF:
+        suffix = None
     base = suffix.group(1) if suffix else value
     number = int(suffix.group(2)) + 1 if suffix else 0
     if base not in name_to_index:

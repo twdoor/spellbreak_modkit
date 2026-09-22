@@ -44,6 +44,10 @@ static func asset_registry_script() -> String:
 			"asset_registry", "patch_asset_registry.py", ASSET_REGISTRY_FILES)
 
 
+static func mod_workflows_script() -> String:
+	return _resolve_bundled_file("mod_workflows", "workflows.py", ["workflows.py", "locres.py"])
+
+
 static func dds_tools_script(override_directory: String = "") -> String:
 	return _resolve_with_override(
 			override_directory, "ue4_dds_tools", "main.py", DDS_TOOLS_FILES)

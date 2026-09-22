@@ -33,12 +33,14 @@ AppThemeManager="*res://app/app_theme_manager.gd"
 
 [display]
 
-window/size/viewport_width=960
-window/size/viewport_height=960
+window/size/viewport_width=900
+window/size/viewport_height=900
+window/size/transparent=true
 window/size/sharp_corners=true
 window/subwindows/embed_subwindows=false
 window/stretch/aspect="expand"
-window/vsync/vsync_mode=0
+window/per_pixel_transparency/allowed=true
+display_server/driver.linuxbsd="wayland"
 
 [editor_plugins]
 

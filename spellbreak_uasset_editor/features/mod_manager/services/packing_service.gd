@@ -109,6 +109,10 @@ func _pack_mods_to_target(mods: Array, pak_path: String, verb: String,
 	if not merge_result.ok:
 		FileUtils.remove_dir_recursive(tmp_dir)
 		return merge_result
+	var localization_result := _merge_localization(mods, merged, tmp_dir, python)
+	if not localization_result.ok:
+		FileUtils.remove_dir_recursive(tmp_dir)
+		return localization_result
 	var declarations_result := _collect_custom_assets(mods)
 	if not declarations_result.ok:
 		FileUtils.remove_dir_recursive(tmp_dir)
@@ -201,6 +205,28 @@ func _pack_mods_to_target(mods: Array, pak_path: String, verb: String,
 		"sig_path": sig_path,
 		"manifest_path": manifest_path if with_manifest else "",
 	}).with_backups(backups)
+
+
+func _merge_localization(mods: Array, merged: String, tmp_dir: String, python: String) -> OperationResult:
+	if mods.size() < 2:
+		return OperationResult.succeeded()
+	var paths: Array[String] = []
+	for mod: ModInfo in mods:
+		paths.append(mod.path)
+	var request := {"command": "merge_localization", "mod": merged, "mods": paths, "converter": ""}
+	var input := tmp_dir.path_join("localization_request.json")
+	var output := tmp_dir.path_join("localization_result.json")
+	if FileUtils.write_bytes_atomic(input, JSON.stringify(request).to_utf8_buffer()) != OK:
+		return OperationResult.failed("Could not prepare language resource merge")
+	var logs: Array = []
+	var script := ToolchainRegistry.mod_workflows_script()
+	var code := ProcessUtils.run_python_script(python, script, tmp_dir, [input, output], logs)
+	var result: Variant = JSON.parse_string(FileAccess.get_file_as_string(output)) \
+		if FileAccess.file_exists(output) else null
+	if code != 0 or not result is Dictionary or not result.get("ok", false):
+		return OperationResult.failed(str(result.get("message", "Language merge failed")) \
+			if result is Dictionary else ProcessUtils.output_text(logs))
+	return OperationResult.succeeded()
 
 
 func _merge_mods_to_dir(mods: Array, merged: String) -> OperationResult:

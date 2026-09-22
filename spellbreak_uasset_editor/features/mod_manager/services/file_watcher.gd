@@ -154,6 +154,9 @@ func _emit_pack_triggered(n: int) -> void:
 
 
 func _emit_pack_triggered_and_pack(n: int, enabled_mods: Array) -> void:
+	# A queued notification may arrive after a workflow has paused the watcher.
+	if not _is_active():
+		return
 	_emit_pack_triggered(n)
 	if _packer == null:
 		return

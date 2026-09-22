@@ -162,6 +162,13 @@ func _setup_mod_tab() -> void:
 	tab_cont.set_tab_title(0, "Mod Manager")
 	panel.open_asset_requested.connect(_on_file_selected)
 	panel.status_changed.connect(_on_mod_status_changed)
+	panel.workflow_guard = func(mod_path: String) -> String:
+		for child in tab_cont.get_children():
+			if child is UassetFileTab and child.tab_asset != null:
+				var path: String = child.tab_asset.binary_path
+				if FileUtils.is_path_within(path, mod_path):
+					return "Close this mod’s asset tabs before applying a workflow, so open edits cannot overwrite the result."
+		return ""
 	_cfg = panel.get_config()
 	_texture_service = TextureService.new().setup(_cfg)
 	_sound_service = SoundService.new().setup(_cfg)

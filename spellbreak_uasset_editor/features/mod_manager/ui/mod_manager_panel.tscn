@@ -1,91 +1,78 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://bt6llwmgvyuc6"]
 
 [ext_resource type="Script" uid="uid://r1t7ckpk38l5" path="res://features/mod_manager/ui/mod_manager_panel.gd" id="1_panel"]
 
-[node name="ModManagerPanel" type="VBoxContainer"]
+[node name="ModManagerPanel" type="VBoxContainer" unique_id=787577391]
 size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 0
 script = ExtResource("1_panel")
 
-[node name="ToolbarMargin" type="MarginContainer" parent="."]
+[node name="ToolbarMargin" type="MarginContainer" parent="." unique_id=1067958755]
 layout_mode = 2
 theme_override_constants/margin_left = 8
 theme_override_constants/margin_top = 6
 theme_override_constants/margin_right = 8
 theme_override_constants/margin_bottom = 4
 
-[node name="Toolbar" type="HBoxContainer" parent="ToolbarMargin"]
+[node name="Toolbar" type="HBoxContainer" parent="ToolbarMargin" unique_id=1940383769]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="PackButton" type="Button" parent="ToolbarMargin/Toolbar"]
+[node name="PackButton" type="Button" parent="ToolbarMargin/Toolbar" unique_id=1600937418]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Pack enabled mods into a .pak file"
 text = "Pack"
 
-[node name="WatchButton" type="Button" parent="ToolbarMargin/Toolbar"]
+[node name="WatchButton" type="Button" parent="ToolbarMargin/Toolbar" unique_id=1985815334]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Auto-pack on file save (toggle)"
 text = "Watch"
 
-[node name="LaunchButton" type="Button" parent="ToolbarMargin/Toolbar"]
+[node name="LaunchButton" type="Button" parent="ToolbarMargin/Toolbar" unique_id=1117869849]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Launch game"
 text = "Launch"
 
-[node name="ToolbarSpacer" type="Control" parent="ToolbarMargin/Toolbar"]
+[node name="ToolbarSpacer" type="Control" parent="ToolbarMargin/Toolbar" unique_id=298316820]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="NewModButton" type="Button" parent="ToolbarMargin/Toolbar"]
+[node name="CreateMenu" type="MenuButton" parent="ToolbarMargin/Toolbar" unique_id=1311763836]
 unique_name_in_owner = true
 layout_mode = 2
-tooltip_text = "Create a new mod folder"
-text = "New Mod"
+tooltip_text = "Create mods and clone cosmetics"
+focus_mode = 2
+text = "Create"
+flat = false
 
-[node name="CloneSkinButton" type="Button" parent="ToolbarMargin/Toolbar"]
-layout_mode = 2
-tooltip_text = "Clone a skin and its editable art into a mod"
-text = "Clone Skin"
-
-[node name="DiagnosticsButton" type="Button" parent="ToolbarMargin/Toolbar"]
+[node name="ToolsMenu" type="MenuButton" parent="ToolbarMargin/Toolbar" unique_id=1303613069]
 unique_name_in_owner = true
 layout_mode = 2
-tooltip_text = "Check paths, tools, and writable folders"
-text = "Health"
+tooltip_text = "Browse base files, check health, and configure settings"
+focus_mode = 2
+text = "Tools"
+flat = false
 
-[node name="BaseFilesButton" type="Button" parent="ToolbarMargin/Toolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-tooltip_text = "Browse reference base files"
-text = "Base Files"
-
-[node name="SettingsButton" type="Button" parent="ToolbarMargin/Toolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-tooltip_text = "Configure paths"
-text = "Settings"
-
-[node name="ToolbarSeparator" type="HSeparator" parent="."]
+[node name="ToolbarSeparator" type="HSeparator" parent="." unique_id=836082096]
 layout_mode = 2
 
-[node name="ModTree" type="Tree" parent="."]
+[node name="ModTree" type="Tree" parent="." unique_id=2084721249]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-select_mode = 2
-hide_root = true
 allow_rmb_select = true
+hide_root = true
+select_mode = 2
 
-[node name="FeedbackSeparator" type="HSeparator" parent="."]
+[node name="FeedbackSeparator" type="HSeparator" parent="." unique_id=1997052696]
 layout_mode = 2
 
-[node name="OperationFeedbackWrapper" type="MarginContainer" parent="."]
+[node name="OperationFeedbackWrapper" type="MarginContainer" parent="." unique_id=1900356381]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -97,14 +84,8 @@ theme_override_constants/margin_bottom = 6
 [connection signal="pressed" from="ToolbarMargin/Toolbar/PackButton" to="." method="_on_pack_pressed"]
 [connection signal="pressed" from="ToolbarMargin/Toolbar/WatchButton" to="." method="_on_watch_pressed"]
 [connection signal="pressed" from="ToolbarMargin/Toolbar/LaunchButton" to="." method="_on_launch_pressed"]
-[connection signal="pressed" from="ToolbarMargin/Toolbar/NewModButton" to="." method="_on_new_mod_pressed"]
-[connection signal="pressed" from="ToolbarMargin/Toolbar/DiagnosticsButton" to="." method="_on_diagnostics_pressed"]
-[connection signal="pressed" from="ToolbarMargin/Toolbar/BaseFilesButton" to="." method="_on_base_files_pressed"]
-[connection signal="pressed" from="ToolbarMargin/Toolbar/SettingsButton" to="." method="_on_settings_pressed"]
 [connection signal="button_clicked" from="ModTree" to="." method="_on_tree_button_clicked"]
 [connection signal="empty_clicked" from="ModTree" to="." method="_on_tree_empty_clicked"]
 [connection signal="gui_input" from="ModTree" to="." method="_on_mod_tree_gui_input"]
 [connection signal="item_activated" from="ModTree" to="." method="_on_tree_item_activated"]
 [connection signal="item_mouse_selected" from="ModTree" to="." method="_on_tree_item_mouse_selected"]
-
-[connection signal="pressed" from="ToolbarMargin/Toolbar/CloneSkinButton" to="." method="_on_clone_skin_pressed"]

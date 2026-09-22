@@ -1,0 +1,1876 @@
+[
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Athletic_DisplayName",
+  "src": "Vivify",
+  "kind": "changed",
+  "asset": "BP_Perk_Athletic",
+  "old_en": "Athletic",
+  "old": {
+   "de": "Sportlich",
+   "es": "Atletismo",
+   "fr": "Athlétique",
+   "it": "Atletismo",
+   "ja": "運動",
+   "ko": "운동선수 기질",
+   "pt-BR": "Atleticismo",
+   "ru": "Атлет",
+   "zh-Hans": "身强体健"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Athletic_Description",
+  "src": "On Rune Use: you and nearby teammates gain +2/3/4/6 sprint speed for 10 seconds (15s cooldown)",
+  "kind": "changed",
+  "asset": "BP_Perk_Athletic",
+  "old_en": "Run Speed +1/2/3/5\nOn reading Body Scroll: +1 Character Level",
+  "old": {
+   "de": "Lauftempo +1/2/3/5\nBeim Lesen einer Schriftrolle des Körpers: +1 Charakterstufe",
+   "es": "Velocidad en carrera +1/2/3/5.\nAl leer un pergamino del cuerpo: +1 al nivel del personaje.",
+   "fr": "Vitesse de déplacement : +1/2/3/5\nÀ la lecture du parchemin corporel : niveau de personnage +1",
+   "it": "Velocità corsa: +1/2/3/5\nLeggendo la pergamena del corpo: livello personaggio +1",
+   "ja": "走るスピード+1/2/3/5\nボディの巻物を読むと：キャラクターレベル+1",
+   "ko": "달리기 속도 +1/2/3/5\n신체의 두루마리 읽기: +1 캐릭터 레벨",
+   "pt-BR": "Velocidade de Corrida +1/2/3/5\nLer um Pergaminho de Corpo: +1 nível de personagem",
+   "ru": "Скорость бега +1/2/3/5\nПри чтении свитка тела: +1 уровень персонажа.",
+   "zh-Hans": "奔跑速度+1/2/3/5\n正在阅读身体卷轴：角色等级+1"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Escapist_Description",
+  "src": "Run Speed: +3\nOn Damage Taken: Run Speed +1/2/3/5 (5s)",
+  "kind": "changed",
+  "asset": "BP_Perk_Escapist",
+  "old_en": "Run Speed: +3\nOn Damage Taken: Run Speed +1 (5s)",
+  "old": {
+   "de": "Lauftempo: +3\nWenn du Schaden erleidest: Lauftempo +1 (5 Sek.)",
+   "es": "Velocidad en carrera: +3.\nAl recibir daño: +1 de velocidad en carrera (5 s).",
+   "fr": "Vitesse de déplacement : +3\nAprès avoir subi des dégâts : vitesse de déplacement +1 (5 s)",
+   "it": "Velocità corsa: +3\nDanni subiti: velocità corsa +1 (5s)",
+   "ja": "ルーンの速度: +3\nダメージを受ける：走るスピード+1（5秒）",
+   "ko": "달리기 속도: +3\n대미지를 받는 경우: 달리기 속도 +1(5초)",
+   "pt-BR": "Velocidade de Corrida: +3\nAo Receber Dano: Velocidade de Corrida +1 (5 s)",
+   "ru": "Скорость бега: +3\nПри получении урона: скорость бега +1 (5 сек.)",
+   "zh-Hans": "奔跑速度：+3\n受到伤害时：奔跑速度+1（5秒）"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Fervor_DisplayName",
+  "src": "Blood Armor",
+  "kind": "changed",
+  "asset": "BP_Perk_Fervor",
+  "old_en": "Fervor",
+  "old": {
+   "de": "Eifer",
+   "fr": "Ferveur",
+   "it": "Fervore",
+   "ja": "熱情",
+   "ko": "열정",
+   "ru": "Рвение",
+   "zh-Hans": "热烈"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Fervor_Description",
+  "src": "Every 10 seconds, gain 4/6/10/16 armor, but lose 2/4/6/10 health (stops at < 25 health).\r\n+10 Max Armor\r\n-10 Max Health",
+  "kind": "changed",
+  "asset": "BP_Perk_Fervor",
+  "old_en": "Spell Cast Speed: +15%",
+  "old": {
+   "de": "Zauber-Wirktempo: +15 %",
+   "es": "Velocidad de lanzamiento de hechizos: +15 %.",
+   "fr": "Vitesse d'incantation : +15 %",
+   "it": "Velocità lancio magia: +15%",
+   "ja": "呪文を放つ速度： +15%",
+   "ko": "주문 시전 속도: +15%",
+   "pt-BR": "Velocidade de Conjuração de Magia: +15%",
+   "ru": "Скорость чтения заклинаний: +15%",
+   "zh-Hans": "法术施展速度：+15%"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Focused_Mana_Description",
+  "src": "With at least 80% Mana: Spell Damage +15/18/20/30%",
+  "kind": "changed",
+  "asset": "BP_Perk_Focused_Mana",
+  "old_en": "With at least 80% Mana: Spell Damage +15%",
+  "old": {
+   "de": "Bei mindestens 80 % Mana: Zauberschaden +15 %",
+   "es": "Con al menos un 80 % de maná: +15 % de daño con hechizos.",
+   "fr": "Avec au moins 80 % de mana : dégâts de sort +15 %",
+   "it": "Con almeno 80% di mana: danni magia +15%",
+   "ja": "マナ残量80%以上：呪文によるダメージ：+15%",
+   "ko": "마나가 최소 80%인 경우: 주문 대미지 +15%",
+   "pt-BR": "Com pelo menos 80% de Mana: Dano de Magia +15%",
+   "ru": "Если маны не менее 80%: урон заклинаний +15%",
+   "zh-Hans": "法力值高于80%时：法术伤害+15%"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Foresight_Description",
+  "src": "See Future Storms and Mana Vaults\nSee Enemies on the Minimap every 20/18/15/12s\r\nOn Damage Target: Outline target for you and your squad (1/2/4/6s)",
+  "kind": "changed",
+  "asset": "BP_Perk_Foresight",
+  "old_en": "See Future Storms and Mana Vaults\nSee Enemies on the Minimap every 10/8/5/3s",
+  "old": {
+   "de": "Du siehst zukünftige Stürme und Manaschreine.\nAlle 10/8/5/3 Sek. werden Gegner auf der Minikarte angezeigt.",
+   "es": "Prevé las futuras tormentas y las cámaras de maná.\nVe a los enemigos en el mapa cada 10/8/5/3 segundos.",
+   "fr": "Voir les futures tempêtes et les coffres de mana\nVoir les ennemis sur la mini-carte toutes les 10/8/5/3 s",
+   "it": "Mostra tempeste future e manaforzieri\nMostra nemici sulla minimappa ogni 10/8/5/3s",
+   "ja": "未来の嵐とマナの部屋を見る\n10/8/5/3秒ごとにミニマップで敵を見る",
+   "ko": "미래의 폭풍과 마나 금고 보기\n미니맵에서 10/8/5/3초마다 적 보기",
+   "pt-BR": "Veja Tempestades Futuras e Esferas de Mana\nVeja Inimigos no Minimapa a cada 10/8/5/3 s",
+   "ru": "Позволяет видеть будущие бури и хранилища маны\nПоказывает врагов на мини-карте каждые 10/8/5/3 сек.",
+   "zh-Hans": "发现即将到来的风暴及法力库\n每10/8/5/3秒在小地图上显示敌人"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Gilded_Description",
+  "src": "On reading Mind Scroll: Upgrade 2 random equipped items by 1 Rarity",
+  "kind": "changed",
+  "asset": "BP_Perk_Gilded",
+  "old_en": "On reading Spirit Scroll: Upgrade 2 random equipped items by 1 Rarity",
+  "old": {
+   "de": "Beim Lesen einer Schriftrolle des Geists: Verbessere 2 zufällige ausgerüstete Gegenstände um 1 Seltenheitsstufe.",
+   "es": "Al leer un pergamino del espíritu: mejora en 1 la rareza de 2 objetos aleatorios que llevas.",
+   "fr": "À la lecture du parchemin spirituel : améliorer 2 objets équipés aléatoires de 1 en rareté",
+   "it": "Leggendo la pergamena dello spirito: rarità +1 per 2 oggetti casuali equipaggiati",
+   "ja": "スピリットの巻物を読むと、ランダムで2つの装着中アイテムのレア度が1つアップグレードされる",
+   "ko": "영혼의 두루마리 읽기: 장착한 아이템 중 무작위 2개 아이템의 희소성 1 증가",
+   "pt-BR": "Ler um Pergaminho de Espírito: melhore em 1 a Raridade de 2 itens equipados aleatórios",
+   "ru": "При чтении свитка духа: повышает редкость 2 случайных снаряженных предметов на 1.",
+   "zh-Hans": "正在阅读精神卷轴：2个随机已装备物品提升1的珍贵度"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Hardened_DisplayName",
+  "src": "Specialist",
+  "kind": "changed",
+  "asset": "BP_Perk_Hardened",
+  "old_en": "Hardened",
+  "old": {
+   "de": "Gehärtet",
+   "es": "Insensible",
+   "fr": "Endurci",
+   "it": "Tempra",
+   "ja": "硬化",
+   "ko": "경화",
+   "pt-BR": "Perseverança",
+   "ru": "Твердость",
+   "zh-Hans": "强身健体"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Hardened_Description",
+  "src": "Main Gauntlet Mana Cost: -10/12/15/20%",
+  "kind": "changed",
+  "asset": "BP_Perk_Hardened",
+  "old_en": "Immune to Ignition and Corrosion\nFreeze and Shock Duration on you: -35/50/75/90%",
+  "old": {
+   "de": "Immun gegen Entzündung und Korrosion\nDie Dauer, für die du eingefroren oder geschockt bist: -35/50/75/90 %",
+   "es": "Inmune a la ignición y la corrosión.\nDuración de congelación y electrocución en ti: -35/50/75/90 %.",
+   "fr": "Immunité à l'embrasement et à la corrosion\nDurée de gel et de choc sur toi : -35/50/75/90 %",
+   "it": "Immune a Incendio e Corrosione\nDurata di congelamento e scossa su di te: -35/50/75/90%",
+   "ja": "発火と腐食に耐性がつく\n凍結とショックの継続時間： -35/50/75/90%",
+   "ko": "점화 및 부식에 면역\n동결 또는 감전 시간: -35/50/75/90%",
+   "pt-BR": "Imune a Incêndio e Corrosão\nReduz a duração de Congelamento e Eletrocussão em você em 35/50/75/90%",
+   "ru": "Неуязвимость: горение и ржавчина\nДлительность действия на вас заморозки и оглушения: -35/50/75/90%.",
+   "zh-Hans": "免疫起火和腐蚀\n身上的急冻和触电持续时间：-35/50/75/90%"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Harmony_Description",
+  "src": "Immune: Slow, Frozen, Shocked\nIncoming Damage Reduction: 5/7/10/15%",
+  "kind": "changed",
+  "asset": "BP_Perk_Harmony",
+  "old_en": "Immune: Slow, Frozen, Shocked\nIncoming Damage Reduction: 5%",
+  "old": {
+   "de": "Immun: Verlangsamen, Einfrieren, Schocken\nVerringerung des erlittenen Schadens: 5 %",
+   "es": "Inmune a: ralentización, congelación, electrocución.\nReducción del daño recibido: 5 %.",
+   "fr": "Immunité : Lenteur, Gel, K.-O.\nRéduction des dégâts subis : 5 %",
+   "it": "Immune: rallentamento, congelamento, scossa\nRiduzione danni subiti: 5%",
+   "ja": "耐性：スロー、凍結、ショック\n受けるダメージの軽減：5%",
+   "ko": "면역: 둔화, 냉동, 감전\n받는 대미지 감소: 5%",
+   "pt-BR": "Imune: Lento, Congelado, Eletrocutado\nRedução de Dano Iminente: 5%",
+   "ru": "Неуязвимость: замедление, заморозка, оглушение\nСнижение получаемого урона: 5%",
+   "zh-Hans": "免疫：减速、冰冻和触电\n下次承伤减少：5%"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Inspired_DisplayName",
+  "src": "Blight",
+  "kind": "changed",
+  "asset": "BP_Perk_Inspired",
+  "old_en": "Inspired",
+  "old": {
+   "de": "Inspiriert",
+   "es": "Inspiración",
+   "fr": "Inspiré",
+   "it": "Ispirazione",
+   "ja": "触発",
+   "ko": "고무적인 영감",
+   "pt-BR": "Inspiração",
+   "ru": "Вдохновение",
+   "zh-Hans": "灵感激发"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Inspired_Description",
+  "src": "On Enemy Hit: Reduce their healing by 20/30/40/50% for 10 seconds",
+  "kind": "changed",
+  "asset": "BP_Perk_Inspired",
+  "old_en": "Spell Damage: +10/12/15/20% while you have a Rune charge",
+  "old": {
+   "de": "Zauberschaden: +10/12/15/20 %, solange du eine Runenaufladung hast.",
+   "es": "+10/12/15/20 % al daño con hechizos mientras tengas una carga de runa.",
+   "fr": "Dégâts de sort : +10/12/15/20 % quand tu as une charge de rune",
+   "it": "Danni magia: +10/12/15/20% con una carica runa",
+   "ja": "ルーンチャージがある間、呪文によるダメージが+10/12/15/20%",
+   "ko": "룬 충전 보유 시 주문 대미지 +10/12/15/20%",
+   "pt-BR": "+10/12/15/20% de Dano de Magia com uma carga de Runa",
+   "ru": "Урон заклинаний +10/12/15/20%, если у вас есть заряд руны.",
+   "zh-Hans": "当有符文储量时法术伤害：+10/12/15/20%"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Intelligent_Description",
+  "src": "Rune Cooldown: -5/8/10/15%",
+  "kind": "changed",
+  "asset": "BP_Perk_Intelligent",
+  "old_en": "Rune Cooldown: -5/10/15/25%",
+  "old": {
+   "de": "Runenabklingzeit: -5/10/15/25 %",
+   "es": "Recuperación de runas: -5/10/15/25 %.",
+   "fr": "Temps de recharge de rune : -5/10/15/25 %",
+   "it": "Recupero runa: -5/10/15/25%",
+   "ja": "ルーンのクールダウン： -5/10/15/25%",
+   "ko": "룬 쿨다운: -5/10/15/25%",
+   "pt-BR": "Tempo de Recarga da Runa: -5/10/15/25%",
+   "ru": "Время восстановления руны: -5/10/15/25%.",
+   "zh-Hans": "符文冷却：-5/10/15/25%"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Mystical_Description",
+  "src": "Max Mana: +5/8/10/15",
+  "kind": "changed",
+  "asset": "BP_Perk_Mystical",
+  "old_en": "Max Mana: +10/12/15/25",
+  "old": {
+   "de": "Max. Mana: +10/12/15/25",
+   "es": "Maná máximo: +10/12/15/25.",
+   "fr": "Mana max. : +10/12/15/25",
+   "it": "Mana massimo: +10/12/15/25",
+   "ja": "最大マナ： +10/12/15/25",
+   "ko": "최대 마나: +10/12/15/25",
+   "pt-BR": "Mana Máx.: +10/12/15/25",
+   "ru": "Макс. мана: +10/12/15/25.",
+   "zh-Hans": "最大法力值：+10/12/15/25"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Recklessness_Description",
+  "src": "On No Armor: Spell Damage +12/15/18/20%\r\nOn No Armor: Speed +0/1/2/3",
+  "kind": "changed",
+  "asset": "BP_Perk_Recklessness",
+  "old_en": "On No Armor: Spell Damage +15%\nOn No Armor: Mana Cost -15%",
+  "old": {
+   "de": "Bei fehlender Rüstung: Zauberschaden +15 %\nBei fehlender Rüstung: Manakosten -15 %",
+   "es": "Sin armadura: daño con hechizos +15 %.\nSin armadura: coste de maná -15 %.",
+   "fr": "Sans armure : dégâts de sort +15 %\nSans armure : coût de mana -15 %",
+   "it": "Senza armatura: danni magia +15%\nSenza armatura: consumo mana -15%",
+   "ja": "アーマーなし： 呪文ダメージ+15%\nアーマーなし：マナ消費-15%",
+   "ko": "아머 없음: 주문 대미지 +15%\n아머 없음: 마나 소모 -15%",
+   "pt-BR": "Sem Armadura: Dano de Magia +15%\nSem Armadura: Custo de Mana -15%",
+   "ru": "Без брони: урон от заклинаний +15%\nБез брони: расход маны -15%",
+   "zh-Hans": "无护甲时：法术伤害+15%\n无护甲时：法力值消耗-15%"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Recovery_Description",
+  "src": "On Health Damage: Regenerate 35% of damage taken (12/10/8/6s)",
+  "kind": "changed",
+  "asset": "BP_Perk_Recovery",
+  "old_en": "On Health Damage: Regenerate 35% of damage taken (12s)",
+  "old": {
+   "de": "Bei Gesundheitsverlust: Stelle Gesundheit in Höhe von 35 % des erlittenen Schadens wieder her (12 Sek.).",
+   "es": "En caso de daño de salud: regenera el 35 % del daño recibido (12 s).",
+   "fr": "En cas de dégâts de santé : régénère 35 % des dégâts subis (12 s)",
+   "it": "Danni energia: rigenera il 35% dei danni subiti (12s)",
+   "ja": "HPダメージ：受けるダメージの35%を再生する（12秒）",
+   "ko": "체력 대미지 시: 받은 대미지의 35% 재생(12초)",
+   "pt-BR": "Ao Receber Dano de Vida: Regenera 35% do dano recebido (12 s)",
+   "ru": "При уроне здоровью: восстановление 35% от полученного урона (12 сек.)",
+   "zh-Hans": "生命值损失时：回复等同于所受伤害35%的生命值（12秒）"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Scavenging_Description",
+  "src": "On Exile Opponent: Restore 10/14/18/25 Health and Armor",
+  "kind": "changed",
+  "asset": "BP_Perk_Scavenging",
+  "old_en": "On Exile Opponent: Restore 25 Health and Armor",
+  "old": {
+   "de": "Wenn du einen Gegner verbannst: 25 Gesundheit und Rüstung werden wiederhergestellt.",
+   "es": "Si el oponente se exilia: recupera 25 de salud y armadura.",
+   "fr": "En cas d'adversaire éliminé : restaure 25 points de santé et d'armure",
+   "it": "Avversario esiliato: ripristina 25 punti energia e armatura",
+   "ja": "敵の排除時：HPとアーマーを25回復する",
+   "ko": "경기 상대 처치 시: 체력 및 방어 25 회복",
+   "pt-BR": "Ao Exilar Oponente: Recupera 25 de Vida e Armadura",
+   "ru": "При изгнании противника: восстановление 25 ед. здоровья и брони",
+   "zh-Hans": "放逐对手时：恢复25点生命值和护甲"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Tough_Description",
+  "src": "Max Armor: +10/12/15/20",
+  "kind": "changed",
+  "asset": "BP_Perk_Tough",
+  "old_en": "Max Armor: +10/12/15/25",
+  "old": {
+   "de": "Max. Rüstung: +10/12/15/25",
+   "es": "Armadura máxima: +10/12/15/25.",
+   "fr": "Armure max. : +10/12/15/25",
+   "it": "Armatura massima: +10/12/15/25",
+   "ja": "最大アーマー： +10/12/15/25",
+   "ko": "최대 방어: +10/12/15/25",
+   "pt-BR": "Máx. de Armadura: +10/12/15/25",
+   "ru": "Макс. броня: +10/12/15/25.",
+   "zh-Hans": "最大护甲：+10/12/15/25"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Tracking_DisplayName",
+  "src": "Dilution",
+  "kind": "changed",
+  "asset": "BP_Perk_Tracking",
+  "old_en": "Tracking",
+  "old": {
+   "de": "Verfolgung",
+   "es": "Rastreo",
+   "fr": "Pistage",
+   "it": "Tracciamento",
+   "ja": "追跡",
+   "ko": "추적",
+   "pt-BR": "Rastreamento",
+   "ru": "Слежка",
+   "zh-Hans": "追踪"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Tracking_Description",
+  "src": "Have a 10/20/30/50% chance to duplicate a potion/shard on pickup",
+  "kind": "changed",
+  "asset": "BP_Perk_Tracking",
+  "old_en": "On Damage Target: Outline target for you and your squad (3/5/7/10s)",
+  "old": {
+   "de": "Wenn du einem Ziel Schaden zufügst: Ziel wird für dich und dein Team hervorgehoben (3/5/7/10 Sek.)",
+   "es": "Al dañar al objetivo: destaca al objetivo para tu escuadrón (3/5/7/10 s).",
+   "fr": "Quand la cible subit des dégâts : met la cible en surbrillance pour toi et ton escouade (3/5/7/10 s)",
+   "it": "Danni al bersaglio: evidenzia il bersaglio per te e la tua squadra (3/5/7/10s)",
+   "ja": "ターゲットにダメージを与えると：ターゲットの輪郭が自分とスクワッドに見えるようになる（3/5/7/10秒）",
+   "ko": "표적 타격 시: 나와 스쿼드에 표적의 윤곽을 드러냅니다(3/5/7/10초)",
+   "pt-BR": "Causar dano a um alvo: contorna o alvo para você e sua equipe (3/5/7/10 s)",
+   "ru": "При нанесении урона цели: выделение цели для вас и вашего отряда (3/5/7/10 сек.).",
+   "zh-Hans": "对目标造成伤害时：为你和你的小队勾勒出目标的轮廓（3/5/7/10秒）"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Vampiric_Description",
+  "src": "Heal for 15/20/25/30% of health damage done",
+  "kind": "changed",
+  "asset": "BP_Perk_Vampiric",
+  "old_en": "Heal for 20/25/30/40% of health damage done",
+  "old": {
+   "de": "Heile dich um 20/25/30/40 % des beim Gegner verursachten Gesundheitsverlusts.",
+   "es": "Cura un 20/25/30/40 % del daño infligido a la salud.",
+   "fr": "Soigne 20/25/30/40 % des dégâts de santé infligés",
+   "it": "Cura pari al 20/25/30/40% dei danni energia inflitti",
+   "ja": "与えたHPダメージの20/25/30/40%分自分を回復",
+   "ko": "체력 대미지의 20/25/30/40%를 치유합니다",
+   "pt-BR": "Recupere 20/25/30/40% do dano de vida causado",
+   "ru": "Вы исцеляете себя на 20/25/30/40% от нанесенного урона.",
+   "zh-Hans": "治疗对生命值造成之伤害的20/25/30/40%"
+  }
+ },
+ {
+  "ns": "DT_Talent",
+  "key": "BP_Perk_Vital_Stone_DisplayName",
+  "src": "Vital Stone",
+  "kind": "changed",
+  "asset": "BP_Perk_Vital_Stone",
+  "old_en": "Rebirth",
+  "old": {
+   "de": "Wiedergeburt",
+   "es": "Renacer",
+   "fr": "Renaissance",
+   "it": "Rinascita",
+   "ja": "再生",
+   "ko": "환생",
+   "pt-BR": "Renascimento",
+   "ru": "Возрождение",
+   "zh-Hans": "复活重生"
+  }
+ },
+ {
+  "ns": "DT_Title",
+  "key": "BP_Cosmetic_Title_League_Season_1_Bronze_TitleDisplayText",
+  "src": "Ash",
+  "kind": "changed",
+  "asset": "BP_Cosmetic_Title_League_Season_1_Bronze",
+  "old_en": "Bronze Fracture",
+  "old": {
+   "de": "Bronze-Bruch",
+   "es": "Fractura de Bronce",
+   "fr": "Fracture de bronze",
+   "it": "Frattura di bronzo",
+   "ja": "ブロンズフラクチャー",
+   "ko": "브론즈 균열",
+   "pt-BR": "Ruptura de Bronze",
+   "ru": "Бронзовый Раскол",
+   "zh-Hans": "青铜断裂"
+  }
+ },
+ {
+  "ns": "DT_Title",
+  "key": "BP_Cosmetic_Title_League_Season_1_Bronze_DisplayName",
+  "src": "Ash",
+  "kind": "changed",
+  "asset": "BP_Cosmetic_Title_League_Season_1_Bronze",
+  "old_en": "Bronze Fracture",
+  "old": {
+   "de": "Bronze-Bruch",
+   "es": "Fractura de Bronce",
+   "fr": "Fracture de bronze",
+   "it": "Frattura di bronzo",
+   "ja": "ブロンズフラクチャー",
+   "ko": "브론즈 균열",
+   "pt-BR": "Ruptura de Bronze",
+   "ru": "Бронзовый Раскол",
+   "zh-Hans": "青铜断裂"
+  }
+ },
+ {
+  "ns": "DT_Title",
+  "key": "BP_Cosmetic_Title_League_Season_1_Bronze_Description",
+  "src": "That's all folks! -Tw",
+  "kind": "changed",
+  "asset": "BP_Cosmetic_Title_League_Season_1_Bronze",
+  "old_en": "You reached the Bronze League in Season 1!",
+  "old": {
+   "de": "Du hast in Saison 1 die Bronzeliga erreicht!",
+   "es": "¡Has llegado a la liga Bronce en la temporada 1!",
+   "fr": "Tu as atteint la Ligue Bronze dans la Saison 1 !",
+   "it": "Hai raggiunto la lega di bronzo nella stagione 1!",
+   "ja": "シーズン1でブロンズリーグに到達しました！",
+   "ko": "시즌 1에서 브론즈 리그에 도달했습니다!",
+   "pt-BR": "Você alcançou a Liga de Bronze na Temporada 1!",
+   "ru": "Вы вошли в бронзовую лигу в сезоне 1!",
+   "zh-Hans": "你已在第1赛季达到青铜联赛！"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Amulet_Reactive_DisplayName",
+  "src": "Reactive Amulet",
+  "kind": "missing",
+  "asset": "BP_Item_Amulet_Reactive"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Amulet_Reactive_Description",
+  "src": "On taking 30 health damage within 2 seconds: Instantly fire 3 lightning bolts at nearby targets",
+  "kind": "missing",
+  "asset": "BP_Item_Amulet_Reactive"
+ },
+ {
+  "ns": "",
+  "key": "1307FC1643A5DFE9419E4BA0EC1AA7E5",
+  "src": "Born of Fire Healing",
+  "kind": "missing",
+  "asset": "BP_Effect_Player_Fire_Health_Regen"
+ },
+ {
+  "ns": "",
+  "key": "B62A090E4426EC5B06A91C8D7B0DFF98",
+  "src": "You are being healed by fire",
+  "kind": "missing",
+  "asset": "BP_Effect_Player_Fire_Health_Regen"
+ },
+ {
+  "ns": "",
+  "key": "D3C4C57543440D2366F59A9606C597DC",
+  "src": "Fortify",
+  "kind": "missing",
+  "asset": "BP_Effect_Scroll_Scholar_Intense_Learning_Cooldown"
+ },
+ {
+  "ns": "",
+  "key": "ED0FB50549A930E5D733A6B3981BBB3B",
+  "src": "No Jumping",
+  "kind": "missing",
+  "asset": "BP_Effect_Scroll_Stoneshaper_Earthbind_Target_3"
+ },
+ {
+  "ns": "",
+  "key": "C7F5698844AB6DAFA4E4FB87CC4E8310",
+  "src": "Corrosion",
+  "kind": "missing",
+  "asset": "BP_Effect_Scroll_Toxicologist_Corrosion_Target"
+ },
+ {
+  "ns": "",
+  "key": "379DCA3D4B1DB088779BDDA560DBE6F1",
+  "src": "Blood Armor",
+  "kind": "missing",
+  "asset": "BP_Effect_Scroll_Zealot_Blood_Armor_Armor"
+ },
+ {
+  "ns": "",
+  "key": "46CE8DD04DF3AEC5CB762B8E97FE819E",
+  "src": "Increases armor over time",
+  "kind": "missing",
+  "asset": "BP_Effect_Scroll_Zealot_Blood_Armor_Armor"
+ },
+ {
+  "ns": "",
+  "key": "A2F56EDA46414732E39177B1D93B4249",
+  "src": "Blood Armor",
+  "kind": "missing",
+  "asset": "BP_Effect_Scroll_Zealot_Blood_Armor_Health"
+ },
+ {
+  "ns": "",
+  "key": "0450254946320BB1869E8BAFECC71001",
+  "src": "Slowly drains your health",
+  "kind": "missing",
+  "asset": "BP_Effect_Scroll_Zealot_Blood_Armor_Health"
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Pyromancer_Conflagration_DisplayName",
+  "src": "Burned Blood",
+  "kind": "changed",
+  "asset": "BP_Scroll_Pyromancer_Conflagration",
+  "old_en": "Conflagration",
+  "old": {
+   "de": "Flächenbrand",
+   "es": "Conflagración",
+   "fr": "Incendie",
+   "it": "Pirogenesi",
+   "ja": "大火災",
+   "ko": "대화재",
+   "pt-BR": "Conflagração",
+   "ru": "Воспламенение",
+   "zh-Hans": "爆炎"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Pyromancer_Conflagration_Description",
+  "src": "Upon taking 30 total health damage:\r\n+30% damage reduction for 5s (10s cd)",
+  "kind": "changed",
+  "asset": "BP_Scroll_Pyromancer_Conflagration",
+  "old_en": "On Fireball Impact: Explode into 6 Cinders that Ignite targets",
+  "old": {
+   "de": "Bei Feuerball-Aufprall: Explodiert in 6 Objekte, die Ziele anzünden",
+   "es": "Al impactar Bola de fuego: la explosión genera 6 ascuas que hacen arder los objetivos.",
+   "fr": "À l'impact de Boule de feu : explose et cause 6 Cendres infligeant Embrasement aux cibles",
+   "it": "All'impatto: Palla di fuoco esplode in 6 tizzoni che incendiano il bersaglio",
+   "ja": "ファイアボール命中時： 爆発してターゲットに火をつける6個の燃えがらとなる",
+   "ko": "파이어 볼 접촉 시: 표적을 점화시키는 잉걸불 6개로 나뉘며 폭발합니다.",
+   "pt-BR": "No impacto da Bola de Fogo: Explode em 6 brasas que Incendeiam os alvos.",
+   "ru": "При попадании огненный шар взрывается, превращаясь в 6 угольков, поджигающих цели.",
+   "zh-Hans": "火球碰撞时：爆裂成6发火苗引燃目标"
+  }
+ },
+ {
+  "ns": "",
+  "key": "1446843B408798D49F9DDA8D2356CAD5",
+  "src": "PURE FIRE",
+  "kind": "missing",
+  "asset": "BP_Debug_Elemental_Fire"
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Conduit_Potential_Energy_DisplayName",
+  "src": "Lightning Fast",
+  "kind": "changed",
+  "asset": "BP_Scroll_Conduit_Potential_Energy",
+  "old_en": "Potential Energy",
+  "old": {
+   "de": "Potenzialenergie",
+   "es": "Energía potencial",
+   "fr": "Énergie potentielle",
+   "it": "Potenziale elettrico",
+   "ja": "ポテンシャルエネルギー",
+   "ko": "잠재적 에너지",
+   "pt-BR": "Energia Potencial",
+   "ru": "Потенциальная энергия",
+   "zh-Hans": "势能"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Conduit_Potential_Energy_Description",
+  "src": "Increases sprint speed by +5,\r\nbut the bonus briefly breaks when you take damage",
+  "kind": "changed",
+  "asset": "BP_Scroll_Conduit_Potential_Energy",
+  "old_en": "Lightning Bolt: +1 Damage every Bolt until you stop casting. Max +5.",
+  "old": {
+   "de": "Blitze: +1 Schaden pro Blitz, bis du mit dem Wirken aufhörst. Max. +5.",
+   "es": "Relámpago: +1 de daño por cada uno que lances. Máx. +5.",
+   "fr": "Foudre : +1 point de dégâts à chaque impact jusqu'à l'arrêt du sort. Max. +5.",
+   "it": "Elettrosaetta: +1 danni a ogni saetta finché non smetti di sparare. Massimo +5.",
+   "ja": "稲妻：放出を止めるまで稲妻ごとにダメージが+1。最大+5。",
+   "ko": "낙뢰: 시전을 멈출 때까지 매 타격마다 대미지 +1. 최대 +5.",
+   "pt-BR": "Flecha Elétrica: +1 de dano para cada flecha lançada até o fim da conjuração. Máx. +5.",
+   "ru": "Разряд молнии: +1 ед. урона за каждый заряд до окончания использования. Макс.: +5",
+   "zh-Hans": "闪电箭：直到停止施展前，每一箭+1点伤害。最多+5点。"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Conduit_Power_Surge_Description",
+  "src": "On Cast Lightning Strike: +100 Mana",
+  "kind": "changed",
+  "asset": "BP_Scroll_Conduit_Power_Surge",
+  "old_en": "On Cast Lightning Strike: -100% Spell Mana Cost (4s)",
+  "old": {
+   "de": "Beim Wirken von „Blitzschlag“: -100 % Zauber-Manakosten (4 Sek.)",
+   "es": "Al lanzar Rayo: -100 % al coste de maná de los hechizos (4 s).",
+   "fr": "Pendant le lancement de Tempête d'éclairs : -100 % coût de mana du sort (4 s)",
+   "it": "Lancio Magifulmine: -100% consumo mana magia (4s)",
+   "ja": "落雷を放つ：呪文マナを100%消費（4秒）",
+   "ko": "벼락 시전 시: 주문 마나 소모 -100%(4초)",
+   "pt-BR": "Ao Lançar Descarga Elétrica: -100% Custo de Mana de Magia (4 s)",
+   "ru": "При использовании удара молнии: -100% расход маны на заклинания (на 4 сек.)",
+   "zh-Hans": "施展雷击时：-100%法术的法力消耗（4秒）"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Conduit_Secondary_Strike_Description",
+  "src": "Lightning Strike: Strike 5 times",
+  "kind": "changed",
+  "asset": "BP_Scroll_Conduit_Secondary_Strike",
+  "old_en": "Lightning Strike: +4 Strikes",
+  "old": {
+   "de": "Blitzschlag: +4 Schläge",
+   "es": "Rayo: +4 rayos.",
+   "fr": "Tempête d'éclairs : +4 frappes",
+   "it": "Magifulmine: +4 colpi",
+   "ja": "落雷：攻撃回数+4",
+   "ko": "벼락: +4회",
+   "pt-BR": "Descarga Elétrica: +4 Descargas",
+   "ru": "Удар молнии: +4 удара",
+   "zh-Hans": "雷击：+4雷击次数"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Frostborn_Frozen_Alacrity_DisplayName",
+  "src": "Icicle",
+  "kind": "changed",
+  "asset": "BP_Scroll_Frostborn_Frozen_Alacrity",
+  "old_en": "Frozen Alacrity",
+  "old": {
+   "de": "Frosteifer",
+   "es": "Presteza congelada",
+   "fr": "Célérité glacée",
+   "it": "Cicatrice ghiacciata",
+   "ja": "アラクリティフリーズ",
+   "ko": "민첩 동결",
+   "pt-BR": "Entusiasmo Congelado",
+   "ru": "Ледяная прыть",
+   "zh-Hans": "冰冻迅捷"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Frostborn_Frozen_Alacrity_Description",
+  "src": "Ice Lance: Leaves Ice Trails\r\nWhile aiming: Highlight visible opponents",
+  "kind": "changed",
+  "asset": "BP_Scroll_Frostborn_Frozen_Alacrity",
+  "old_en": "Ice Lance: Leaves Ice Trails\n150% faster acceleration on Ice Trails\nImmune to Slow/Frozen",
+  "old": {
+   "de": "Eisspeer: Hinterlässt Eisspuren.\n150 % schnellere Beschleunigung auf Eisspuren.\nImmun gegen Verlangsamen, Einfrieren",
+   "es": "Lanza de hielo: deja rastros de hielo.\nAceleración un 150 % más rápida en los rastros de hielo.\nInmune a ralentización/congelación.",
+   "fr": "Lance de glace : laisse des traces de glace\nAccélération 150 % plus rapide sur les traces de glace\nImmunité au ralentissement/gel",
+   "it": "Dardo polare: rilascia scia di ghiaccio\nAccelerazione più rapida del 150% su scia di ghiaccio\nImmune a rallentamento/congelamento",
+   "ja": "氷の槍：氷の跡を残す\n氷の跡の上での加速が150%上昇\nスロー/凍結に耐性がつく",
+   "ko": "얼음 창: 얼음 흔적을 남깁니다\n얼음 흔적에서 150% 더 빠른 가속\n둔화/동결에 면역",
+   "pt-BR": "Lança de Gelo: deixa Rastros de Gelo\n150% mais aceleração nos Rastros de Gelo\nImune a Lentidão/Congelamento",
+   "ru": "Ледяное копье: оставляет ледяной след\nУвеличивает скорость на ледяном следе на 150%\nНеуязвимость: замедление/заморозка",
+   "zh-Hans": "冰枪：留下冰霜轨迹\n冰霜轨迹速度增加150%\n对减速/冰冻免疫"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Frostborn_Ice_Prism_Description",
+  "src": "Ice Lance: Overcharge for 0.75s for 30% piercing damage",
+  "kind": "changed",
+  "asset": "BP_Scroll_Frostborn_Ice_Prism",
+  "old_en": "Ice Lance: Overcharge for 0.5s for +35% damage",
+  "old": {
+   "de": "Eisspeer: Überladung für 0,5 Sek. für +35 % Schaden.",
+   "es": "Lanza de hielo: se sobrecarga durante 0,5 s e inflige +35 % de daño.",
+   "fr": "Lance de glace : charge 0,5 s de plus pour infliger +35 % de dégâts supplémentaires",
+   "it": "Dardo polare: sovraccarico per 0.5s per +35% danni",
+   "ja": "氷の槍：0.5秒間オーバーチャージして+35%のダメージを与える",
+   "ko": "얼음 창: 0.5초간 과충전하면 +35% 대미지를 줍니다",
+   "pt-BR": "Lança de Gelo: Sobrecarregue por 0,5 s para +35% de dano",
+   "ru": "Ледяное копье: перегрузка на 0,5 сек. увеличивает урон на 35%",
+   "zh-Hans": "冰枪：过载0.5秒+35%伤害"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Frostborn_Icicle_DisplayName",
+  "src": "Frozen Alacrity",
+  "kind": "changed",
+  "asset": "BP_Scroll_Frostborn_Icicle",
+  "old_en": "Icicle",
+  "old": {
+   "de": "Eiszapfen",
+   "es": "Carámbano",
+   "fr": "Pic de glace",
+   "it": "Fiocco di neve",
+   "ja": "つらら",
+   "ko": "고드름",
+   "pt-BR": "Estaca de Gelo",
+   "ru": "Сосулька",
+   "zh-Hans": "冰柱"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Frostborn_Icicle_Description",
+  "src": "+150% faster acceleration on Ice Trails\r\n+25% sprint speed on Ice Trails\r\nImmune to being Slowed/Frozen",
+  "kind": "changed",
+  "asset": "BP_Scroll_Frostborn_Icicle",
+  "old_en": "Ice Lance: Highlight targets while aiming\nOn Ice Lance Full Charge: -100% Ice Lance Mana Cost",
+  "old": {
+   "de": "Eisspeer: Hebe Gegner beim Zielen hervor.\nBei vollständiger Aufladung von Eisspeer: -100 % Manakosten für Eisspeer",
+   "es": "Lanza de hielo: destacas los objetivos mientras apuntas.\nCarga completa de Lanza de hielo: -100 % del coste de maná de Lanza de hielo.",
+   "fr": "Lance de glace : met la cible en évidence pendant la visée\nLance de glace à pleine charge : -100 % au coût en mana de Lance de glace",
+   "it": "Dardo polare: contrassegna i bersagli mentre miri\nUna volta caricato al massimo: -100% consumo mana del Dardo polare",
+   "ja": "氷の槍：狙う間にターゲットをハイライト表示する\n氷の槍フルチャージ：氷の槍のマナコスト-100%",
+   "ko": "얼음 창: 조준하는 동안 표적을 강조합니다\n얼음 창 완전 충전: 얼음 창 마나 소모 -100%",
+   "pt-BR": "Lança de Gelo: marque alvos enquanto mira\nLança de Gelo com Carga Máxima: -100% de Custo de Mana de Lança de Gelo.",
+   "ru": "Ледяное копье: подсвечивает цели при прицеливании.\nРасход маны на Ледяное копье при полном заряде: -100%",
+   "zh-Hans": "冰枪：瞄准时高亮显示目标\n冰枪完全蓄力时：-100%冰枪法力值消耗"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Frostborn_Tundra_Description",
+  "src": "While casting Flash Freeze: Gain 30 Temporary Armor\r\nFlash Freeze Duration: +100%",
+  "kind": "changed",
+  "asset": "BP_Scroll_Frostborn_Tundra",
+  "old_en": "Immune to Damage while casting Flash Freeze\nFlash Freeze Duration: +100%",
+  "old": {
+   "de": "Immun gegen Schaden, während Blitzfrost gewirkt wird.\nBlitzfrost-Dauer: +100 %",
+   "es": "Inmune al daño mientras lanzas Destello congelante.\nDuración de Destello congelante: +100 %.",
+   "fr": "Immunité aux dégâts en lançant gel rapide\nDurée du gel rapide : +100 %",
+   "it": "Immune ai danni mentre lanci Criolampo\nDurata Criolampo: +100%",
+   "ja": "急速冷凍を放っている間はダメージを受けない\n急速冷凍の継続時間：+100%",
+   "ko": "급속냉동을 시전하는 동안 대미지로부터 면역됩니다\n급속냉동 지속 시간: +100%",
+   "pt-BR": "Imune a Dano enquanto conjura Congelamento Rápido\nDuração do Congelamento Rápido: +100%",
+   "ru": "Неуязвимость к урону во время использования быстрой заморозки\nДлительность быстрой заморозки: +100%",
+   "zh-Hans": "施展急冻时伤害免疫\n急冻持续时间：+100%"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Pyromancer_Combust_DisplayName",
+  "src": "Born of Fire",
+  "kind": "changed",
+  "asset": "BP_Scroll_Pyromancer_Combust",
+  "old_en": "Combust",
+  "old": {
+   "de": "Verbrennung",
+   "es": "Combustión",
+   "fr": "Combustion",
+   "it": "Combustione",
+   "ja": "コンバスト",
+   "ko": "연소",
+   "pt-BR": "Combustão",
+   "ru": "Сгорание",
+   "zh-Hans": "燃烧"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Pyromancer_Combust_Description",
+  "src": "Firefly: Regenerate 15 Health over time (25s cooldown)\r\nIgnite: Enemies hit are set on fire",
+  "kind": "changed",
+  "asset": "BP_Scroll_Pyromancer_Combust",
+  "old_en": "On Direct Hit: Ignite Target (2s)\nFireball Explosion Radius: +200%",
+  "old": {
+   "de": "Bei direktem Treffer: Ziel wird in Brand gesteckt (2 Sek).\nFeuerball-Explosionsradius: +200 %",
+   "es": "En caso de impacto directo: prende el objetivo (2 s).\nRadio de explosión de Bola de fuego: +200 %.",
+   "fr": "Lors d'un impact direct : embrase la cible (2 s)\nRayon d'explosion de la boule de feu : +200 %",
+   "it": "A segno diretto: incendia il bersaglio (2s)\nRaggio esplosione Palla di fuoco: +200%",
+   "ja": "直撃時：ターゲットを炎上させる（2秒）\nファイアボールの爆発半径：+200%",
+   "ko": "직격타 시: 표적 점화(2초)\n파이어 볼 폭발 반경: +200%",
+   "pt-BR": "Ao Golpear Diretamente: Incendeia o alvo (2 s)\nRaio da Explosão da Bola de Fogo: +200%",
+   "ru": "При прямом попадании: поджигает цель (2 сек.)\nРадиус взрыва Огненного шара: +200%",
+   "zh-Hans": "直接命中时：点燃目标（2秒）\n火球爆炸半径：+200%"
+  }
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Scroll_Pyromancer_Conflagration_DisplayName_E7D402C2",
+  "src": "Ignite",
+  "kind": "rekeyed",
+  "asset": "BP_Scroll_Pyromancer_Conflagration"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Scroll_Pyromancer_Conflagration_Description_E7D402C2",
+  "src": "Fireball Direct Hit: Ignite the target for 2 seconds",
+  "kind": "rekeyed",
+  "asset": "BP_Scroll_Pyromancer_Conflagration"
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Pyromancer_Firefly_Description",
+  "src": "Immune: Your Flamewalls\nOn Entering Your Flamewall: Fly (1.5s)",
+  "kind": "changed",
+  "asset": "BP_Scroll_Pyromancer_Firefly",
+  "old_en": "Immune: Your Flamewalls\nOn Entering Your Flamewall: Fly (2s)",
+  "old": {
+   "de": "Immun: Deine Flammenmauern\nBeim Betreten deiner Flammenmauer: Flug (2 Sek.)",
+   "es": "Inmune a tus muros de llamas.\nAl entrar en un muro de llamas tuyo: Vuelo (2 s).",
+   "fr": "Immunité à tes murs de feu\nÀ l'entrée dans ton mur de feu : vol (2 s)",
+   "it": "Immune: tua Pirobarriera\nToccare la tua Pirobarriera attiva Volo (2s)",
+   "ja": "耐性：自分のフレイムウォール\n自分のフレイムウォールに入る：飛ぶ（2秒）",
+   "ko": "면역: 나의 불꽃의 벽\n나의 불꽃의 벽 진입 시: 비행(2초)",
+   "pt-BR": "Imune: Suas Paredes de Fogo\nAo Entrar em Sua Parede de Fogo: Voar (2 s)",
+   "ru": "Неуязвимость: ваши Стены пламени\nПри входе в вашу Стену пламени: полет (2 сек.)",
+   "zh-Hans": "免疫：你的火墙\n进入你的火墙时：飞行（2秒）"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Pyromancer_Pyrolysis_DisplayName",
+  "src": "Lasting Burn",
+  "kind": "changed",
+  "asset": "BP_Scroll_Pyromancer_Pyrolysis",
+  "old_en": "Pyrolysis",
+  "old": {
+   "de": "Pyrolyse",
+   "es": "Pirólisis",
+   "fr": "Pyrolyse",
+   "it": "Liquefazione",
+   "ja": "パイロリシス",
+   "ko": "열분해",
+   "pt-BR": "Pirólise",
+   "ru": "Пиролиз",
+   "zh-Hans": "高温分解"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Pyromancer_Pyrolysis_Description",
+  "src": "Flamewall: +100% Damage (2s)\r\nEnemies ignited by your Flamewalls stay ignited for 4 seconds, but take 3 damage per tick",
+  "kind": "changed",
+  "asset": "BP_Scroll_Pyromancer_Pyrolysis",
+  "old_en": "Flamewall: +100% Damage (2s)",
+  "old": {
+   "de": "Flammenmauer: +100 % Schaden (2 Sek.)",
+   "es": "Muro de llamas: +100 % de daño (2 s).",
+   "fr": "Mur de feu : +100 % de points de dégâts (2 s)",
+   "it": "Danni Pirobarriera: +100% (2s)",
+   "ja": "フレイムウォール：+100% ダメージ（2秒）",
+   "ko": "불꽃의 벽: 대미지 +100%(2초)",
+   "pt-BR": "Parede de Fogo: +100% de Dano (2 s)",
+   "ru": "Стена пламени: +100% урона (на 2 сек.)",
+   "zh-Hans": "火墙：+100%伤害（2秒）"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Stoneshaper_Bedrock_Description",
+  "src": "Shockwave length increased by +25%\r\nShockwave bounces",
+  "kind": "changed",
+  "asset": "BP_Scroll_Stoneshaper_Bedrock",
+  "old_en": "On Cast Shockwave: Crash to the ground",
+  "old": {
+   "de": "Beim Wirken von „Schockwelle“: Du krachst kraftvoll auf den Boden.",
+   "es": "Al lanzar Onda expansiva: cae con fuerza contra el suelo.",
+   "fr": "Au lancement de l'Onde de choc : faille dans le sol",
+   "it": "Lancio Onda d'urto: schianto a terra",
+   "ja": "ショックウェーブを放つ：地面に衝突する",
+   "ko": "충격파 시전 시: 땅에 충돌합니다",
+   "pt-BR": "Ao Lançar Abalo Sísmico: Despenca ao chão",
+   "ru": "При использовании Ударной волны: удар об землю",
+   "zh-Hans": "施展冲击波时：撞向地面"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Tempest_Squall_Description",
+  "src": "On Updraft or Wind Surge: Spell Damage: +15%\nOn Updraft or Wind Surge: Incoming Damage Reduction: +10%",
+  "kind": "changed",
+  "asset": "BP_Scroll_Tempest_Squall",
+  "old_en": "On Updraft or Wind Surge: Spell Damage: +20%\nOn Updraft or Wind Surge: Incoming Damage Reduction: +10%",
+  "old": {
+   "de": "Bei Aufwind oder Windwoge: Zauberschaden: +20 %\nBei Aufwind oder Windwoge: Verringerung des erlittenen Schadens: +10 %",
+   "es": "Al lanzar Corriente ascendente o Ventolera: +20 % de daño con hechizos.\nAl lanzar Corriente ascendente o Ventolera: +10 % de reducción del daño recibido.",
+   "fr": "En Courant ascendant ou Vent violent : dégâts de sort : +20%\nEn Courant ascendant ou Vent violent : réduction des dégâts subis : +10 %",
+   "it": "Con Monsone o Turbolenza: danni magia +20%\nCon Monsone o Turbolenza: riduzione danni subiti +10%",
+   "ja": "上昇気流またはウインドサージに乗って： 呪文によるダメージ：+20%\n上昇気流またはウインドサージに乗って： 受けるダメージの軽減：+10%",
+   "ko": "상승 기류 또는 폭풍 해일 위에 있을 때: 주문 대미지: +20%\n상승 기류 또는 폭풍 해일 위에 있을 때: 받는 대미지 감소: +10%",
+   "pt-BR": "Numa Corrente de Ar ou Explosão de Vento: +20% de Dano de Magia\nNuma Corrente de Ar ou Explosão de Vento: +10% de Redução de Dano Iminente",
+   "ru": "При использовании Восходящего потока или Порыва ветра: урон заклинаний +20%\nПри использовании Восходящего потока или Порыва ветра: снижение получаемого урона +10%.",
+   "zh-Hans": "风卷流云或风起云涌时：法术伤害：+20%\n风卷流云或风起云涌时：下次承伤减少：+10%"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Toxicologist_Outbreak_Description",
+  "src": "While Invisible: +50% Toxic Spray Damage",
+  "kind": "changed",
+  "asset": "BP_Scroll_Toxicologist_Outbreak",
+  "old_en": "While Invisible: +75% Toxic Spray Damage",
+  "old": {
+   "de": "Während Unsichtbarkeit: +75 % Giftsprüher-Schaden",
+   "es": "Mientras eres invisible: +75 % de daño con Espray tóxico.",
+   "fr": "Pendant l'invisibilité : +75 % de points de dégâts de jet toxique",
+   "it": "Se invisibile: danni Fiotto di veleno +75%",
+   "ja": "見えない間：毒スプレーによるダメージ+75%",
+   "ko": "투명 상태: 독 스프레이 대미지 +75%",
+   "pt-BR": "Enquanto Invisível: +75% Dano de Spray Tóxico",
+   "ru": "Невидимка: +75% урона от Ядовитых брызг",
+   "zh-Hans": "隐形时：+75%毒素喷射伤害"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Toxicologist_Vanishing_Mists_Description",
+  "src": "Immune: Your Toxic Clouds\nOn Entering Your Toxic Cloud: Dash, Vanish (3s)\r\nWhile Vanished: Immune to Toxic Puddles",
+  "kind": "changed",
+  "asset": "BP_Scroll_Toxicologist_Vanishing_Mists",
+  "old_en": "Immune: Your Toxic Clouds\nOn Entering Your Toxic Cloud: Dash, Invisible (3s)",
+  "old": {
+   "de": "Immun: Deine Giftwolken\nBeim Betreten deiner Giftwolke: Spurt, unsichtbar (3 Sek.)",
+   "es": "Inmune a: tus nubes tóxicas.\nAl entrar en una de tus nubes tóxicas: Carrera, Invisible (3 s).",
+   "fr": "Immunité à tes nuages toxiques\nÀ l'entrée dans ton nuage toxique : propulsion, invisibilité (3 s)",
+   "it": "Immune: tue Nubi tossiche\nToccare le tue Nubi tossiche attiva Scatto, Invisibilità (3s)",
+   "ja": "耐性：自分の毒雲\n自分の毒雲に入る：ダッシュ、見えなくなる（3秒）",
+   "ko": "면역: 나의 독 구름\n나의 독 구름 진입 시: 돌진, 투명화(3초)",
+   "pt-BR": "Imune: Suas Nuvens Tóxicas\nAo Entrar na Nuvem Tóxica: Investida, Invisível (3 s)",
+   "ru": "Неуязвимость: ваши ядовитые облака\nПри входе в свое ядовитое облако: рывок, невидимость (3 сек.)",
+   "zh-Hans": "免疫：你的毒云\n在进入你的毒云时：突进，隐形（3秒）"
+  }
+ },
+ {
+  "ns": "DT_Item_Scroll",
+  "key": "BP_Scroll_Toxicologist_Viscosity_Description",
+  "src": "Toxic Spray: Leaves Sticky Toxic Puddles\r\nToxic Spray: Direct hits apply Corrosion",
+  "kind": "changed",
+  "asset": "BP_Scroll_Toxicologist_Viscosity",
+  "old_en": "Toxic Spray: Leaves Sticky Toxic Puddles",
+  "old": {
+   "de": "Giftsprüher: Hinterlässt klebrige Giftpfützen.",
+   "es": "Espray tóxico: deja charcos tóxicos pegajosos.",
+   "fr": "Jet toxique : laisse des flaques toxiques collantes",
+   "it": "Fiotto di veleno: rilascia pozze di veleno appiccicoso",
+   "ja": "毒スプレー：粘り気のある毒の水たまりを残す",
+   "ko": "독 스프레이: 끈끈한 독 웅덩이를 남깁니다",
+   "pt-BR": "Spray Tóxico: Deixa Poças Tóxicas Pegajosas",
+   "ru": "Ядовитые брызги: оставляют липкие ядовитые лужи",
+   "zh-Hans": "毒素喷射：留下黏性毒坑"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Amulet_Baron_Description",
+  "src": "On Full Mana: Spell Damage +15%\nMax Mana: +40",
+  "kind": "changed",
+  "asset": "BP_Item_Amulet_Baron",
+  "old_en": "On Full Mana: Spell Damage +25%\nMax Mana: +40",
+  "old": {
+   "de": "Bei vollem Mana: Zauberschaden +25 %\nMax. Mana: +40",
+   "es": "Con el maná al completo: daño con hechizos: +25 %.\nManá máximo: +40.",
+   "fr": "Avec mana rempli : dégâts de sort : +25 %\nMana max. : +40",
+   "it": "Mana al massimo: danni magia: +25%\nMana massimo: +40",
+   "ja": "マナ満タン：呪文によるダメージ：+25%\n最大マナ: +40",
+   "ko": "마나가 가득 찬 경우: 주문 대미지 +25%\n최대 마나: +40",
+   "pt-BR": "Com o Mana cheio: Dano de Magia +25%\nMana Máx.: +40",
+   "ru": "Полный запас маны: урон заклинаний +25%\nМакс. мана: +40",
+   "zh-Hans": "法力值满时：法术伤害+25%\n最大法力值：+40"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Amulet_Behemoth_Description",
+  "src": "Spell Damage: +5%\nCast Speed: +10%\nMax Mana: +40",
+  "kind": "changed",
+  "asset": "BP_Item_Amulet_Behemoth",
+  "old_en": "Spell Damage: +10%\nCast Speed: +15%\nMax Mana: +50",
+  "old": {
+   "de": "Zauberschaden: +10 %\nWirktempo: +15 %\nMax. Mana: +50",
+   "es": "Daño con hechizos: +10 %.\nVelocidad de lanzamiento: +15 %.\nManá máximo: +50.",
+   "fr": "Points de dégâts de sort : +10 %\nVitesse d'incantation : +15 %\nMana max. : +50",
+   "it": "Danni magia: +10%\nVelocità lancio magia: +15%\nMana massimo: +50",
+   "ja": "呪文によるダメージ：+10%\n放つスピード： +15%\n最大マナ: +50",
+   "ko": "주문 대미지: +10%\n시전 속도: +15%\n최대 마나: +50",
+   "pt-BR": "Dano de Magia: +10%\nVelocidade de Conjuração: +15%\nMana Máx.: +50",
+   "ru": "Урон заклинаний: +10%\nСкорость чтения заклинаний: +15%\nМакс. мана: +50",
+   "zh-Hans": "法术伤害：+10%\n施展速度：+15%\n最大法力值：+50"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Amulet_Berserker_Description",
+  "src": "Sorcery Cooldown: -10%\nMax Mana: +40",
+  "kind": "changed",
+  "asset": "BP_Item_Amulet_Berserker",
+  "old_en": "Sorcery Cooldown: -35%\nMax Mana: +30",
+  "old": {
+   "de": "Hexerei-Abklingzeit: -35 %\nMax. Mana: +30",
+   "es": "Recuperación de conjuro: -35 %.\nManá máximo: +30.",
+   "fr": "Temps de recharge de sorcellerie : -35 %\nMana max. : +30",
+   "it": "Recupero stregoneria: -35%\nMana massimo: +30",
+   "ja": "魔術クールダウン： -35%\n最大マナ： +30",
+   "ko": "마법 쿨다운: -35%\n최대 마나: +30",
+   "pt-BR": "Tempo de Recarga do Feitiço: -35%\nMana Máx.: +30",
+   "ru": "Восстановления волшебства: -35%\nМакс. мана: +30",
+   "zh-Hans": "巫术冷却：-35%\n最大法力值：+30"
+  }
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Amulet_Conflagration_DisplayName",
+  "src": "Conflagration Amulet",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Amulet_Conflagration"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Amulet_Conflagration_Description",
+  "src": "Your Fireball launches 6 smaller fireballs when it explodes\r\nMax Mana: +35",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Amulet_Conflagration"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Amulet_Crosswinds_DisplayName",
+  "src": "Crosswinds Amulet",
+  "kind": "missing",
+  "asset": "BP_Item_Amulet_Crosswinds"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Amulet_Crosswinds_Description",
+  "src": "Wind Cast Speed: -25%\r\nWind Jump Force: +35%\r\nMax Mana: +35",
+  "kind": "missing",
+  "asset": "BP_Item_Amulet_Crosswinds"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Amulet_Eruption_DisplayName",
+  "src": "Earthbind Amulet",
+  "kind": "missing",
+  "asset": "BP_Item_Amulet_Eruption"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Amulet_Eruption_Description",
+  "src": "On Stone Hit: Pull the enemy to the ground\r\nMax Mana: +40",
+  "kind": "missing",
+  "asset": "BP_Item_Amulet_Eruption"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Amulet_Infected_DisplayName",
+  "src": "Infected Amulet",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Amulet_Infected"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Amulet_Infected_Description",
+  "src": "Spreading Sickness: Clouds split vertically\r\nMax Mana: +35",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Amulet_Infected"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Amulet_Reactive_Description_08DAE825",
+  "src": "Highlights visible opponents\r\nMax Mana: +45",
+  "kind": "rekeyed",
+  "asset": "BP_Item_Amulet_Reactive"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Amulet_Refraction_Icy_DisplayName",
+  "src": "Amulet of Icy Refraction",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Amulet_Refraction_Icy"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Amulet_Refraction_Icy_Description",
+  "src": "Uncharged Ice Lance: Splits into 3 weaker lances\r\nCharged Ice Lance: +3 bounces\r\nMax Mana: +40",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Amulet_Refraction_Icy"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Amulet_Scribe_Description",
+  "src": "On Rune Use: Refresh Sorceries\nCooldown: 15s\nMax Mana: +35",
+  "kind": "changed",
+  "asset": "BP_Item_Amulet_Scribe",
+  "old_en": "On Rune Use: Refresh Sorceries\nCooldown: 5s\nMax Mana: +50",
+  "old": {
+   "de": "Bei Runenverwendung: Hexereien aktualisieren\nAbklingzeit: 5 Sek.\nMax. Mana: +50",
+   "es": "Al usar runas: se restablecen los conjuros.\nRecuperación: 5 s.\nManá máximo: +50.",
+   "fr": "Pendant l'utilisation d'une rune : régénère les sorcelleries\nTemps de recharge : 5 s\nMana max. : +50",
+   "it": "Uso runa: ripristina stregonerie\nRecupero: 5s\nMana massimo: +50",
+   "ja": "ルーン使用：魔術をリフレッシュ\nクールダウン：5秒\n最大マナ：+50",
+   "ko": "룬 사용 시: 마법 재생\n쿨다운: 5초\n최대 마나: +50",
+   "pt-BR": "Ao Usar Runa: Recarrega Feitiços\nTempo de Recarga: 5 s\nMana Máx.: +50",
+   "ru": "При использовании руны: обновление волшебства\nВосстановление: 5 сек.\nМакс. мана: +50",
+   "zh-Hans": "使用符文时：刷新巫术\n冷却：5秒\n最大法力值：+50"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Amulet_Slayer_Description",
+  "src": "Spell Damage: +10%\r\nMax Mana: +40",
+  "kind": "changed",
+  "asset": "BP_Item_Amulet_Slayer",
+  "old_en": "Spell Damage: +15%\nMax Mana: +40",
+  "old": {
+   "de": "Zauberschaden: +15 %\nMax. Mana: +40",
+   "es": "Daño con hechizos: +15 %.\nManá máximo: +40.",
+   "fr": "Dégâts de sort : +15 %\nMana max. : +40",
+   "it": "Danni magia: +15%\nMana massimo: +40",
+   "ja": "呪文によるダメージ：+15%\n最大マナ: +40",
+   "ko": "주문 대미지: +15%\n최대 마나: +40",
+   "pt-BR": "Dano da Magia: +15%\nMana Máx.: +40",
+   "ru": "Урон заклинаний: +15%\nМакс. мана: +40",
+   "zh-Hans": "法术伤害：+15%\n最大法力值：+40"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Amulet_Spellslinger_Description",
+  "src": "On Spell Cast: Sorcery Cooldowns -2s\nCooldown: 5s\nMax Mana: +35",
+  "kind": "changed",
+  "asset": "BP_Item_Amulet_Spellslinger",
+  "old_en": "On Spell Cast: Sorcery Cooldowns -2s\nCooldown: 2s\nMax Mana: +50",
+  "old": {
+   "de": "Beim Wirken eines Zaubers: Hexerei-Abklingzeit -2 Sek.\nAbklingzeit: 2 Sek.\nMax. Mana: +50",
+   "es": "Al lanzar el hechizo: recuperación de conjuro -2 s.\nRecuperación: 2 s.\nManá máximo: +50.",
+   "fr": "Pendant le lancement d'un sort : temps de recharge de sorcellerie -2 s\nTemps de recharge : 2 s\nMana max. : +50",
+   "it": "Uso magia: recupero stregoneria: -2s\nRecupero: 2s\nMana massimo: +50",
+   "ja": "呪文を放つ：魔術クールダウン-2秒\nクールダウン： 2秒\n最大マナ： +50",
+   "ko": "주문 시전 시: 주문 쿨다운 -2초\n쿨다운: 2초\n최대 마나: +50",
+   "pt-BR": "Ao Lançar Magia: tempos de recarga de Feitiço -2 s\nTempo de Recarga: 2 s\nMana Máx.: +50",
+   "ru": "При использовании заклинания: восстановление волшебства -2 сек.\nВосстановление: 2 сек.\nМакс. мана: +50",
+   "zh-Hans": "施展法术时：巫术冷却-2秒\n冷却：2秒\n最大法力值：+50"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Amulet_Survivor_Description",
+  "src": "Leech Health: 15%\nMax Mana: +35",
+  "kind": "changed",
+  "asset": "BP_Item_Amulet_Survivor",
+  "old_en": "Drain Health: 25%\nMax Mana: +40",
+  "old": {
+   "de": "Gesundheitsentzug: 25 %\nMax. Mana: +40",
+   "es": "Absorción de salud: 25 %.\nManá máximo: +40.",
+   "fr": "Points de santé épuisés : 25 %\nMana max. : +40",
+   "it": "Riduzione energia: 25%\nMana massimo: +40",
+   "ja": "HPを奪う： 25%\n最大マナ： +40",
+   "ko": "체력 고갈: 25%\n최대 마나: +40",
+   "pt-BR": "Drenar Vida: 25%\nMana Máx.: +40",
+   "ru": "Поглощение здоровья: 25%\nМакс. мана: +40",
+   "zh-Hans": "汲取生命值：25%\n最大法力值：+40"
+  }
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Amulet_Thinkers_DisplayName",
+  "src": "Thinker's Amulet",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Amulet_Thinkers"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Amulet_Thinkers_Description",
+  "src": "Mana Recharge Rate: +10%\r\nMax Mana: +35",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Amulet_Thinkers"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Amulet_Vandal_DisplayName",
+  "src": "Amulet of the Vandal",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Amulet_Vandal"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Amulet_Vandal_Description",
+  "src": "15% of damage ignores the target's Armor\r\nMax Mana: +40",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Amulet_Vandal"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Belt_Baron_Description",
+  "src": "On Full Armor: Damage Resistance +30%\nArmor: +70",
+  "kind": "changed",
+  "asset": "BP_Item_Belt_Baron",
+  "old_en": "On Full Armor: Damage Resistance +80%\nArmor: +65",
+  "old": {
+   "de": "Bei voller Rüstung: Schadenswiderstand +80 %\nRüstung: +65",
+   "es": "Con la armadura al completo: resistencia al daño: +80 %.\nArmadura: +65.",
+   "fr": "Avec armure complète : résistance aux dégâts : +80 %\nArmure : +65",
+   "it": "Armatura al massimo: resistenza danni: +80%\nArmatura: +65",
+   "ja": "フルアーマー：ダメージ抵抗：+80%\nアーマー： +65",
+   "ko": "전체 아머 장착: 대미지 저항 +80%\n방어: +65",
+   "pt-BR": "Com Armadura cheia: Resistência a Dano +80%\nArmadura: +65",
+   "ru": "Полная броня: сопротивление урону +80%\nБроня: +65",
+   "zh-Hans": "护甲值满时：伤害抗性+80%\n护甲：+65"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Belt_Behemoth_Description",
+  "src": "Damage Resistance: +15%\nMax Armor: +80",
+  "kind": "changed",
+  "asset": "BP_Item_Belt_Behemoth",
+  "old_en": "Damage Resistance: +10%\nMax Rune Charges: +1\nMax Armor: +70",
+  "old": {
+   "de": "Schadenswiderstand: +10 %\nMax. Runenaufladungen: +1\nMax. Rüstung: +70",
+   "es": "Resistencia al daño: +10%.\nCargas máximas de runas: +1.\nArmadura máxima: +70.",
+   "fr": "Résistance aux dégâts : +10 %\nCharges de rune max. : +1\nArmure max. : +70",
+   "it": "Resistenza danni: +10\nMax cariche runa: +1\nArmatura massima: +70",
+   "ja": "ダメージ抵抗：+10%\nルーン最大チャージ： +1\n最大アーマー： +70",
+   "ko": "대미지 저항: +10%\n최대 룬 충전: +1\n최대 방어: +70",
+   "pt-BR": "Resistência a Dano: +10%\nMáx. de Cargas de Runa: +1\nArmadura Máx.: +70",
+   "ru": "Сопротивление урону: +10%\nМакс. кол-во зарядов рун: +1\nМакс. броня: +70",
+   "zh-Hans": "伤害抗性：+10%\n最大符文储量：+1\n最大护甲：+70"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Belt_Berserker_DisplayName",
+  "src": "Berserker's Belt",
+  "kind": "changed",
+  "asset": "BP_Item_Belt_Berserker",
+  "old_en": "Legendary Belt of the Berserker",
+  "old": {
+   "de": "Legendärer Gürtel des Berserkers",
+   "es": "Cinturón legendario de berserker",
+   "fr": "Ceinture légendaire du berserker",
+   "it": "Cintura del berserker leggendaria",
+   "ja": "バーサーカーのレジェンドベルト",
+   "ko": "전설 버서커 벨트",
+   "pt-BR": "Cinto Lendário do Berserker",
+   "ru": "Легендарный пояс берсерка",
+   "zh-Hans": "狂战士传奇腰带"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Belt_Berserker_Description",
+  "src": "On Exile: +20 Health & Armor\r\nMax Armor: +70",
+  "kind": "changed",
+  "asset": "BP_Item_Belt_Berserker",
+  "old_en": "Max Rune Charges: +2\nRune Cooldown Speed: +20%\nMax Armor: +70",
+  "old": {
+   "de": "Max. Runenaufladungen: +2\nRunen-Abklingtempo: +20 %\nMax. Rüstung: +70",
+   "es": "Cargas máximas de runas: +2.\nVelocidad de recuperación de runas: +20 %.\nArmadura máxima: +70.",
+   "fr": "Charges de rune max. : +2\nVitesse de recharge de rune : +20 %\nArmure max. : +70",
+   "it": "Max cariche runa: +2\nVelocità recupero runa: +20%\nArmatura massima: +70",
+   "ja": "ルーン最大チャージ：+2\nルーンクールダウンスピード： +20%\n最大アーマー： +70",
+   "ko": "최대 룬 충전: +2\n룬 쿨다운 속도: +20%\n최대 방어: +70",
+   "pt-BR": "Máx. de Cargas de Runa: +2\nVelocidade de Recarga da Runa: +20%\nMáx. de Armadura: +70",
+   "ru": "Макс. кол-во зарядов рун: +2\nСкорость восстановления рун: +20%\nМакс. броня: +70",
+   "zh-Hans": "最大符文储量：+2\n符文冷却速度：+20%\n最大护甲：+70"
+  }
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Belt_Constitution_DisplayName",
+  "src": "Belt of Constitution",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Belt_Constitution"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Belt_Constitution_Description",
+  "src": "Max Health: +50",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Belt_Constitution"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Belt_Earth_Wind_DisplayName",
+  "src": "Belt of Earth & Wind",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Belt_Earth_Wind"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Belt_Earth_Wind_Description",
+  "src": "Earth & Wind Damage Resistance: 15%\r\nMax Armor: +80",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Belt_Earth_Wind"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Belt_Fire_Ice_DisplayName",
+  "src": "Belt of Fire & Ice",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Belt_Fire_Ice"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Belt_Fire_Ice_Description",
+  "src": "Fire & Ice Damage Resistance: 15%\r\nMax Armor: +80",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Belt_Fire_Ice"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Belt_Lightning_Poison_DisplayName",
+  "src": "Belt of Lightning & Poison",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Belt_Lightning_Poison"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Belt_Lightning_Poison_Description",
+  "src": "Lightning & Poison Damage Resistance: 15%\r\nMax Armor: +80",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Belt_Lightning_Poison"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Belt_Mender_Description",
+  "src": "Armor Recovery Rate: +10%\nHealth Recovery Rate: +10%\nMax Armor: +65",
+  "kind": "changed",
+  "asset": "BP_Item_Belt_Mender",
+  "old_en": "Armor Recovery Rate: +50%\nHealth Recovery Rate: +50%\nMax Armor: +65",
+  "old": {
+   "de": "Rüstungswiederherstellungsrate: +50 %\nGesundheitswiederherstellungsrate: +50 %\nMax. Rüstung: +65",
+   "es": "Velocidad de recuperación de armadura: +50 %.\nVelocidad de recuperación de salud: +50 %.\nArmadura máxima: +65.",
+   "fr": "Taux de récupération d'armure : +50 %\nTaux de récupération de santé : +50 %\nAmure max. : +65",
+   "it": "Velocità recupero armatura: +50%\nVelocità recupero energia: +50%\nArmatura massima: +65",
+   "ja": "アーマー回復率：+50%\nHP回復率： +50%\n最大アーマー： +65",
+   "ko": "방어 회복률: +50%\n체력 회복률: +50%\n최대 방어: +65",
+   "pt-BR": "Taxa de Recuperação da Armadura: +50%\nTaxa de Recuperação de Vida: +50%\nMáx. de Armadura: +65",
+   "ru": "Скорость восстановления брони: +50%\nСкорость восстановления здоровья: +50%\nМакс. броня: +65",
+   "zh-Hans": "护甲回复速率：+50%\n生命值回复速率：+50%\n最大护甲：+65"
+  }
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Belt_Regeneration_DisplayName",
+  "src": "Belt of Regeneration",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Belt_Regeneration"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Belt_Regeneration_Description",
+  "src": "Regenerate 3 Health every 10 seconds\r\nMax Armor: +60",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Belt_Regeneration"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Belt_Reinforced_DisplayName",
+  "src": "Reinforced Belt",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Belt_Reinforced"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Belt_Reinforced_Description",
+  "src": "Increases Armor gained from all sources by 20%\r\nMax Armor: +70",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Belt_Reinforced"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Belt_Scribe_Description",
+  "src": "On Rune Use: Damage Resistance: +30% (1s)\nCooldown: 5s\nMax Armor: +65",
+  "kind": "changed",
+  "asset": "BP_Item_Belt_Scribe",
+  "old_en": "On Rune Use: Damage Resistance: +95% (1s)\nCooldown: 5s\nMax Armor: +65",
+  "old": {
+   "de": "Bei Runenverwendung: Schadenswiderstand: +95 % (1 Sek.)\nAbklingzeit: 5 Sek.\nMax. Rüstung: +65",
+   "es": "Al usar la runa: resistencia al daño: +95 % (1 s).\nTiempo de recarga: 5 s.\nArmadura máxima: +65.",
+   "fr": "Pendant l'utilisation d'une rune : résistance aux dégâts : +95 % (1 s)\nTemps de recharge : 5 s\nArmure max. : +65",
+   "it": "Uso runa: resistenza danni +95% (1s)\nRecupero: 5s\nArmatura massima: +65",
+   "ja": "ルーン使用：ダメージ抵抗：+95%（1秒）\nクールダウン： 5秒\n最大アーマー： +65",
+   "ko": "룬 사용 시: 대미지 저항: +95%(1초)\n쿨다운: 5초\n최대 방어: +65",
+   "pt-BR": "Ao Usar Runa: Resistência a Dano: +95% (1 s)\nTempo de Recarga: 5 s\nMáx. de Armadura: +65",
+   "ru": "При использовании рун: сопротивление урону +95% (1 сек.)\nВосстановление: 5 сек.\nМакс. броня: +65",
+   "zh-Hans": "使用符文时：伤害抗性：+95%（1秒）\n冷却：5秒\n最大护甲：+65"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Belt_Slayer_Description",
+  "src": "Rune Cooldown Speed: +10%\nMax Armor: +70",
+  "kind": "changed",
+  "asset": "BP_Item_Belt_Slayer",
+  "old_en": "Rune Cooldown Speed: +20%\nMax Armor: +55",
+  "old": {
+   "de": "Runen-Abklingtempo: +20 %\nMax. Rüstung: +55",
+   "es": "Velocidad de recarga de runa: +20 %.\nArmadura máxima: +55.",
+   "fr": "Vitesse de recharge de rune : +20 %\nArmure max. : +55",
+   "it": "Velocità recupero runa: +20%\nArmatura massima: +55",
+   "ja": "ルーンクールダウンスピード： +20%\n最大アーマー： +55",
+   "ko": "룬 쿨다운 속도: +20%\n최대 아머: +55",
+   "pt-BR": "Velocidade de Recarga da Runa: +20%\nMáx. de Armadura: +55",
+   "ru": "Скорость восстановления рун: +20%\nМакс. броня: +55",
+   "zh-Hans": "符文冷却速度：+20%\n最大护甲：+55"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Belt_Spellslinger_Description",
+  "src": "On Spell Cast: Rune Cooldown -1s\nCooldown: 5s\nMax Armor: +65",
+  "kind": "changed",
+  "asset": "BP_Item_Belt_Spellslinger",
+  "old_en": "On Spell Cast: Rune Cooldown -2s\nCooldown: 2s\nMax Armor: +65",
+  "old": {
+   "de": "Beim Wirken eines Zaubers: Runen-Abklingzeit -2 Sek.\nAbklingzeit: 2 Sek.\nMax. Rüstung: +65",
+   "es": "Al lanzar el hechizo: recuperación de runas -2 s.\nRecuperación: 2 s.\nArmadura máxima: +65.",
+   "fr": "Pendant le lancement d'un sort : temps de recharge de rune -2 s\nTemps de recharge : 2 s\nArmure max. : +65",
+   "it": "Uso magia: recupero runa: -2s\nRecupero: 2s\nArmatura massima: +65",
+   "ja": "呪文を放つ：ルーンクールダウン-2秒\nクールダウン： 2秒\n最大アーマー： +65",
+   "ko": "주문 시전 시: 룬 쿨다운 -2초\n쿨다운: 2초\n최대 아머: +65",
+   "pt-BR": "Ao Lançar Magia: tempos de recarga de Runa -2 s\nTempo de Recarga: 2 s\nMáx. de Armadura: +65",
+   "ru": "При использовании заклинания: восстановление рун -2 сек.\nВосстановление: 2 сек.\nМакс. броня: +65",
+   "zh-Hans": "施展法术时：符文冷却-2秒\n冷却：2秒\n最大护甲：+65"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Belt_Survivor_Description",
+  "src": "Damage Resistance: +10%\nMax Armor: +70",
+  "kind": "changed",
+  "asset": "BP_Item_Belt_Survivor",
+  "old_en": "Damage Resistance: +20%\nMax Armor: +65",
+  "old": {
+   "de": "Schadenswiderstand: +20 %\nMax. Rüstung: +65",
+   "es": "Resistencia al daño: +20 %.\nArmadura máxima: +65.",
+   "fr": "Résistance aux dégâts : +20 %\nArmure max. : +65",
+   "it": "Resistenza danni: +20%\nArmatura massima: +65",
+   "ja": "ダメージ抵抗：+20%\n最大アーマー： +65",
+   "ko": "대미지 저항: +20%\n최대 방어: +65",
+   "pt-BR": "Resistência a Dano: +20%\nMáx. de Armadura: +65",
+   "ru": "Сопротивление урону: +20%\nМакс. броня: +65",
+   "zh-Hans": "伤害抗性：+20%\n最大护甲：+65"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Belt_Wanderer_DisplayName",
+  "src": "Belt of the Wanderer",
+  "kind": "changed",
+  "asset": "BP_Item_Belt_Wanderer",
+  "old_en": "Rare Belt of the Wanderer",
+  "old": {
+   "de": "Seltener Gürtel des Wanderers",
+   "es": "Cinturón raro del caminante",
+   "fr": "Ceinture rare du vagabond",
+   "it": "Cintura del viandante rara",
+   "ja": "放浪者のレアベルト",
+   "ko": "희소 방랑자 벨트",
+   "pt-BR": "Cinto Raro do Andarilho",
+   "ru": "Редкий пояс странника",
+   "zh-Hans": "流浪者稀有腰带"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Belt_Wanderer_Description",
+  "src": "Max Rune Charges: +1\nMax Armor: +60",
+  "kind": "changed",
+  "asset": "BP_Item_Belt_Wanderer",
+  "old_en": "Max Rune Charges: +1\nMax Armor: +55",
+  "old": {
+   "de": "Max. Runenaufladungen: +1\nMax. Rüstung: +55",
+   "es": "Cargas máximas de runa: +1.\nArmadura máxima: +55.",
+   "fr": "Charges de rune max. : +1\nArmure max. : +55",
+   "it": "Max cariche runa: +1\nArmatura massima: +55",
+   "ja": "ルーン最大チャージ：+1\n最大アーマー： +55",
+   "ko": "최대 룬 충전: +1\n최대 방어: +55",
+   "pt-BR": "Máx. de Cargas de Runa: +1\nMáx. de Armadura: +55",
+   "ru": "Макс. кол-во зарядов рун: +1\nМакс. броня: +55",
+   "zh-Hans": "最大符文储量：+1\n最大护甲：+55"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Boots_Cat_DisplayName",
+  "src": "Boots of the Cat",
+  "kind": "missing",
+  "asset": "BP_Item_Boots_Cat"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Boots_Cat_Description",
+  "src": "Increases your jump velocity by 40%\r\nRun Speed: +6",
+  "kind": "missing",
+  "asset": "BP_Item_Boots_Cat"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Boots_Grounding_DisplayName",
+  "src": "Grounding Boots",
+  "kind": "missing",
+  "asset": "BP_Item_Boots_Grounding"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Boots_Grounding_Description",
+  "src": "After 2s on the ground: Run Speed +5\r\nRun Speed: +3",
+  "kind": "missing",
+  "asset": "BP_Item_Boots_Grounding"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Boots_Mender_DisplayName",
+  "src": "Boots of the Mender",
+  "kind": "changed",
+  "asset": "BP_Item_Boots_Mender",
+  "old_en": "Epic Boots of the Mender",
+  "old": {
+   "de": "Epische Stiefel des Verbesserers",
+   "es": "Botas épicas del reparador",
+   "fr": "Bottes épiques du réparateur",
+   "it": "Stivali del guaritore epici",
+   "ja": "修理人のエピックブーツ",
+   "ko": "에픽 수선공 부츠",
+   "pt-BR": "Botas Épicas do Reparador",
+   "ru": "Эпические сапоги ремонтника",
+   "zh-Hans": "修理工史诗战靴"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Boots_Mender_Description",
+  "src": "After running for 5s: Regenerate 4 Health every 2 seconds\nRun Speed: +5",
+  "kind": "changed",
+  "asset": "BP_Item_Boots_Mender",
+  "old_en": "On Crouch (1s): Regenerate 4 Health / 2 Seconds\nRun Speed: +5",
+  "old": {
+   "de": "Geduckt (1 Sek.): Regeneriere 4 Gesundheit/2 Sekunden\nLauftempo: +5",
+   "es": "Al agacharse (1 s): regenera 4 de salud / 2 segundos.\nVelocidad en carrera: +5.",
+   "fr": "En position accroupie (1 s) : régénère 4 points de santé/2 s\nVitesse de déplacement : +5",
+   "it": "Accovacciato (1s): +4 punti energia ogni 2s\nVelocità corsa: +5",
+   "ja": "しゃがむ（1秒）：2秒あたりHPを4再生\n走るスピード：+5",
+   "ko": "웅크리기(1초): 2초당 체력 4 회복\n달리기 속도: +5",
+   "pt-BR": "Ao Agachar (1 s): Regenera 4 de Vida/2 Segundos\nVelocidade de Corrida: +5",
+   "ru": "В приседе (1 сек.): Восстановление здоровья 4 ед./2 сек.\nСкорость бега: +5",
+   "zh-Hans": "蹲伏时（1秒）：每2秒回复4点生命值\n奔跑速度：+5"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Boots_Mouse_DisplayName",
+  "src": "Mouse Boots",
+  "kind": "missing",
+  "asset": "BP_Item_Boots_Mouse"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Boots_Mouse_Description",
+  "src": "While Emoting: Become Invisible\r\nRun Speed: +4",
+  "kind": "missing",
+  "asset": "BP_Item_Boots_Mouse"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Boots_Rubber_DisplayName",
+  "src": "Rubber Boots",
+  "kind": "missing",
+  "asset": "BP_Item_Boots_Rubber"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Boots_Rubber_Description",
+  "src": "Poison Puddles deal no damage to you\r\nRun Speed: +5",
+  "kind": "missing",
+  "asset": "BP_Item_Boots_Rubber"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Boots_Shoes_Padded_DisplayName",
+  "src": "Padded Shoes",
+  "kind": "missing",
+  "asset": "BP_Item_Boots_Shoes_Padded"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Boots_Shoes_Padded_Description",
+  "src": "Landing from a height creates a shockwave that damages nearby enemies\r\nRun Speed: +3",
+  "kind": "missing",
+  "asset": "BP_Item_Boots_Shoes_Padded"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Boots_Slayer_Description",
+  "src": "Levitation Mana Cost: -10%\nMax Jump: +10%\r\nRun Speed: +5",
+  "kind": "changed",
+  "asset": "BP_Item_Boots_Slayer",
+  "old_en": "Levitation Mana Cost -25%\nMax Jump: +25%\nRun Speed: +6",
+  "old": {
+   "de": "Manakosten für Schweben: -25 %\nMax. Sprung: +25 %\nLauftempo: +6",
+   "es": "Coste de maná de la levitación: -25 %.\nSalto máximo: +25 %.\nVelocidad en carrera: +6.",
+   "fr": "Coût de mana de lévitation -25 %\nSaut max. : +25 %\nVitesse de déplacement : +6",
+   "it": "Consumo mana levitazione: -25%\nSalto massimo: +25%\nVelocità corsa: +6",
+   "ja": "浮遊のマナ消費 -25%\n最大ジャンプ： +25%\n走るスピード： +6",
+   "ko": "공중부양 마나 소모 -25%\n최대 점프: +25%\n달리기 속도: +6",
+   "pt-BR": "Custo de Mana de Levitação -25%\nAltura Máx. de Pulo: +25%\nVelocidade de Corrida: +6",
+   "ru": "Расход маны на полет: -25%\nМакс. прыжок: +25%\nСкорость бега: +6",
+   "zh-Hans": "浮空法力消耗-25%\n最大跳跃：+25%\n奔跑速度：+6"
+  }
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Boots_Slowfall_DisplayName",
+  "src": "Slowfall Boots",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Boots_Slowfall"
+ },
+ {
+  "ns": "EF_Balance",
+  "key": "BP_Item_Boots_Slowfall_Description",
+  "src": "Decreases the effects of gravity by 50%, Run Speed +6",
+  "kind": "unkeyed",
+  "asset": "BP_Item_Boots_Slowfall"
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Boots_Spellslinger_Description",
+  "src": "On Spell Cast: Run Speed +2 (10s). Stacks 3 times.\nRun Speed: +4",
+  "kind": "changed",
+  "asset": "BP_Item_Boots_Spellslinger",
+  "old_en": "On Spell Cast: Run Speed +1 (10s). Stacks 5 times.\nRun Speed: +4",
+  "old": {
+   "de": "Beim Wirken eines Zaubers: Lauftempo +1 (10 Sek.). Kann 5-mal gestapelt werden.\nLauftempo: +4",
+   "es": "Al lanzar el hechizo: velocidad en carrera +1 (10 s). Se acumula 5 veces.\nVelocidad en carrera: +4.",
+   "fr": "Pendant le lancement d'un sort : vitesse de déplacement : +1 (10 s). Cumulable 5 fois.\nVitesse de déplacement : +4",
+   "it": "Uso magia: velocità corsa +1 (10s). Fino a 5 volte.\nVelocità corsa: +4",
+   "ja": "呪文を放つ：走るスピード +1 （10秒）。スタック5回。\n走るスピード： +4",
+   "ko": "주문 시전 시: 달리기 속도 +1(10초). 5회 중첩됩니다.\n달리기 속도: +4",
+   "pt-BR": "Ao Lançar Magia: Velocidade de Corrida +1 (10 s). Acumula 5 vezes.\nVelocidade de Corrida: +4",
+   "ru": "При использовании заклинания: скорость бега +1 (10 сек.), накапливается 5 раз.\nСкорость бега: +4",
+   "zh-Hans": "施展法术时：奔跑速度：+1（10秒）。叠加5次。\n奔跑速度：+4"
+  }
+ },
+ {
+  "ns": "DT_Item_Wearable",
+  "key": "BP_Item_Boots_Tier_5_Description",
+  "src": "Run Speed: +7",
+  "kind": "changed",
+  "asset": "BP_Item_Boots_Tier_5",
+  "old_en": "Run Speed: +5",
+  "old": {
+   "de": "Lauftempo: +5",
+   "es": "Velocidad en carrera: +5.",
+   "fr": "Vitesse de déplacement : +5",
+   "it": "Velocità corsa: +5",
+   "ja": "走るスピード：+5",
+   "ko": "달리기 속도: +5",
+   "pt-BR": "Velocidade de Corrida: +5",
+   "ru": "Скорость бега: +5",
+   "zh-Hans": "奔跑速度：+5"
+  }
+ },
+ {
+  "ns": "DT_Item_Rune",
+  "key": "BP_Item_Rune_Blink_Description",
+  "src": "Instantly teleport forward a short distance. Has 3 charges.",
+  "kind": "changed",
+  "asset": "BP_Item_Rune_Blink",
+  "old_en": "Instantly teleport forward a short distance.",
+  "old": {
+   "de": "Teleportiere dich sofort eine geringe Entfernung nach vorne.",
+   "es": "Te teletransporta al instante a un punto situado a corta distancia.",
+   "fr": "Téléporte instantanément vers l'avant sur une courte distance.",
+   "it": "Consente il teletrasporto istantaneo a corto raggio.",
+   "ja": "短距離を先方へ瞬く間にテレポートする。",
+   "ko": "즉시 앞쪽으로 짧게 순간 이동합니다.",
+   "pt-BR": "Teletransporte-se uma curta distância para frente instantaneamente.",
+   "ru": "Мгновенно телепортирует вас вперед на небольшое расстояние.",
+   "zh-Hans": "立刻瞬移前进一小段距离。"
+  }
+ },
+ {
+  "ns": "DT_Item_Rune",
+  "key": "BP_Item_Rune_Wolfsblood_Tier_1_Description",
+  "src": "See other players through walls and terrain, and increase your Run Speed by 12.",
+  "kind": "changed",
+  "asset": "BP_Item_Rune_Wolfsblood_Tier_1",
+  "old_en": "See other players through walls and terrain and increases your run speed by 4.",
+  "old": {
+   "de": "Du siehst andere Spieler durch Wände und Gelände und dein Lauftempo wird um 4 erhöht.",
+   "es": "Puedes ver a los demás jugadores a través del terreno y las paredes y tu velocidad en carrera aumenta en 4.",
+   "fr": "Permet de voir les autres joueurs à travers les murs et le terrain, et augmente la vitesse de déplacement de 4.",
+   "it": "Mostra gli altri giocatori attraverso muri e scenario, e incrementa la velocità della corsa di 4.",
+   "ja": "壁や地形越しに他のプレイヤーを見ることができ、走る速度が4倍になる。",
+   "ko": "장벽과 지형을 통과하여 다른 플레이어를 볼 수 있으며 달리기 속도가 4 증가합니다.",
+   "pt-BR": "Veja outros jogadores através de paredes e terrenos, e aumente sua velocidade de corrida em 4.",
+   "ru": "Позволяет видеть других игроков сквозь стены и ландшафт и повышает скорость бега на 4.",
+   "zh-Hans": "透视被墙壁和地形挡住的其他玩家并提升奔跑速度4点。"
+  }
+ },
+ {
+  "ns": "DT_Item_Rune",
+  "key": "BP_Item_Rune_Wolfsblood_Tier_2_Description",
+  "src": "See other players through walls and terrain, and increase your Run Speed by 12.",
+  "kind": "changed",
+  "asset": "BP_Item_Rune_Wolfsblood_Tier_2",
+  "old_en": "See other players through walls and terrain and increases your run speed by 4.",
+  "old": {
+   "de": "Du siehst andere Spieler durch Wände und Gelände und dein Lauftempo wird um 4 erhöht.",
+   "es": "Puedes ver a los demás jugadores a través del terreno y las paredes y tu velocidad en carrera aumenta en 4.",
+   "fr": "Permet de voir les autres joueurs à travers les murs et le terrain, et augmente la vitesse de déplacement de 4.",
+   "it": "Mostra gli altri giocatori attraverso muri e scenario, e incrementa la velocità della corsa di 4.",
+   "ja": "壁や地形越しに他のプレイヤーを見ることができ、走る速度が4倍になる。",
+   "ko": "장벽과 지형을 통과하여 다른 플레이어를 볼 수 있으며 달리기 속도가 4 증가합니다.",
+   "pt-BR": "Veja outros jogadores através de paredes e terrenos, e aumente sua velocidade de corrida em 4.",
+   "ru": "Позволяет видеть других игроков сквозь стены и ландшафт и повышает скорость бега на 4.",
+   "zh-Hans": "透视被墙壁和地形挡住的其他玩家并提升奔跑速度4点。"
+  }
+ },
+ {
+  "ns": "DT_Item_Rune",
+  "key": "BP_Item_Rune_Wolfsblood_Tier_3_Description",
+  "src": "See other players through walls and terrain, and increase your Run Speed by 12.",
+  "kind": "changed",
+  "asset": "BP_Item_Rune_Wolfsblood_Tier_3",
+  "old_en": "See other players through walls and terrain and increases your run speed by 4.",
+  "old": {
+   "de": "Du siehst andere Spieler durch Wände und Gelände und dein Lauftempo wird um 4 erhöht.",
+   "es": "Puedes ver a los demás jugadores a través del terreno y las paredes y tu velocidad en carrera aumenta en 4.",
+   "fr": "Permet de voir les autres joueurs à travers les murs et le terrain, et augmente la vitesse de déplacement de 4.",
+   "it": "Mostra gli altri giocatori attraverso muri e scenario, e incrementa la velocità della corsa di 4.",
+   "ja": "壁や地形越しに他のプレイヤーを見ることができ、走る速度が4倍になる。",
+   "ko": "장벽과 지형을 통과하여 다른 플레이어를 볼 수 있으며 달리기 속도가 4 증가합니다.",
+   "pt-BR": "Veja outros jogadores através de paredes e terrenos, e aumente sua velocidade de corrida em 4.",
+   "ru": "Позволяет видеть других игроков сквозь стены и ландшафт и повышает скорость бега на 4.",
+   "zh-Hans": "透视被墙壁和地形挡住的其他玩家并提升奔跑速度4点。"
+  }
+ },
+ {
+  "ns": "DT_Item_Rune",
+  "key": "BP_Item_Rune_Wolfsblood_Tier_4_Description",
+  "src": "See other players through walls and terrain, and increase your Run Speed by 12.",
+  "kind": "changed",
+  "asset": "BP_Item_Rune_Wolfsblood_Tier_4",
+  "old_en": "See other players through walls and terrain and increases your run speed by 4.",
+  "old": {
+   "de": "Du siehst andere Spieler durch Wände und Gelände und dein Lauftempo wird um 4 erhöht.",
+   "es": "Puedes ver a los demás jugadores a través del terreno y las paredes y tu velocidad en carrera aumenta en 4.",
+   "fr": "Permet de voir les autres joueurs à travers les murs et le terrain, et augmente la vitesse de déplacement de 4.",
+   "it": "Mostra gli altri giocatori attraverso muri e scenario, e incrementa la velocità della corsa di 4.",
+   "ja": "壁や地形越しに他のプレイヤーを見ることができ、走る速度が4倍になる。",
+   "ko": "장벽과 지형을 통과하여 다른 플레이어를 볼 수 있으며 달리기 속도가 4 증가합니다.",
+   "pt-BR": "Veja outros jogadores através de paredes e terrenos, e aumente sua velocidade de corrida em 4.",
+   "ru": "Позволяет видеть других игроков сквозь стены и ландшафт и повышает скорость бега на 4.",
+   "zh-Hans": "透视被墙壁和地形挡住的其他玩家并提升奔跑速度4点。"
+  }
+ },
+ {
+  "ns": "DT_Item_Rune",
+  "key": "BP_Item_Rune_Wolfsblood_Tier_5_Description",
+  "src": "See other players through walls and terrain, and increase your Run Speed by 12.",
+  "kind": "changed",
+  "asset": "BP_Item_Rune_Wolfsblood_Tier_5",
+  "old_en": "See other players through walls and terrain and increases your run speed by 4.",
+  "old": {
+   "de": "Du siehst andere Spieler durch Wände und Gelände und dein Lauftempo wird um 4 erhöht.",
+   "es": "Puedes ver a los demás jugadores a través del terreno y las paredes y tu velocidad en carrera aumenta en 4.",
+   "fr": "Permet de voir les autres joueurs à travers les murs et le terrain, et augmente la vitesse de déplacement de 4.",
+   "it": "Mostra gli altri giocatori attraverso muri e scenario, e incrementa la velocità della corsa di 4.",
+   "ja": "壁や地形越しに他のプレイヤーを見ることができ、走る速度が4倍になる。",
+   "ko": "장벽과 지형을 통과하여 다른 플레이어를 볼 수 있으며 달리기 속도가 4 증가합니다.",
+   "pt-BR": "Veja outros jogadores através de paredes e terrenos, e aumente sua velocidade de corrida em 4.",
+   "ru": "Позволяет видеть других игроков сквозь стены и ландшафт и повышает скорость бега на 4.",
+   "zh-Hans": "透视被墙壁和地形挡住的其他玩家并提升奔跑速度4点。"
+  }
+ },
+ {
+  "ns": "",
+  "key": "FA74D30C4E30738155CE8EA3D0D9CB62",
+  "src": "Sacrificial Lamb",
+  "kind": "missing",
+  "asset": "BattleRoyale_Duo"
+ },
+ {
+  "ns": "",
+  "key": "2D9C728B4836794E9AE5268F939AFA08",
+  "src": "Sacrificial Lamb",
+  "kind": "missing",
+  "asset": "BattleRoyale_Solo"
+ },
+ {
+  "ns": "",
+  "key": "418FD99144561346DF9A20A18EDBFD4C",
+  "src": "Sacrificial Lamb",
+  "kind": "missing",
+  "asset": "BattleRoyale_Squad"
+ },
+ {
+  "ns": "",
+  "key": "30200B4742EAA0C8A7E20FBB80A436A8",
+  "src": "Sacrificial Lamb",
+  "kind": "missing",
+  "asset": "Capture_Squad"
+ },
+ {
+  "ns": "",
+  "key": "36B54AA640E65F8D4E7BB1988D0F9E0A",
+  "src": "Feather Cloak",
+  "kind": "missing",
+  "asset": "BP_Skill_Springstep_Base"
+ },
+ {
+  "ns": "",
+  "key": "C2C12AAC4E6106C3CCDAA183C4A51426",
+  "src": "Launch into the air and slowly glide back down",
+  "kind": "missing",
+  "asset": "BP_Skill_Springstep_Base"
+ }
+]

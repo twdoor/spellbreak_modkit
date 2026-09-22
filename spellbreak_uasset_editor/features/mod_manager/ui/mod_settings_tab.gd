@@ -91,7 +91,7 @@ func _sync_controls() -> void:
 	_sources_hint.text = (
 		"Register exported asset directories for reference — the base game export, older game versions, "
 		+ "reference mods, etc. Each source has a name and a path to its root folder "
-		+ "(the one containing %s/)." % cr)
+		+ "(the one containing %s/). Drag the handles to reorder; the first source is the default." % cr)
 
 	_syncing_controls = true
 	_game_directory_edit.text = _cfg.game_dir
@@ -203,14 +203,27 @@ func _rebuild_sources() -> void:
 	# Use free() (not queue_free()) so nodes are removed immediately before we re-add.
 	while _sources_container.get_child_count() > 0:
 		_sources_container.get_child(0).free()
-	for entry: Dictionary in _cfg.sources:
-		_sources_container.add_child(_build_source_row(entry))
+	for index in _cfg.sources.size():
+		_sources_container.add_child(_build_source_row(_cfg.sources[index], index))
 
 
-func _build_source_row(entry: Dictionary) -> Control:
+func _build_source_row(entry: Dictionary, index: int) -> Control:
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_theme_constant_override("separation", AppTheme.SPACING_FIELD)
+	var handle := Label.new()
+	handle.text = "⠿"
+	handle.custom_minimum_size.x = 24
+	handle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	handle.mouse_filter = Control.MOUSE_FILTER_STOP
+	handle.mouse_default_cursor_shape = Control.CURSOR_DRAG
+	handle.tooltip_text = "Drag to reorder sources. The first source is the default."
+	row.add_child(handle)
+	var priority := Label.new()
+	priority.text = "Default" if index == 0 else str(index + 1)
+	priority.custom_minimum_size.x = 60
+	AppTheme.style_muted(priority)
+	row.add_child(priority)
 
 	# Name — short fixed-width field
 	var name_edit := LineEdit.new()
@@ -256,7 +269,51 @@ func _build_source_row(entry: Dictionary) -> Control:
 	)
 	row.add_child(remove_btn)
 
+	# Accept a drop over the fields as well as the row's empty space.
+	var targets: Array[Control] = [row]
+	for child in row.get_children():
+		targets.append(child as Control)
+	for target: Control in targets:
+		target.set_drag_forwarding(
+			_source_drag.bind(index, handle) if target == handle else Callable(),
+			func(_position: Vector2, data: Variant) -> bool: return _can_drop_source(data),
+			func(drop_position: Vector2, data: Variant) -> void:
+				if not _can_drop_source(data):
+					return
+				var local := row.get_global_transform().affine_inverse() * (target.get_global_transform() * drop_position)
+				var slot := index + (1 if local.y >= row.size.y / 2.0 else 0)
+				# Keep the drag controls alive until Godot finishes dispatching the drop.
+				_move_source.call_deferred(int(data.index), slot))
 	return row
+
+
+func _source_drag(_position: Vector2, index: int, handle: Control) -> Variant:
+	var preview := Label.new()
+	var entry: Dictionary = _cfg.sources[index]
+	preview.text = str(entry.get("name", "")).strip_edges()
+	if preview.text.is_empty():
+		preview.text = str(entry.get("path", "Source"))
+	handle.set_drag_preview(preview)
+	return {"source_list": get_instance_id(), "index": index}
+
+
+func _can_drop_source(data: Variant) -> bool:
+	return data is Dictionary and data.get("source_list") == get_instance_id() \
+		and data.get("index") is int and data.index >= 0 and data.index < _cfg.sources.size()
+
+
+func _move_source(from_index: int, insertion_slot: int) -> void:
+	if from_index < 0 or from_index >= _cfg.sources.size():
+		return
+	var destination := clampi(insertion_slot, 0, _cfg.sources.size())
+	if destination > from_index:
+		destination -= 1
+	if destination == from_index:
+		return
+	var entry: Dictionary = _cfg.sources.pop_at(from_index)
+	_cfg.sources.insert(destination, entry)
+	_rebuild_sources()
+	_update_footer_state()
 
 
 # ── Base source generation ───────────────────────────────────────────────────

@@ -17,8 +17,8 @@ var _state:   ModStateManager
 var _packer:  PackingService
 var _watcher: ModFileWatcher
 var _new_mod_from_pak_service: BaseSourceService
-var _skin_cloner := SkinCloneService.new()
-var _skin_resume_watch := false
+var _cosmetic_cloner := CosmeticCloneService.new()
+var _cosmetic_resume_watch := false
 
 # ── State ──────────────────────────────────────────────────────────────────────
 var _mods:           Array[ModInfo] = []
@@ -44,15 +44,19 @@ const _BTN_GIT := 1
 const _BTN_DEL := 0
 const _BTN_OPEN_EXTERNAL := 1
 
+enum ToolbarAction { NEW_MOD, CLONE_COSMETIC, BASE_FILES, DIAGNOSTICS, SETTINGS, LOCALIZATION, RECIPES }
+
+var workflow_guard: Callable
+var _workflow_dialog: ModWorkflowDialog
+var _workflow_resume_watch := false
+
 # ── UI references ──────────────────────────────────────────────────────────────
 @onready var _mod_tree: Tree = %ModTree
 @onready var _watch_btn: Button = %WatchButton
 @onready var _pack_btn: Button = %PackButton
 @onready var _launch_btn: Button = %LaunchButton
-@onready var _new_mod_btn: Button = %NewModButton
-@onready var _diagnostics_btn: Button = %DiagnosticsButton
-@onready var _base_files_btn: Button = %BaseFilesButton
-@onready var _settings_btn: Button = %SettingsButton
+@onready var _create_menu: MenuButton = %CreateMenu
+@onready var _tools_menu: MenuButton = %ToolsMenu
 @onready var _operation_feedback_wrapper: MarginContainer = %OperationFeedbackWrapper
 
 var _operation_feedback: OperationFeedback
@@ -75,10 +79,10 @@ func _ready() -> void:
 	_new_mod_from_pak_service.generate_finished.connect(_on_new_mod_from_pak_finished)
 	_cfg.config_changed.connect(_on_config_changed)
 
-	_skin_cloner.finished.connect(func(result: OperationResult) -> void:
+	_cosmetic_cloner.finished.connect(func(result: OperationResult) -> void:
 		_refresh_mods()
 		_set_status(result.message, not result.ok)
-		if _skin_resume_watch:
+		if _cosmetic_resume_watch:
 			_watcher.start()
 		if result.ok:
 			clone_created.emit(str(result.value)))
@@ -91,7 +95,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	_skin_cloner.wait_to_finish()
+	_cosmetic_cloner.wait_to_finish()
 	_watcher.stop()
 	_watcher.wait_to_finish()
 	_packer.wait_to_finish()
@@ -105,20 +109,71 @@ func _configure_scene_ui() -> void:
 	AppTheme.style_muted_btn(_watch_btn)
 	_launch_btn.icon = _icon("Play")
 	_launch_btn.add_theme_color_override("font_color", AppTheme.BTN_LAUNCH)
-	_new_mod_btn.icon = _icon("FolderCreate")
-	_new_mod_btn.add_theme_color_override("font_color", AppTheme.BTN_NEW_MOD)
-	_diagnostics_btn.icon = _icon("StatusWarning")
-	AppTheme.style_muted_btn(_diagnostics_btn)
-	_base_files_btn.icon = _icon("FileTree")
-	AppTheme.style_muted_btn(_base_files_btn)
-	_settings_btn.icon = _icon("Tools")
-	AppTheme.style_muted_btn(_settings_btn)
+	_create_menu.add_theme_color_override("font_color", AppTheme.BTN_NEW_MOD)
+	AppTheme.style_muted_btn(_tools_menu)
+	var create_popup := _create_menu.get_popup()
+	create_popup.add_icon_item(_icon("FolderCreate"), "New Mod…", ToolbarAction.NEW_MOD)
+	create_popup.add_icon_item(_icon("Duplicate"), "Clone Cosmetic…", ToolbarAction.CLONE_COSMETIC)
+	create_popup.id_pressed.connect(_on_toolbar_action)
+	var tools_popup := _tools_menu.get_popup()
+	tools_popup.add_icon_item(_icon("FileTree"), "Base Files…", ToolbarAction.BASE_FILES)
+	tools_popup.add_separator()
+	tools_popup.add_item("Localization…", ToolbarAction.LOCALIZATION)
+	tools_popup.add_item("Batch Recipes…", ToolbarAction.RECIPES)
+	tools_popup.add_separator()
+	tools_popup.add_icon_item(_icon("StatusWarning"), "Health Check…", ToolbarAction.DIAGNOSTICS)
+	tools_popup.add_icon_item(_icon("Tools"), "Settings…", ToolbarAction.SETTINGS)
+	tools_popup.id_pressed.connect(_on_toolbar_action)
 
 	_operation_feedback = OperationFeedback.new().setup(_retry_last_pack_operation, true)
 	_operation_feedback.set_auto_dismiss_seconds(8.0)
 	_operation_feedback.dismiss_requested.connect(
 		func() -> void: _operation_feedback_wrapper.visible = false)
 	_operation_feedback_wrapper.add_child(_operation_feedback)
+
+
+func _on_toolbar_action(id: int) -> void:
+	match id:
+		ToolbarAction.NEW_MOD:
+			_on_new_mod_pressed()
+		ToolbarAction.CLONE_COSMETIC:
+			_on_clone_cosmetic_pressed()
+		ToolbarAction.BASE_FILES:
+			_on_base_files_pressed()
+		ToolbarAction.DIAGNOSTICS:
+			_on_diagnostics_pressed()
+		ToolbarAction.SETTINGS:
+			_on_settings_pressed()
+		ToolbarAction.LOCALIZATION:
+			_open_workflow(0)
+		ToolbarAction.RECIPES:
+			_open_workflow(1)
+
+
+func _open_workflow(tab: int) -> void:
+	if is_instance_valid(_workflow_dialog):
+		_workflow_dialog.grab_focus()
+		return
+	if _mods.is_empty():
+		_set_status("Create a mod first", true)
+		return
+	_workflow_dialog = ModWorkflowDialog.new()
+	_workflow_dialog.setup(_mods, _cfg.sources, tab)
+	_workflow_dialog.mutation_guard = func(mod_path: String) -> String:
+		if _packer.is_packing() or _cosmetic_cloner.is_busy() or _new_mod_from_pak_service.is_busy():
+			return "Wait for the current mod operation to finish."
+		return str(workflow_guard.call(mod_path)) if workflow_guard.is_valid() else ""
+	_workflow_dialog.mutation_started.connect(func() -> void:
+		_workflow_resume_watch = _watcher.is_watching()
+		_watcher.stop()
+		_watcher.wait_to_finish())
+	_workflow_dialog.mutation_finished.connect(func() -> void:
+		if _workflow_resume_watch:
+			_watcher.start()
+		_workflow_resume_watch = false)
+	_workflow_dialog.content_changed.connect(_refresh_mods)
+	add_child(_workflow_dialog)
+	_workflow_dialog.popup_centered_clamped(Vector2i(980, 700), 0.85)
 
 
 func _on_diagnostics_pressed() -> void:
@@ -133,15 +188,15 @@ func _on_base_files_pressed() -> void:
 	open_explorer_requested.emit()
 
 
-func _on_clone_skin_pressed() -> void:
+func _on_clone_cosmetic_pressed() -> void:
 	if _cfg.sources.is_empty() or _mods.is_empty():
 		_set_status("Add an extracted source in Settings and create a mod first", true)
 		return
 	var dialog := FileDialog.new()
-	dialog.title = "Choose a skin cosmetic blueprint"
+	dialog.title = "Choose a cosmetic blueprint"
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
 	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
-	dialog.filters = PackedStringArray(["BP_Cosmetic_Skin_*.uasset ; Skin blueprints"])
+	dialog.filters = PackedStringArray(["BP_Cosmetic_*.uasset ; Cosmetic blueprints"])
 	AppTheme.apply_theme(dialog)
 	dialog.use_native_dialog = false
 	var source_row := HBoxContainer.new()
@@ -151,44 +206,57 @@ func _on_clone_skin_pressed() -> void:
 	var source_picker := OptionButton.new()
 	source_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	source_row.add_child(source_picker)
+	var type_label := Label.new()
+	type_label.text = "Type"
+	source_row.add_child(type_label)
+	var type_picker := OptionButton.new()
+	for kind: String in CosmeticCloneService.TYPES:
+		type_picker.add_item(CosmeticCloneService.TYPES[kind].folder)
+		type_picker.set_item_metadata(type_picker.item_count - 1, kind)
+	source_row.add_child(type_picker)
 	var first_available := -1
 	for source: Dictionary in _cfg.sources:
 		var root := str(source.get("path", "")).rstrip("/")
-		var folder := root.path_join("g3/Content/Blueprints/Cosmetics/Skins")
+		var folder := root.path_join("g3/Content/Blueprints/Cosmetics")
 		var index := source_picker.item_count
 		var source_name := str(source.get("name", "")).strip_edges()
 		source_picker.add_item(source_name if not source_name.is_empty() else root)
 		source_picker.set_item_metadata(index, root)
 		var available := not root.is_empty() and DirAccess.dir_exists_absolute(folder)
 		source_picker.set_item_disabled(index, not available)
-		source_picker.set_item_tooltip(index, root if available else root + " (no skin blueprint folder)")
+		source_picker.set_item_tooltip(index, root if available else root + " (no cosmetics folder)")
 		if available and first_available == -1:
 			first_available = index
 	if first_available == -1:
 		source_row.free()
 		dialog.free()
-		_set_status("No configured source contains g3/Content/Blueprints/Cosmetics/Skins", true)
+		_set_status("No configured source contains g3/Content/Blueprints/Cosmetics", true)
 		return
 	dialog.get_vbox().add_child(source_row)
 	dialog.get_vbox().move_child(source_row, 0)
-	var select_source := func(index: int) -> void:
-		var root := str(source_picker.get_item_metadata(index))
+	var select_folder := func() -> void:
+		var root := str(source_picker.get_item_metadata(source_picker.selected))
+		var kind := str(type_picker.get_item_metadata(type_picker.selected))
+		var folder: String = CosmeticCloneService.TYPES[kind].folder
 		dialog.current_file = ""
-		dialog.current_dir = root.path_join("g3/Content/Blueprints/Cosmetics/Skins")
+		dialog.current_dir = root.path_join("g3/Content/Blueprints/Cosmetics").path_join(folder)
+		dialog.filters = PackedStringArray(["BP_Cosmetic_%s_*.uasset ; %s" % [kind, folder]])
 		source_picker.tooltip_text = root
-	source_picker.item_selected.connect(select_source)
+	source_picker.item_selected.connect(func(_index: int) -> void: select_folder.call())
+	type_picker.item_selected.connect(func(_index: int) -> void: select_folder.call())
 	source_picker.select(first_available)
-	select_source.call(first_available)
+	select_folder.call()
 	add_child(dialog)
 	dialog.file_selected.connect(func(path: String) -> void:
 		var root := str(source_picker.get_item_metadata(source_picker.selected))
 		dialog.queue_free()
-		if FileUtils.is_path_within(path, root):
+		if FileUtils.is_path_within(path, root) and CosmeticCloneService.is_cosmetic(path):
 			clone_source_file_to_mod(path, root)
 		else:
-			_set_status("Choose a skin inside the selected source folder", true))
+			_set_status("Choose a cosmetic inside the selected source folder", true))
 	dialog.canceled.connect(dialog.queue_free)
-	dialog.popup_centered(Vector2i(900, 650))
+	dialog.transient = true
+	dialog.popup_centered_clamped(Vector2i(760, 520))
 
 
 func _on_tree_empty_clicked(_position: Vector2, _mouse_button_index: int) -> void:
@@ -1146,6 +1214,7 @@ func _show_clone_unique_mod_picker(source_path: String, source_root: String,
 	var dialog := ConfirmationDialog.new()
 	dialog.title = "Clone Unique Asset"
 	dialog.ok_button_text = "Clone"
+	dialog.dialog_hide_on_ok = false
 	dialog.cancel_button_text = "Cancel"
 	dialog.min_size = Vector2i(580, 460)
 	AppTheme.apply_theme(dialog)
@@ -1193,19 +1262,19 @@ func _show_clone_unique_mod_picker(source_path: String, source_root: String,
 	name_edit.tooltip_text = "Unreal object name: letters, digits, and underscore; cannot start with a digit"
 	content.add_child(name_edit)
 
-	var skin_option := CheckBox.new()
-	skin_option.text = "Clone skin chain (includes editable textures and icons)"
-	skin_option.visible = SkinCloneService.is_skin(source_path)
-	skin_option.button_pressed = skin_option.visible
-	content.add_child(skin_option)
-	if skin_option.visible:
-		dialog.title = "Clone Skin"
+	var cosmetic_option := CheckBox.new()
+	cosmetic_option.text = "Clone cosmetic dependencies (includes editable art)"
+	cosmetic_option.visible = CosmeticCloneService.is_cosmetic(source_path)
+	cosmetic_option.button_pressed = cosmetic_option.visible
+	content.add_child(cosmetic_option)
+	if cosmetic_option.visible:
+		dialog.title = "Clone " + CosmeticCloneService.cosmetic_type(source_path)
 		name_edit.text = source_name + "_Custom"
-		name_edit.tooltip_text = "Keep BP_Cosmetic_Skin_ followed by your unique skin name"
+		name_edit.tooltip_text = "Keep BP_Cosmetic_%s_ followed by your unique name" % CosmeticCloneService.cosmetic_type(source_path)
 
 	var display_edit := LineEdit.new()
 	display_edit.placeholder_text = "Display name (optional; blank keeps the original)"
-	display_edit.visible = skin_option.visible
+	display_edit.visible = cosmetic_option.visible
 	content.add_child(display_edit)
 
 	var destination_label := AppTheme.make_status_label("", AppTheme.StatusKind.IDLE,
@@ -1221,15 +1290,19 @@ func _show_clone_unique_mod_picker(source_path: String, source_root: String,
 			return
 		var clone_name := name_edit.text.strip_edges()
 		var valid_name := ModManagerPanel._valid_clone_name(clone_name, source_name)
-		var destination := SkinCloneService.blueprint_destination(mod.path, clone_name) \
-			if skin_option.visible and skin_option.button_pressed \
+		var destination := CosmeticCloneService.blueprint_destination(mod.path, clone_name) \
+			if cosmetic_option.visible and cosmetic_option.button_pressed \
 			else ModManagerPanel._clone_destination_path(mod, relative_path, clone_name)
+		var valid_type := not cosmetic_option.button_pressed or \
+			CosmeticCloneService.cosmetic_type(destination) == CosmeticCloneService.cosmetic_type(source_path)
+		display_edit.visible = cosmetic_option.visible and cosmetic_option.button_pressed
+		dialog.get_ok_button().disabled = not valid_name or not valid_type \
+			or destination.is_empty() or FileAccess.file_exists(destination)
 		if destination.is_empty():
 			AppTheme.set_status_label(destination_label,
 				"Destination: —", AppTheme.StatusKind.ERROR)
-		elif not valid_name:
-			var reason := "invalid name" if clone_name.is_empty() \
-					else "must differ from the source name"
+		elif not valid_name or not valid_type:
+			var reason := "use a valid, unique name and keep the cosmetic type prefix"
 			AppTheme.set_status_label(destination_label,
 				"Destination: %s (%s)" % [destination, reason],
 				AppTheme.StatusKind.ERROR)
@@ -1250,25 +1323,27 @@ func _show_clone_unique_mod_picker(source_path: String, source_root: String,
 		var clone_name := name_edit.text.strip_edges()
 		if not ModManagerPanel._valid_clone_name(clone_name, source_name):
 			return
-		var destination := SkinCloneService.blueprint_destination(mod.path, clone_name) \
-			if skin_option.visible and skin_option.button_pressed \
+		var destination := CosmeticCloneService.blueprint_destination(mod.path, clone_name) \
+			if cosmetic_option.visible and cosmetic_option.button_pressed \
 			else ModManagerPanel._clone_destination_path(mod, relative_path, clone_name)
 		if destination.is_empty() or FileAccess.file_exists(destination):
 			return
+		if cosmetic_option.button_pressed and CosmeticCloneService.cosmetic_type(destination) != CosmeticCloneService.cosmetic_type(source_path):
+			return
 		dialog.queue_free()
-		if skin_option.visible and skin_option.button_pressed:
-			if _skin_cloner.is_busy() or _packer.is_packing():
+		if cosmetic_option.visible and cosmetic_option.button_pressed:
+			if _cosmetic_cloner.is_busy() or _packer.is_packing():
 				_set_status("Wait for the current clone or pack to finish", true)
 				return
-			_skin_resume_watch = _watcher.is_watching()
+			_cosmetic_resume_watch = _watcher.is_watching()
 			_watcher.stop()
 			_watcher.wait_to_finish()
-			_set_status("Cloning skin dependencies…")
-			_skin_cloner.clone_skin(source_path, source_root, destination, _cfg, display_edit.text.strip_edges())
+			_set_status("Cloning cosmetic dependencies…")
+			_cosmetic_cloner.clone_cosmetic(source_path, source_root, destination, _cfg, display_edit.text.strip_edges())
 		else:
 			_perform_unique_clone(source_path, source_root, mod, destination)
 
-	skin_option.toggled.connect(func(_enabled: bool) -> void: update_destination.call())
+	cosmetic_option.toggled.connect(func(_enabled: bool) -> void: update_destination.call())
 	mod_list.item_selected.connect(func(_index: int) -> void: update_destination.call())
 	mod_list.item_activated.connect(func(_index: int) -> void: clone_selected.call())
 	name_edit.text_changed.connect(func(_text: String) -> void: update_destination.call())
@@ -1793,8 +1868,8 @@ func _on_pack_pressed() -> void:
 
 
 func _pack_mods(mods: Array, empty_message: String) -> void:
-	if _skin_cloner.is_busy():
-		_set_status("Wait for skin cloning to finish", true)
+	if _cosmetic_cloner.is_busy():
+		_set_status("Wait for cosmetic cloning to finish", true)
 		return
 	if not _cfg.is_configured():
 		_set_status("Configure paths in Settings first", true)
@@ -1826,25 +1901,13 @@ func _open_export_mod_dialog(mod: ModInfo) -> void:
 	dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
 	dialog.filters = PackedStringArray(["*.pak ; Unreal Pak"])
-	AppTheme.apply_theme(dialog)
-	dialog.use_native_dialog = false
+	AppTheme.configure_file_dialog(dialog)
 	dialog.title = "Export %s" % mod.name
-	var options := VBoxContainer.new()
-	var format_picker := OptionButton.new()
-	format_picker.add_item("Complete package")
-	format_picker.add_item("Package + manifest")
-	options.add_child(format_picker)
-	var explanation := Label.new()
-	explanation.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var update_explanation := func(index: int) -> void:
-		explanation.text = ("Includes the Asset Registry. Ready to use as a standalone mod package."
-				if index == 0 else
-				"Exports a content pak and a small manifest beside it. Your launcher combines the registries.")
-	format_picker.item_selected.connect(update_explanation)
-	update_explanation.call(0)
-	options.add_child(explanation)
-	dialog.get_vbox().add_child(options)
-	dialog.get_vbox().move_child(options, 0)
+	# Native dialogs ignore controls added to get_vbox(); use their option API.
+	dialog.add_option("Export format", PackedStringArray([
+		"Complete package (includes Asset Registry)",
+		"Package + manifest (for launcher registry merging)",
+	]), 0)
 	dialog.canceled.connect(dialog.queue_free)
 	dialog.current_file = "%s.pak" % _safe_export_basename(mod.name)
 	var paks_dir := _cfg.get_paks_dir()
@@ -1853,16 +1916,17 @@ func _open_export_mod_dialog(mod: ModInfo) -> void:
 	elif DirAccess.dir_exists_absolute(_cfg.mods_dir):
 		dialog.current_dir = _cfg.mods_dir
 	dialog.file_selected.connect(func(path: String) -> void:
+		var with_manifest := int(dialog.get_selected_options().get("Export format", 0)) == 1
 		dialog.queue_free()
-		_export_mod_to_path(mod, path, format_picker.selected == 1)
+		_export_mod_to_path(mod, path, with_manifest)
 	)
 	get_tree().root.add_child(dialog)
-	dialog.popup_centered(Vector2i(900, 650))
+	dialog.popup_centered(Vector2i(760, 520))
 
 
 func _export_mod_to_path(mod: ModInfo, pak_path: String, with_manifest: bool = false) -> void:
-	if _skin_cloner.is_busy():
-		_set_status("Wait for skin cloning to finish", true)
+	if _cosmetic_cloner.is_busy():
+		_set_status("Wait for cosmetic cloning to finish", true)
 		return
 	var mod_name := mod.name
 	_last_pack_operation = func() -> void: _export_mod_to_path(mod, pak_path, with_manifest)
@@ -1888,8 +1952,8 @@ func _safe_export_basename(mod_name: String) -> String:
 
 
 func _on_watch_pressed() -> void:
-	if _skin_cloner.is_busy():
-		_set_status("Wait for skin cloning to finish", true)
+	if _cosmetic_cloner.is_busy():
+		_set_status("Wait for cosmetic cloning to finish", true)
 		return
 	if _watch_toggle_locked:
 		return
