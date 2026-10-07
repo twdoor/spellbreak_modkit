@@ -224,7 +224,8 @@ def validate_primary_asset_location(data: bytes, record: AssetRecord,
 
 def clone_record(data: bytes, record: AssetRecord, names: list[str], old: str, new: str,
                  name_to_index: dict[str, int], added_names: list[str],
-                 references: dict[str, str] | None = None) -> bytes:
+                 references: dict[str, str] | None = None,
+                 native_parent_class: str = "") -> bytes:
     off = record.start
     output = bytearray()
     for _field in range(5):
@@ -234,6 +235,7 @@ def clone_record(data: bytes, record: AssetRecord, names: list[str], old: str, n
     tag_count = i32(data, off)
     output += data[off : off + 4]
     off += 4
+    parent_tags = set()
     for _tag in range(tag_count):
         key, off = parse_fname(data, off, record.end, names)
         output += encode_fname(rewrite_identity(key, old, new), names,
@@ -243,7 +245,12 @@ def clone_record(data: bytes, record: AssetRecord, names: list[str], old: str, n
         value, off = read_fstring(data, off, record.end)
         rewritten = (rewrite_bundle_references(value, references or {old: new})
                      if key == "AssetBundleData" else rewrite_identity(value, old, new))
+        if native_parent_class and key in {"ParentClass", "NativeParentClass"}:
+            rewritten = f"Class'{native_parent_class}'"
+            parent_tags.add(key)
         output += data[string_start:off] if rewritten == value else encode_fstring(rewritten, was_wide)
+    if native_parent_class and parent_tags != {"ParentClass", "NativeParentClass"}:
+        raise RegistryError(f"native parent override requires Blueprint parent tags: {old}")
     output += data[off : record.end]
     return bytes(output)
 
@@ -267,6 +274,10 @@ def patch_registry_many(source: Path, output: Path,
     targets: set[str] = set()
     normalized: list[tuple[str, str]] = []
     for operation in operations:
+        native_parent = operation.get("native_parent_class", "")
+        if not isinstance(native_parent, str) or (native_parent and not re.fullmatch(
+                r"/Script/[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*", native_parent)):
+            raise RegistryError("native_parent_class must be a native /Script/Module.Class path")
         old = str(operation.get("source", ""))
         new = str(operation.get("target", ""))
         if not old or not new or "." not in old or "." not in new:
@@ -292,7 +303,8 @@ def patch_registry_many(source: Path, output: Path,
     name_to_index = {name: index for index, name in enumerate(names)}
     added_names: list[str] = []
     clones = b"".join(clone_record(data, by_path[old], names, old, new,
-                                   name_to_index, added_names, groups[skin_reference_group(operation)])
+                                   name_to_index, added_names, groups[skin_reference_group(operation)],
+                                   operation.get("native_parent_class", ""))
                       for operation, (old, new) in zip(operations, normalized))
     new_entries = b"".join(encode_fstring(name) + name_hashes(name) for name in added_names)
     out = bytearray(data[:assets_end] + clones + data[assets_end:name_offset])

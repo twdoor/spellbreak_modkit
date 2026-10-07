@@ -25,13 +25,16 @@ def fname(index: int) -> bytes:
 
 def build_registry(path: Path) -> None:
     names = ["Old", "/Game/Items", "Blueprint", "/Game/Items/Old", "GeneratedClass",
-             "AssetBundleData", "Data", "/Game/Items/Data", "PrimaryAssetType"]
+             "AssetBundleData", "Data", "/Game/Items/Data", "PrimaryAssetType",
+             "ParentClass", "NativeParentClass"]
     record = b"".join(fname(index) for index in [0, 1, 2, 3, 0])
-    record += struct.pack("<i", 2) + fname(4)
+    record += struct.pack("<i", 4) + fname(4)
     record += patcher.encode_fstring("/Game/Items/Old.Old_C")
     record += fname(5) + patcher.encode_fstring(
         '(Bundles=((BundleName="Equipped",BundleAssets=('
         '/Game/Items/Data.Data,/Game/Items/Old_Base.Old_Base))))')
+    for index in [9, 10]:
+        record += fname(index) + patcher.encode_fstring("Class'/Script/g3.XGameplayEffect'")
     record += struct.pack("<ii", 0, 0)
     record += b"".join(fname(index) for index in [6, 1, 2, 7, 6])
     record += struct.pack("<i", 1) + fname(8) + patcher.encode_fstring("RawSkin")
@@ -117,6 +120,36 @@ def main() -> None:
             assert "scan paths" in str(error)
         else:
             raise AssertionError("RawSkin outside its scan path must be rejected")
+        assert not (root / "invalid.bin").exists()
+        operation = {"source": "/Game/Items/Old.Old", "target": "/Game/New/Projectile.Projectile",
+                     "native_parent_class": "/Script/g3.GSpawnProjectileEffect"}
+        patcher.patch_registry_many(source, output, [operation])
+        data = output.read_bytes()
+        offset = struct.unpack_from("<q", data, 20)[0]
+        names, _ = patcher.parse_names(data, offset)
+        records, _ = patcher.parse_assets(data, names, offset)
+        for record in records:
+            if record.object_path not in {operation["source"], operation["target"]}:
+                continue
+            tags = read_tags(data, names, record)
+            parent = "GSpawnProjectileEffect" if record.object_path == operation["target"] else "XGameplayEffect"
+            assert tags["ParentClass"] == tags["NativeParentClass"] == f"Class'/Script/g3.{parent}'"
+            assert "AssetBundleData" in tags
+        for parent in [None, 5, "/Game/Blueprints/Foo.Foo_C", "/Script/g3.Bad'Class"]:
+            try:
+                patcher.patch_registry_many(source, root / "invalid.bin", [dict(operation, native_parent_class=parent)])
+            except patcher.RegistryError as error:
+                assert "native_parent_class" in str(error)
+            else:
+                raise AssertionError("invalid native parent must be rejected")
+            assert not (root / "invalid.bin").exists()
+        try:
+            patcher.patch_registry_many(source, root / "invalid.bin", [dict(operation,
+                source="/Game/Items/Data.Data", target="/Game/Data/Skins/Test/Test.Test")])
+        except patcher.RegistryError as error:
+            assert "parent tags" in str(error)
+        else:
+            raise AssertionError("missing Blueprint parent tags must be rejected")
         assert not (root / "invalid.bin").exists()
     print("PASS: Asset Registry patcher regression tests")
 

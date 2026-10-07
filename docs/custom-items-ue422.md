@@ -190,6 +190,21 @@ The tool can clone several existing records into one registry build, supports
 different-length package names, and rejects duplicate targets. It does not yet
 extract arbitrary metadata directly from a new package.
 
+### Data-only clones with a different native parent
+
+If a compatible data-only Blueprint is deliberately reparented to a native
+class, its manifest declaration can include
+`"native_parent_class": "/Script/g3.GSpawnProjectileEffect"`. The cooked
+package must already have matching superclass and native default-object imports;
+this field does not modify the asset or compile Blueprint logic.
+
+The registry patcher updates both `ParentClass` and `NativeParentClass` on the
+cloned record, preserving the source record and other metadata. It accepts only
+native `/Script/Module.Class` paths and requires both parent tags on the donor
+record. Mod Manager packing and distribution export/composition preserve this
+field. Older builds that drop unknown declaration fields must be updated before
+packing these assets.
+
 ## Packing and installation
 
 From the root of a staged mod containing `g3/`:

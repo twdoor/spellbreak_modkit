@@ -124,6 +124,8 @@ static func record_unique_clones(descriptions: Array, cfg: ModConfigManager) -> 
 			"source": description.source, "target": description.target}
 		if not str(description.get("reference_group", "")).is_empty():
 			by_target[str(description.target)]["reference_group"] = str(description.reference_group)
+		if not str(description.get("native_parent_class", "")).is_empty():
+			by_target[str(description.target)]["native_parent_class"] = str(description.native_parent_class)
 	var keys := by_target.keys()
 	keys.sort()
 	var custom_assets: Array = []

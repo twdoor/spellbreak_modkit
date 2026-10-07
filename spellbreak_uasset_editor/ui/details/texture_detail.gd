@@ -168,16 +168,16 @@ func _load_preview_async(tex_service: TextureService) -> void:
 			AppTheme.StatusKind.ERROR)
 		return
 	_preview_job_id = _ctx.background_jobs.run(
-		func() -> Image: return tex_service.get_preview_image(uasset_path),
+		func() -> OperationResult: return tex_service.get_preview_result(uasset_path),
 		_on_preview_loaded)
 
 
-func _on_preview_loaded(img: Image) -> void:
+func _on_preview_loaded(result: OperationResult) -> void:
 	_preview_job_id = -1
-	if img:
-		_show_preview(img)
+	if result.ok:
+		_show_preview(result.value)
 	else:
-		_set_status_label(_loading_label, "Failed to load preview", AppTheme.StatusKind.ERROR)
+		_set_status_label(_loading_label, "Failed to load preview: " + result.message, AppTheme.StatusKind.ERROR)
 
 
 func dispose() -> void:

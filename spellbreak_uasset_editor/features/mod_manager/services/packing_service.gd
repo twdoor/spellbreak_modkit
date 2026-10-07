@@ -294,8 +294,11 @@ func _collect_custom_assets(mods: Array) -> OperationResult:
 				return OperationResult.failed(
 						"Unique asset file is missing in '%s': %s" % [mod.name, relative_file])
 			targets[target.to_lower()] = mod.name
-			declarations.append({"source": source, "target": target, "file": relative_file,
-				"reference_group": str(declaration.get("reference_group", ""))})
+			var operation := {"source": source, "target": target, "file": relative_file,
+				"reference_group": str(declaration.get("reference_group", ""))}
+			if declaration.has("native_parent_class"):
+				operation["native_parent_class"] = declaration["native_parent_class"]
+			declarations.append(operation)
 	return OperationResult.succeeded("", declarations)
 
 

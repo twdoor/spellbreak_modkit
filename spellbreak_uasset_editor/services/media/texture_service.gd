@@ -44,14 +44,22 @@ func inject_png(uasset_path: String, png_path: String, output_dir: String) -> vo
 ## Intended to be called from a worker thread (blocks on subprocess).
 ## Returns null on failure.
 func get_preview_image(uasset_path: String) -> Image:
+	var result := get_preview_result(uasset_path)
+	return result.value if result.ok else null
+
+
+## Keep errors attached to each job so concurrent previews cannot overwrite them.
+func get_preview_result(uasset_path: String) -> OperationResult:
 	var result := _do_export_png(uasset_path, "")
 	if not result.ok:
-		return null
+		return result
 	var png_path := str(result.value)
 	if png_path.is_empty() or not FileAccess.file_exists(png_path):
-		return null
+		return OperationResult.failed("Texture preview PNG was not created")
 	var img := Image.load_from_file(png_path)
-	return img
+	if img == null:
+		return OperationResult.failed("Could not load texture preview PNG")
+	return OperationResult.succeeded("", img)
 
 
 ## Resolve a /Game/... package to an extracted .uasset. Prefer the source that
@@ -412,7 +420,7 @@ func _get_texture_toolchain() -> Dictionary:
 		return {"ok": false, "error": "UE4-DDS-Tools not configured"}
 	var python := ProcessUtils.find_python()
 	if python.is_empty():
-		return {"ok": false, "error": "Python was not found in PATH"}
+		return {"ok": false, "error": ProcessUtils.python_not_found_message()}
 	var magick := _find_magick()
 	if magick.is_empty():
 		return {"ok": false, "error": "ImageMagick (magick) not found in PATH"}

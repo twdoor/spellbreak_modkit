@@ -22,7 +22,7 @@ Everything is bundled inside the single binary:
 ## Requirements
 
 - **Python 3.10+** — required at runtime for mod packing, base-pak source generation, and texture operations
-  > **Windows:** when installing Python, check **"Add Python to PATH"** on the first installer screen — it is unchecked by default.
+  > **Windows:** enable **"Add Python to PATH"** when installing Python, or install the Python launcher (`py`), then restart the Modkit. The Modkit checks that Python can run and skips broken or outdated PATH entries. If you see **"Python was not found"** or exit **9009**, install Python 3.10+; if a Microsoft Store shortcut still intercepts Python, disable `python.exe` / `python3.exe` under **Settings > Apps > Advanced app settings > App execution aliases**. Texture previews use the same Python and ImageMagick tools as texture export.
 - **.NET Runtime** — required for UAssetAPI (asset parsing)
 - **ImageMagick** — required for texture export/import (DDS/TGA to PNG conversion)
   > Most Linux distros include it. On Windows, install from [imagemagick.org](https://imagemagick.org/script/download.php) and add to PATH.

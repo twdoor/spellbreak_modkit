@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
@@ -74,6 +75,12 @@ def declarations(manifest: dict) -> list[dict]:
             if not isinstance(entry['reference_group'], str):
                 raise ValueError('reference_group must be a string')
             cleaned['reference_group'] = entry['reference_group']
+        if 'native_parent_class' in entry:
+            parent = entry['native_parent_class']
+            if not isinstance(parent, str) or not re.fullmatch(
+                    r'/Script/[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*', parent):
+                raise ValueError('native_parent_class must be a native /Script/Module.Class path')
+            cleaned['native_parent_class'] = parent
         result.append(cleaned)
     return result
 

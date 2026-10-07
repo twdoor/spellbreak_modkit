@@ -27,7 +27,39 @@ static func find_executable(candidates: Array[String]) -> String:
 
 
 static func find_python() -> String:
-	return find_executable(["python3", "python"])
+	# A PATH entry can be a Microsoft Store alias, an old Python, or a broken
+	# installation. Verify it can execute our code before selecting it.
+	for candidate in ["python3", "python", "py"]:
+		var output: Array = []
+		var finder := "where" if OS.get_name() == "Windows" else "which"
+		var finder_args: Array = [candidate] if OS.get_name() == "Windows" else ["-a", candidate]
+		if OS.execute(finder, finder_args, output, true, false) != 0:
+			continue
+		for path in output_text(output, "").split("\n"):
+			var executable := path.strip_edges()
+			if not executable.is_absolute_path() or not FileAccess.file_exists(executable):
+				continue
+			var resolved := _probe_python(executable, candidate == "py")
+			if not resolved.is_empty():
+				return resolved
+	return ""
+
+
+static func _probe_python(executable: String, launcher: bool = false) -> String:
+	var args: Array = ["-3"] if launcher else []
+	args.append_array(["-c", "import sys; sys.exit(1) if sys.version_info < (3,10) else print(sys.executable)"])
+	var output: Array = []
+	if OS.execute(executable, args, output, true, false) != 0:
+		return ""
+	var resolved := output_text(output, "").strip_edges()
+	return resolved if resolved.is_absolute_path() and FileAccess.file_exists(resolved) else ""
+
+
+static func python_not_found_message() -> String:
+	return ("Python 3.10+ was not found or could not run. Install Python 3.10+ and restart the Modkit. "
+		+ "On Windows, enable Add Python to PATH or install the Python launcher (py). "
+		+ "If Windows opens the Microsoft Store, disable the python.exe/python3.exe shortcuts in "
+		+ "Settings > Apps > Advanced app settings > App execution aliases.")
 
 
 static func run_python_script(python: String, script: String, working_dir: String,

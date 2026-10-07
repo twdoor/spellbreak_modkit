@@ -26,6 +26,7 @@ run_godot_checked() {
 
 run_godot_checked --headless --editor --path "$project_dir" --quit
 run_godot_checked --headless --path "$project_dir" --script res://tests/test_core.gd
+run_godot_checked --headless --path "$project_dir" --script res://tests/test_python_discovery.gd
 run_godot_checked --headless --path "$project_dir" --script res://tests/test_skin_clone.gd
 run_godot_checked --headless --path "$project_dir" --script res://tests/test_cosmetic_clone.gd
 run_godot_checked --headless --path "$project_dir" --script res://tests/test_background_jobs.gd
