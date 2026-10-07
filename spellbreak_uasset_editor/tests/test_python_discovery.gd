@@ -4,7 +4,7 @@ var _failures: Array[String] = []
 
 
 func _init() -> void:
-	var python := ProcessUtils.find_python()
+	var python := ProcessUtils.find_system_python()
 	check(not python.is_empty(), "Find a working Python installation")
 	if not python.is_empty():
 		check(ProcessUtils._probe_python(python) == python, "Probe resolves the actual interpreter")
@@ -34,18 +34,18 @@ func _test_path_fallbacks(python: String) -> void:
 	_write_executable(first.path_join("python3"), "#!/bin/sh\necho 'Python was not found' >&2\nexit 49\n")
 	DirAccess.open(root).create_link(python, second.path_join("python3"))
 	OS.set_environment("PATH", first + ":" + second)
-	check(not ProcessUtils.find_python().is_empty(), "Skip broken alias and try later PATH entries")
+	check(not ProcessUtils.find_system_python().is_empty(), "Skip broken alias and try later PATH entries")
 	DirAccess.remove_absolute(second.path_join("python3"))
 	DirAccess.open(root).create_link(python, second.path_join("python"))
-	check(not ProcessUtils.find_python().is_empty(), "Fall back from python3 alias to python")
+	check(not ProcessUtils.find_system_python().is_empty(), "Fall back from python3 alias to python")
 	DirAccess.remove_absolute(second.path_join("python"))
 	_write_executable(first.path_join("python"), "#!/bin/sh\nexit 1\n")
 	DirAccess.open(root).create_link(python, second.path_join("runtime"))
 	_write_executable(first.path_join("py"),
 		"#!/bin/sh\n[ \"$1\" = '-3' ] || exit 1\nshift\nexec runtime \"$@\"\n")
-	check(not ProcessUtils.find_python().is_empty(), "Launcher fallback requests Python 3")
+	check(not ProcessUtils.find_system_python().is_empty(), "Launcher fallback requests Python 3")
 	DirAccess.remove_absolute(first.path_join("py"))
-	check(ProcessUtils.find_python().is_empty(), "Only unusable installations reports missing Python")
+	check(ProcessUtils.find_system_python().is_empty(), "Only unusable installations reports missing Python")
 	OS.set_environment("PATH", original_path)
 	FileUtils.remove_dir_recursive(root)
 

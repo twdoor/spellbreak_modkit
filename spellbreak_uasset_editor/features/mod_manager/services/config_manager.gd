@@ -135,7 +135,7 @@ func _store_current_values() -> void:
 
 
 func get_umodel_path() -> String:
-	return umodel_path
+	return umodel_path if not umodel_path.is_empty() else BundledRuntime.executable("umodel")
 
 
 ## Returns the cached Spellbreak profile.

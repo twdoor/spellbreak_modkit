@@ -90,11 +90,12 @@ def export_named(data, name):
 
 
 class Converter:
-    def __init__(self, dll):
+    def __init__(self, dll, dotnet="dotnet"):
         self.dll = str(Path(dll).resolve())
+        self.dotnet = dotnet
 
     def run(self, *args):
-        result = subprocess.run(['dotnet', self.dll, *map(str, args)], capture_output=True, text=True)
+        result = subprocess.run([self.dotnet, self.dll, *map(str, args)], capture_output=True, text=True)
         if result.returncode:
             raise ValueError(result.stderr.strip() or result.stdout.strip() or 'Asset conversion failed')
         return result.stdout
@@ -390,7 +391,7 @@ def run(request):
     root = Path(request['mod']).resolve()
     if not (root / 'g3').is_dir():
         raise ValueError('Choose a mod folder containing g3')
-    converter = Converter(request['converter'])
+    converter = Converter(request['converter'], request.get('dotnet', 'dotnet'))
     command = request['command']
     if command == 'merge_localization':
         merged_count = 0

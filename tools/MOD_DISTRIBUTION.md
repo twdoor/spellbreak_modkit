@@ -93,7 +93,7 @@ needed before deploying this workflow to players.
 From the repository root:
 
 ```sh
-python3 tools/build_mod_tools_zip.py dist/0.13.0/spellbreak-mod-tools.zip
+python3 tools/build_mod_tools_zip.py dist/1.0.0/spellbreak-mod-tools.zip
 ```
 
 The archive includes the three scripts, portable usage instructions, and license

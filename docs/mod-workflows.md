@@ -51,7 +51,7 @@ Close asset tabs for the selected mod before applying/building, so an older open
 
 Backups live under `<mod>/.modkit/backups/<operation-id>/`, outside packed `g3/` content. The status message gives the exact path. `restore.json` lists each target and whether it existed before the operation. To restore manually, close the mod's editor tabs, copy the saved files back to the corresponding mod paths, and remove targets marked `false` in that map. Keep `.uasset` and companions together.
 
-Requires the modkit's usual Python 3 and .NET converter. No additional Python packages are required for these editor workflows. Client/server release composition remains separate and is not implemented by this feature.
+Uses the private Python runtime and .NET converter bundled with the editor. No separate runtime installation is needed in release builds. No additional Python packages are required for these editor workflows. Client/server release composition remains separate and is not implemented by this feature.
 
 ## Implementation reference
 

@@ -78,7 +78,7 @@ text = "Launch Command"
 
 [node name="LaunchCommandHint" type="Label" parent="SettingsScroll/ContentMargin/Content"]
 layout_mode = 2
-text = "Shell command to start the game. Leave blank to disable the Launch button."
+text = "Program and arguments used by Launch. Leave blank if you launch the game yourself."
 
 [node name="LaunchCommandEdit" type="LineEdit" parent="SettingsScroll/ContentMargin/Content"]
 unique_name_in_owner = true
@@ -91,7 +91,7 @@ text = "Packing"
 
 [node name="PackingHint" type="Label" parent="SettingsScroll/ContentMargin/Content"]
 layout_mode = 2
-text = "Optionally keep the previous output .pak and .sig after a successful pack or export. This is disabled by default to avoid accumulating backup files."
+text = "Keep a backup of the previous .pak and .sig when packing or exporting."
 
 [node name="BackupRow" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
 layout_mode = 2
@@ -115,7 +115,7 @@ text = ".uasset File Association"
 
 [node name="FileAssociationHint" type="Label" parent="SettingsScroll/ContentMargin/Content"]
 layout_mode = 2
-text = "Use the custom asset icon for .uasset files and open them in Spellbreak Modkit. Registration only affects your user account."
+text = "Open .uasset files in Modkit by default for your user account."
 
 [node name="FileAssociationRow" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
 layout_mode = 2
@@ -130,28 +130,6 @@ text = "Default application"
 [node name="FileAssociationButton" type="Button" parent="SettingsScroll/ContentMargin/Content/FileAssociationRow"]
 unique_name_in_owner = true
 layout_mode = 2
-
-[node name="UmodelTitle" type="Label" parent="SettingsScroll/ContentMargin/Content"]
-layout_mode = 2
-text = "umodel (3D Preview)"
-
-[node name="UmodelHint" type="Label" parent="SettingsScroll/ContentMargin/Content"]
-layout_mode = 2
-text = "Path to the umodel binary. Required for 3D mesh and animation preview. Download from gildor.org/en/projects/umodel"
-
-[node name="UmodelRow" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
-layout_mode = 2
-theme_override_constants/separation = 6
-
-[node name="UmodelEdit" type="LineEdit" parent="SettingsScroll/ContentMargin/Content/UmodelRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-placeholder_text = "/path/to/umodel"
-
-[node name="UmodelBrowseButton" type="Button" parent="SettingsScroll/ContentMargin/Content/UmodelRow"]
-layout_mode = 2
-text = "Browse..."
 
 [node name="SourcesTitle" type="Label" parent="SettingsScroll/ContentMargin/Content"]
 layout_mode = 2
@@ -186,24 +164,6 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="ConfigFileTitle" type="Label" parent="SettingsScroll/ContentMargin/Content"]
-layout_mode = 2
-text = "Config File"
-
-[node name="ConfigFileRow" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 6
-
-[node name="ConfigPathHint" type="Label" parent="SettingsScroll/ContentMargin/Content/ConfigFileRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="OpenConfigButton" type="Button" parent="SettingsScroll/ContentMargin/Content/ConfigFileRow"]
-layout_mode = 2
-text = "Open Config Folder"
-
 [node name="KeyMappingsHeader" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -220,7 +180,7 @@ text = "Edit Keymap"
 
 [node name="KeyMappingsHint" type="Label" parent="SettingsScroll/ContentMargin/Content"]
 layout_mode = 2
-text = "Customize editor shortcuts using native Godot input actions."
+text = "Choose your editor shortcuts."
 
 [node name="ThemeHeader" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
 layout_mode = 2
@@ -238,7 +198,66 @@ text = "Edit Theme"
 
 [node name="ThemeHint" type="Label" parent="SettingsScroll/ContentMargin/Content"]
 layout_mode = 2
-text = "Customize colors, font sizes, spacing, margins, and corner radii with a live preview."
+text = "Adjust colors, text size, and spacing with a live preview."
+
+[node name="AdvancedToggle" type="Button" parent="SettingsScroll/ContentMargin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+alignment = 0
+text = "▸ Advanced"
+
+[node name="AdvancedContent" type="VBoxContainer" parent="SettingsScroll/ContentMargin/Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="UmodelTitle" type="Label" parent="SettingsScroll/ContentMargin/Content/AdvancedContent"]
+layout_mode = 2
+text = "Custom mesh exporter"
+
+[node name="UmodelHint" type="Label" parent="SettingsScroll/ContentMargin/Content/AdvancedContent"]
+layout_mode = 2
+text = "Mesh and animation previews use the bundled exporter. Set a custom umodel executable only if you need to override it."
+
+[node name="UmodelRow" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content/AdvancedContent"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="UmodelEdit" type="LineEdit" parent="SettingsScroll/ContentMargin/Content/AdvancedContent/UmodelRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Bundled exporter (default)"
+
+[node name="UmodelBrowseButton" type="Button" parent="SettingsScroll/ContentMargin/Content/AdvancedContent/UmodelRow"]
+layout_mode = 2
+text = "Browse..."
+
+[node name="UseBundledButton" type="Button" parent="SettingsScroll/ContentMargin/Content/AdvancedContent/UmodelRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Use bundled"
+tooltip_text = "Clear the custom exporter path. Save to keep this change."
+
+[node name="ConfigFileTitle" type="Label" parent="SettingsScroll/ContentMargin/Content/AdvancedContent"]
+layout_mode = 2
+text = "Config File"
+
+[node name="ConfigFileRow" type="HBoxContainer" parent="SettingsScroll/ContentMargin/Content/AdvancedContent"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="ConfigPathHint" type="Label" parent="SettingsScroll/ContentMargin/Content/AdvancedContent/ConfigFileRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="OpenConfigButton" type="Button" parent="SettingsScroll/ContentMargin/Content/AdvancedContent/ConfigFileRow"]
+layout_mode = 2
+text = "Open Config Folder"
 
 [node name="FooterSeparator" type="HSeparator" parent="."]
 layout_mode = 2
@@ -270,12 +289,15 @@ layout_mode = 2
 [connection signal="text_changed" from="SettingsScroll/ContentMargin/Content/LaunchCommandEdit" to="." method="_on_launch_command_changed"]
 [connection signal="toggled" from="SettingsScroll/ContentMargin/Content/BackupRow/BackupToggle" to="." method="_on_backup_toggled"]
 [connection signal="pressed" from="SettingsScroll/ContentMargin/Content/FileAssociationRow/FileAssociationButton" to="." method="_on_register_file_association"]
-[connection signal="text_changed" from="SettingsScroll/ContentMargin/Content/UmodelRow/UmodelEdit" to="." method="_on_umodel_path_changed"]
-[connection signal="pressed" from="SettingsScroll/ContentMargin/Content/UmodelRow/UmodelBrowseButton" to="." method="_on_umodel_browse_pressed"]
+[connection signal="text_changed" from="SettingsScroll/ContentMargin/Content/AdvancedContent/UmodelRow/UmodelEdit" to="." method="_on_umodel_path_changed"]
+[connection signal="pressed" from="SettingsScroll/ContentMargin/Content/AdvancedContent/UmodelRow/UmodelBrowseButton" to="." method="_on_umodel_browse_pressed"]
 [connection signal="pressed" from="SettingsScroll/ContentMargin/Content/SourceActions/AddSourceButton" to="." method="_add_source"]
 [connection signal="pressed" from="SettingsScroll/ContentMargin/Content/SourceActions/GenerateSourceButton" to="." method="_on_generate_base_source_pressed"]
-[connection signal="pressed" from="SettingsScroll/ContentMargin/Content/ConfigFileRow/OpenConfigButton" to="." method="_open_config_folder"]
+[connection signal="pressed" from="SettingsScroll/ContentMargin/Content/AdvancedContent/ConfigFileRow/OpenConfigButton" to="." method="_open_config_folder"]
 [connection signal="pressed" from="SettingsScroll/ContentMargin/Content/KeyMappingsHeader/EditKeymapButton" to="." method="_on_edit_keymap_pressed"]
 [connection signal="pressed" from="SettingsScroll/ContentMargin/Content/ThemeHeader/EditThemeButton" to="." method="_on_edit_theme_pressed"]
 [connection signal="pressed" from="FooterMargin/Footer/SaveButton" to="." method="_on_save"]
 [connection signal="pressed" from="FooterMargin/Footer/CloseOrRevertButton" to="." method="_on_close_or_revert"]
+
+[connection signal="toggled" from="SettingsScroll/ContentMargin/Content/AdvancedToggle" to="." method="_on_advanced_toggled"]
+[connection signal="pressed" from="SettingsScroll/ContentMargin/Content/AdvancedContent/UmodelRow/UseBundledButton" to="." method="_on_use_bundled_pressed"]

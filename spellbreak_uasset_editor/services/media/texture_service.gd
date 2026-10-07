@@ -1,11 +1,11 @@
 class_name TextureService extends BackgroundOperationService
 
-## Wraps UE4-DDS-Tools and ImageMagick to provide texture extraction, injection,
+## Wraps UE4-DDS-Tools and Godot image codecs to provide texture extraction, injection,
 ## and preview for UE4 texture assets.  Subprocess pattern mirrors PackingService.
 ##
 ## Pipeline:
-##   Export: uasset -> TGA (UE4-DDS-Tools/libtexconv) -> PNG (ImageMagick)
-##   Import: PNG -> TGA (ImageMagick) -> inject into uasset (UE4-DDS-Tools)
+##   Export: uasset -> TGA (UE4-DDS-Tools/libtexconv) -> PNG (Godot)
+##   Import: PNG -> TGA (Godot) -> inject into uasset (UE4-DDS-Tools)
 ##   Preview: export to PNG in temp dir, load as Godot Image
 
 signal operation_finished(result: OperationResult)
@@ -93,10 +93,6 @@ func is_configured() -> bool:
 	return not main_py.is_empty() and FileAccess.file_exists(main_py)
 
 
-func has_magick() -> bool:
-	return not _find_magick().is_empty()
-
-
 # ── Background operations ────────────────────────────────────────────────────
 
 
@@ -130,8 +126,7 @@ func _do_export_png(uasset_path: String, output_png: String) -> OperationResult:
 	if not bool(repaired.get("ok", false)):
 		return _export_error(str(repaired.get("error", "Texture package is missing companion files")))
 
-	# Step 1: Export to TGA in temp dir. ImageMagick's DDS reader support
-	# varies by platform, so libtexconv handles DDS decoding.
+	# Step 1: libtexconv decodes DDS to TGA/HDR on both platforms.
 	var tmp_result := FileUtils.make_temp_dir("sb_tex")
 	if not bool(tmp_result.get("ok", false)):
 		return _export_error(str(tmp_result.get("error", "Could not create temp directory")))
@@ -153,10 +148,10 @@ func _do_export_png(uasset_path: String, output_png: String) -> OperationResult:
 	if intermediate_path.is_empty():
 		var dds_path := _find_first_file_in_dir(tmp_dir, ["dds"])
 		if not dds_path.is_empty():
-			return _export_error("Texture format could only be exported as DDS, which ImageMagick cannot reliably preview on Linux", tmp_dir)
+			return _export_error("Texture format could only be exported as DDS, without a decoded preview image", tmp_dir)
 		return _export_error("No image file produced by UE4-DDS-Tools", tmp_dir)
 
-	# Step 2: Convert TGA/HDR -> PNG via ImageMagick
+	# Step 2: Convert TGA/HDR -> PNG using built-in codecs
 	var target_png := output_png
 	if target_png.is_empty():
 		# Use cache dir
@@ -165,14 +160,9 @@ func _do_export_png(uasset_path: String, output_png: String) -> OperationResult:
 		target_png = cache_dir.path_join(_cache_key(uasset_path) + ".png")
 
 	var staged_png := tmp_dir.path_join("converted.png")
-	var convert_output: Array = []
-	var convert_code := OS.execute(str(tools["magick"]), [intermediate_path, staged_png],
-			convert_output, true, false)
-
-	if convert_code != 0:
-		var err_text := ProcessUtils.output_text(convert_output)
-		return _export_error("%s->PNG conversion failed: %s" % [
-				intermediate_path.get_extension().to_upper(), err_text], tmp_dir)
+	var converted := TextureImageCodec.to_png(intermediate_path, staged_png)
+	if not converted.ok:
+		return _export_error(converted.message, tmp_dir)
 
 	if not FileAccess.file_exists(staged_png):
 		return _export_error("PNG file was not created", tmp_dir)
@@ -185,7 +175,7 @@ func _do_export_png(uasset_path: String, output_png: String) -> OperationResult:
 
 
 ## Inject PNG -> TGA -> uasset.
-## Pipeline: ImageMagick converts PNG to TGA (lossless), then UE4-DDS-Tools
+## Pipeline: Godot converts PNG to TGA (lossless), then UE4-DDS-Tools
 ## injects the TGA using libtexconv to match the original texture's BC format.
 ## Returns [success: bool, message: String].
 func _do_inject_png(uasset_path: String, png_path: String, output_dir: String) -> OperationResult:
@@ -205,18 +195,11 @@ func _do_inject_png(uasset_path: String, png_path: String, output_dir: String) -
 		return _inject_error(str(tmp_result.get("error", "Could not create temp directory")))
 	var tmp_dir := str(tmp_result["path"])
 
-	# Step 1: Convert PNG to TGA via ImageMagick (lossless, no compression issues)
-	# TGA is natively supported by texconv on all platforms (no WIC needed).
+	# TGA is supported by libtexconv on both Windows and Linux.
 	var tga_path := tmp_dir.path_join("texture.tga")
-	var convert_output: Array = []
-	var convert_code := OS.execute(str(tools["magick"]), [png_path, tga_path],
-			convert_output, true, false)
-
-	if convert_code != 0:
-		var err_text := ProcessUtils.output_text(convert_output)
-		return _inject_error("PNG->TGA conversion failed: %s" % err_text, tmp_dir)
-	if not FileAccess.file_exists(tga_path):
-		return _inject_error("TGA file was not created", tmp_dir)
+	var converted := TextureImageCodec.to_tga(png_path, tga_path)
+	if not converted.ok:
+		return _inject_error(converted.message, tmp_dir)
 
 	# Step 2: Inject TGA into uasset (texconv handles BC format matching)
 	var output_dir_error := DirAccess.make_dir_recursive_absolute(output_dir)
@@ -245,19 +228,13 @@ func _do_inject_png(uasset_path: String, png_path: String, output_dir: String) -
 	var collected := _collect_injected_texture_files(uasset_path, staged_output, output_dir, base_name)
 	if not bool(collected.get("ok", false)):
 		return _inject_error(str(collected.get("error", "Could not prepare injected texture files")), tmp_dir)
-	var install_result := FileUtils.install_staged_files_with_result(
-			collected["files"], [], true, "texture-backup")
+	# Keep rollback copies only during installation; successful edits leave no backups.
+	var install_error := FileUtils.install_staged_files(collected["files"])
 	_remove_dir(tmp_dir)
-	var install_error := int(install_result.get("error", ERR_BUG))
 	if install_error != OK:
 		return _inject_error("Could not install injected texture (error %d)" % install_error)
 
-	var message := "Injected texture into %s" % uasset_path.get_file()
-	var backup_summary := FileUtils.format_backup_summary(install_result.get("backups", []))
-	if not backup_summary.is_empty():
-		message += ". " + backup_summary
-	return OperationResult.succeeded(message).with_backups(
-			install_result.get("backups", []))
+	return OperationResult.succeeded("Injected texture into %s" % uasset_path.get_file())
 
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
@@ -421,16 +398,12 @@ func _get_texture_toolchain() -> Dictionary:
 	var python := ProcessUtils.find_python()
 	if python.is_empty():
 		return {"ok": false, "error": ProcessUtils.python_not_found_message()}
-	var magick := _find_magick()
-	if magick.is_empty():
-		return {"ok": false, "error": "ImageMagick (magick) not found in PATH"}
 	return {
 		"ok": true,
 		"main_py": main_py,
 		"dds_tools_dir": _cfg.get_dds_tools_dir(),
 		"dds_ver": _cfg.get_game_profile().dds_tools_version,
 		"python": python,
-		"magick": magick,
 	}
 
 
@@ -444,13 +417,6 @@ func _inject_error(message: String, tmp_dir: String = "") -> OperationResult:
 	if not tmp_dir.is_empty():
 		_remove_dir(tmp_dir)
 	return OperationResult.failed(message)
-
-
-func _find_magick() -> String:
-	var candidates: Array[String] = ["magick"]
-	if OS.get_name() != "Windows":
-		candidates.append("convert")
-	return ProcessUtils.find_executable(candidates)
 
 
 ## Find the first file with one of the given extensions in a directory.

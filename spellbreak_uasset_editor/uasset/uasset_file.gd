@@ -100,7 +100,7 @@ static func _load_binary(path: String) -> UAssetFile:
 		return null
 
 	var output: Array = []
-	var exit_code := OS.execute("dotnet", [dll, "read", path], output, true)
+	var exit_code := OS.execute(ProcessUtils.find_dotnet(), [dll, "read", path], output, true)
 	if exit_code != 0:
 		push_error("UAssetFile: Converter failed (exit %d): %s" % [exit_code, output[0] if output.size() > 0 else "no output"])
 		return null
@@ -347,7 +347,7 @@ func save_file(path: String = "") -> Error:
 
 			_remove_staged_asset_files(stage_stem)
 			var output: Array = []
-			var exit_code := OS.execute("dotnet", [dll, "fromjson", tmp_json, staged_uasset], output, true)
+			var exit_code := OS.execute(ProcessUtils.find_dotnet(), [dll, "fromjson", tmp_json, staged_uasset], output, true)
 
 			if exit_code == 0:
 				break  # success

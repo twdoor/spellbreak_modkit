@@ -51,6 +51,20 @@ const _TAB_TITLE_SCROLL_GAP := "   "
 const _STARTUP_OPEN_EXTENSIONS := ["uasset", "json"]
 
 func _ready() -> void:
+	var arguments := OS.get_cmdline_user_args()
+	var smoke_index := arguments.find("--verify-toolchain")
+	if smoke_index >= 0:
+		set_process(false)
+		set_process_input(false)
+		set_process_unhandled_input(false)
+		var texture_path := arguments[smoke_index + 1] if smoke_index + 1 < arguments.size() else ""
+		var failures := ToolchainSmokeCheck.new().run(texture_path)
+		for failure in failures:
+			printerr("FAIL: " + failure)
+		if failures.is_empty():
+			print("PASS: self-contained toolchain (empty PATH)")
+		get_tree().quit(0 if failures.is_empty() else 1)
+		return
 	_background_jobs = BackgroundJobRunner.new()
 	_keymap_config = KeymapSettingsTab.load_saved_config()
 	KeymapSettingsTab.apply_config(_keymap_config)
@@ -167,7 +181,7 @@ func _setup_mod_tab() -> void:
 			if child is UassetFileTab and child.tab_asset != null:
 				var path: String = child.tab_asset.binary_path
 				if FileUtils.is_path_within(path, mod_path):
-					return "Close this mod’s asset tabs before applying a workflow, so open edits cannot overwrite the result."
+					return "Close this mod’s asset tabs before changing its files, so open edits cannot overwrite the result."
 		return ""
 	_cfg = panel.get_config()
 	_texture_service = TextureService.new().setup(_cfg)

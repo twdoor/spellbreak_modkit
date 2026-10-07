@@ -82,16 +82,9 @@ func _configure_scene_ui() -> void:
 func _sync_controls() -> void:
 	var profile := _cfg.get_game_profile()
 	var cr := profile.content_root
-	_game_directory_hint.text = (
-		"Select the Spellbreak install folder used to locate the executable and pak files. "
-		+ "The folder should contain %s/ so paks resolve under %s/Content/Paks/." % [cr, cr])
-	_mods_directory_hint.text = (
-		("Choose the folder that contains your mod folders. Structure: Mods/MyMod/%s/Content/... "
-		+ "Each direct child folder is treated as one mod and can be enabled, packed, or watched separately.") % cr)
-	_sources_hint.text = (
-		"Register exported asset directories for reference — the base game export, older game versions, "
-		+ "reference mods, etc. Each source has a name and a path to its root folder "
-		+ "(the one containing %s/). Drag the handles to reorder; the first source is the default." % cr)
+	_game_directory_hint.text = "Game install folder containing %s/." % cr
+	_mods_directory_hint.text = "Each folder here is one mod, for example Mods/MyMod/%s/Content/." % cr
+	_sources_hint.text = "Extracted asset folders containing %s/. Drag to reorder; the first is the default source." % cr
 
 	_syncing_controls = true
 	_game_directory_edit.text = _cfg.game_dir
@@ -101,6 +94,7 @@ func _sync_controls() -> void:
 	_update_toggle_button_text(_backup_toggle, _cfg.keep_pack_backups)
 	_umodel_edit.text = _cfg.umodel_path
 	_config_path_hint.text = _cfg.get_config_path()
+	_config_path_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_syncing_controls = false
 
 	_file_association_button.text = _file_association_service.action_label()
@@ -498,7 +492,26 @@ func _is_dirty() -> bool:
 	return _snapshot_config() != _initial_snapshot
 
 
+func _on_advanced_toggled(expanded: bool) -> void:
+	%AdvancedContent.visible = expanded
+	_update_advanced_state()
+
+
+func _on_use_bundled_pressed() -> void:
+	_umodel_edit.text = ""
+	_on_umodel_path_changed("")
+
+
+func _update_advanced_state() -> void:
+	var custom := not _cfg.umodel_path.strip_edges().is_empty()
+	%UseBundledButton.disabled = not custom
+	%AdvancedToggle.text = ("▾ " if %AdvancedContent.visible else "▸ ") + "Advanced"
+	if custom:
+		%AdvancedToggle.text += " · Custom mesh exporter"
+
+
 func _update_footer_state() -> void:
+	_update_advanced_state()
 	var dirty := _is_dirty()
 	if is_instance_valid(_save_btn):
 		_save_btn.disabled = not dirty

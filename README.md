@@ -16,20 +16,21 @@ Everything is bundled inside the single binary:
 - [UAssetAPI](https://github.com/atenfyr/UAssetAPI) converter (pre-compiled .NET DLLs)
 - [u4pak](https://github.com/panzi/u4pak) for packing mods into `.pak` files and extracting base-game sources
 - [UE4-DDS-Tools](https://github.com/matyalatte/UE4-DDS-Tools) + [libtexconv](https://github.com/matyalatte/Texconv-Custom-DLL) for texture extraction/injection
+- Private Python and .NET runtimes, plus UE Viewer for mesh/animation export (self-contained builds)
 
 ---
 
 ## Requirements
 
-- **Python 3.10+** — required at runtime for mod packing, base-pak source generation, and texture operations
-  > **Windows:** enable **"Add Python to PATH"** when installing Python, or install the Python launcher (`py`), then restart the Modkit. The Modkit checks that Python can run and skips broken or outdated PATH entries. If you see **"Python was not found"** or exit **9009**, install Python 3.10+; if a Microsoft Store shortcut still intercepts Python, disable `python.exe` / `python3.exe` under **Settings > Apps > Advanced app settings > App execution aliases**. Texture previews use the same Python and ImageMagick tools as texture export.
-- **.NET Runtime** — required for UAssetAPI (asset parsing)
-- **ImageMagick** — required for texture export/import (DDS/TGA to PNG conversion)
-  > Most Linux distros include it. On Windows, install from [imagemagick.org](https://imagemagick.org/script/download.php) and add to PATH.
+See the [1.0 release notes](release_notes/1.0.0.md) for the changes and upgrade notes.
 
-Optional:
-- **[umodel](https://www.gildor.org/en/projects/umodel)** (UE Viewer) — required for 3D mesh and animation preview (StaticMesh / SkeletalMesh / AnimSequence assets). Download a prebuilt binary or [build from source](https://github.com/gildor2/UEViewer). Set the path in **Settings > umodel (3D Preview)**.
-- **Godot 4.7.1+** — only if building the editor from source (no .NET support needed)
+Self-contained Windows x64 and Linux x86-64 builds include private Python and .NET runtimes, UE Viewer, and the texture tools. **No separate Python, .NET, or ImageMagick installation is required.** Runtimes are extracted into the editor's writable user-data directory on first use; this needs additional disk space and can take a few seconds. The editor does not download or install packages at runtime.
+
+Git must be installed separately to use repository controls. The standalone mod distribution tools require Python 3.10+; this does not apply to the desktop editor.
+
+Linux builds support **glibc-based x86-64 distributions, including Fedora**, with glibc 2.38+ and libstdc++ with GLIBCXX_3.4.26. Alpine/musl is not supported. These are native operating-system libraries, not Python/.NET installations. The desktop editor also needs the usual graphics/display support for Godot.
+
+For development without generated runtime bundles, install Python 3.10+ and .NET 8; Godot 4.7.1+ is required to build the editor. ImageMagick is no longer used. Older published releases may still require external tools; these instructions apply to builds made with the self-contained packaging workflow.
 
 ---
 
@@ -52,7 +53,7 @@ git clone https://github.com/twdoor/spellbreak_modkit
 cd spellbreak_modkit
 ```
 
-Open `spellbreak_uasset_editor/` in Godot 4.7.1+, then **Project > Export > Linux/Windows**. All dependencies (converter, u4pak, the Asset Registry patcher, and ue4_dds_tools) are bundled automatically.
+For source development, open `spellbreak_uasset_editor/project.godot` in Godot 4.7.1+ with Python 3.10+ and .NET 8 installed. For self-contained exports, generate the platform runtime archives with `tools/build_runtime_bundles.py` (see `--help`), then export with `scripts/export_self_contained.sh`. Linux UE Viewer builds use `tools/build_umodel_linux.py`. Run the regression suite with `GODOT=/path/to/godot scripts/test.sh`.
 
 ### 2. Configure the editor
 
@@ -62,9 +63,11 @@ Launch the app, click **Settings**, and fill in:
 - **Mods directory** — the parent folder that contains your mod folders. Each direct child is treated as one mod and should mirror the game structure, for example `Mods/MyMod/g3/Content/...`.
 - **Launch command** — optional, used by the Launch button
 - **.uasset file association** — optional, registers the editor and its custom asset icon for `.uasset` files. Linux can set it as the default directly; Windows opens Default Apps for the final choice.
-- **umodel path** — optional, path to the umodel binary for 3D mesh and animation preview
+- **Advanced > umodel path** — optional override for the bundled mesh and animation exporter
 - **Sources** — extracted asset directories for reference. Use **Generate from Pak** to select a game `.pak`, choose an output folder, unpack it, and add the extracted folder as a source.
 - **Theme** — opens a compact visual editor with shared palette colors, text sizes, spacing, padding, and roundness. Related UI roles are derived automatically; changes preview live and can be saved or canceled.
+
+Diagnostics groups checks by feature and collapses healthy configuration details. Enable **Show technical details** to inspect full paths, or use **Copy report** when reporting a problem.
 
 Settings are saved atomically to `settings.cfg` in the operating system's
 per-user configuration directory (`~/.config/spellbreak-modkit` on Linux,
@@ -279,7 +282,9 @@ When opening a texture `.uasset` (Texture2D, TextureCube, etc.), the detail pane
 - **Export as PNG** — save the texture to a PNG file
 - **Import PNG** — inject an edited PNG back into the `.uasset` (automatically handles BC1/BC3/BC5/BC7 format matching)
 
-> Texture operations require Python and ImageMagick to be installed and in PATH.
+Successful texture imports remove their temporary rollback copies; they no longer leave `.sb_texture-backup_*` files beside assets. Existing backups from older versions are not automatically deleted.
+
+> Texture operations use the bundled Python/native texture tools and Godot image codecs. No ImageMagick installation is needed.
 
 ### Audio support
 
@@ -300,7 +305,7 @@ When opening a StaticMesh or SkeletalMesh `.uasset`, the detail panel shows:
 - **Animation preview** — on SkeletalMesh assets, auto-find likely AnimSequence `.uasset` files or browse manually, then play, pause, loop, change speed, or scrub on the current mesh
 - **Export as glTF** — save the mesh to a glTF file
 
-> Mesh and animation preview require [umodel](https://www.gildor.org/en/projects/umodel) to be installed and configured in Settings.
+> Mesh and animation previews use bundled [umodel](https://www.gildor.org/en/projects/umodel). Settings can override its location.
 
 ---
 
@@ -434,4 +439,38 @@ replacement, subprocess argument handling, and pak creation/failure recovery.
 - [u4pak](https://github.com/panzi/u4pak) by panzi — UE4 pak archive tool (bundled)
 - [UE4-DDS-Tools](https://github.com/matyalatte/UE4-DDS-Tools) by matyalatte — UE4 texture extraction/injection (bundled)
 - [Texconv-Custom-DLL](https://github.com/matyalatte/Texconv-Custom-DLL) by matyalatte — Cross-platform texture format converter (bundled as libtexconv)
-- [umodel / UE Viewer](https://www.gildor.org/en/projects/umodel) by Gildor — UE4 mesh viewer/exporter (optional, user-installed)
+- [umodel / UE Viewer](https://www.gildor.org/en/projects/umodel) by Gildor — UE4 mesh viewer/exporter (bundled; optional path override)
+
+### Git projects
+
+Click a project's Git badge to view its branch, tracked remote, incoming/outgoing
+commits, and local files. **Fetch** updates remote information; **Pull** only
+fast-forwards a clean branch; **Commit all** saves local edits; **Push** uploads
+commits (or **Publish branch** configures the first upstream). Operations run in
+the background, and their output can be copied from the dialog.
+
+**Branches…** switches to a local branch or creates a local tracking branch from
+a fetched remote branch. Commit local edits before switching; ignored files are
+protected from being overwritten. **Create and switch** starts a new branch at
+the current commit and keeps your uncommitted changes. New branches stay local
+until you publish them. Fetch first to discover new remote branches.
+
+**Sync…** replaces the current local branch and working folder with the latest
+tracked remote branch after confirmation. Local-only commits leave the current
+branch, modified files are replaced, and new/ignored files are deleted. No backup
+branch or stash is created.
+
+Enable **Back up local work first** in the Sync confirmation to retain local
+commits on a `modkit-backup/force-sync-*` branch and modified, staged, new, and
+ignored files in a stash, pinned under `refs/modkit-backups/force-sync-*`. The
+result shows both recovery references. The checkbox is off by default; the confirmation
+text and button update when it is toggled. Neither option changes the remote.
+A failed fetch stops before local changes. Backup mode stops if the backup fails.
+Detached heads, missing upstreams, submodules, and in-progress merges/rebases
+require a Git client. Nested repositories are not deleted. Close the project's
+open asset tabs first; file watching is paused during Git operations.
+
+To recover, first preserve any work done since syncing, then switch to the named
+backup branch and apply the named stash reference with `git stash apply --index
+<reference>`. The backup remains available until explicitly deleted. Avoid other
+Git clients or external file edits while an operation is running.

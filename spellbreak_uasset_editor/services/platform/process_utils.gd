@@ -27,6 +27,15 @@ static func find_executable(candidates: Array[String]) -> String:
 
 
 static func find_python() -> String:
+	var bundled := BundledRuntime.executable("python")
+	if not bundled.is_empty():
+		return bundled
+	if not OS.has_feature("editor"):
+		return ""
+	return find_system_python()
+
+
+static func find_system_python() -> String:
 	# A PATH entry can be a Microsoft Store alias, an old Python, or a broken
 	# installation. Verify it can execute our code before selecting it.
 	for candidate in ["python3", "python", "py"]:
@@ -55,7 +64,16 @@ static func _probe_python(executable: String, launcher: bool = false) -> String:
 	return resolved if resolved.is_absolute_path() and FileAccess.file_exists(resolved) else ""
 
 
+static func find_dotnet() -> String:
+	var bundled := BundledRuntime.executable("dotnet")
+	if not bundled.is_empty():
+		return bundled
+	return find_executable(["dotnet"]) if OS.has_feature("editor") else ""
+
+
 static func python_not_found_message() -> String:
+	if not OS.has_feature("editor"):
+		return "Bundled Python is missing or could not be extracted. Reinstall the complete Modkit release and check that its user-data folder is writable."
 	return ("Python 3.10+ was not found or could not run. Install Python 3.10+ and restart the Modkit. "
 		+ "On Windows, enable Add Python to PATH or install the Python launcher (py). "
 		+ "If Windows opens the Microsoft Store, disable the python.exe/python3.exe shortcuts in "
@@ -66,7 +84,7 @@ static func run_python_script(python: String, script: String, working_dir: Strin
 		args: Array, output: Array) -> int:
 	if python.is_empty():
 		return ERR_FILE_NOT_FOUND
-	var python_args: Array = ["-c", _PYTHON_CWD_RUNNER, working_dir, script]
+	var python_args: Array = ["-I", "-c", _PYTHON_CWD_RUNNER, working_dir, script]
 	python_args.append_array(args)
 	return OS.execute(python, python_args, output, true, false)
 

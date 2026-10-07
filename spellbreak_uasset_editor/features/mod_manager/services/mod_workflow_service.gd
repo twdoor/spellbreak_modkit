@@ -7,6 +7,7 @@ func run(request: Dictionary) -> void:
 	var script := ToolchainRegistry.mod_workflows_script()
 	request = request.duplicate(true)
 	request["converter"] = ToolchainRegistry.converter_dll()
+	request["dotnet"] = ProcessUtils.find_dotnet()
 	var error := _start_background(_run.bind(request, script),
 		func(result: OperationResult) -> void: finished.emit(result))
 	if error != OK:

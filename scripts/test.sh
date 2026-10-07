@@ -26,13 +26,16 @@ run_godot_checked() {
 
 run_godot_checked --headless --editor --path "$project_dir" --quit
 run_godot_checked --headless --path "$project_dir" --script res://tests/test_core.gd
+run_godot_checked --headless --path "$project_dir" --script res://tests/test_git_force_sync.gd
 run_godot_checked --headless --path "$project_dir" --script res://tests/test_python_discovery.gd
+run_godot_checked --headless --path "$project_dir" --script res://tests/test_texture_codec.gd
 run_godot_checked --headless --path "$project_dir" --script res://tests/test_skin_clone.gd
 run_godot_checked --headless --path "$project_dir" --script res://tests/test_cosmetic_clone.gd
 run_godot_checked --headless --path "$project_dir" --script res://tests/test_background_jobs.gd
 run_godot_checked --headless --path "$project_dir" --script res://tests/app_settings_test.gd
 run_godot_checked --headless --path "$project_dir" --script res://tests/app_theme_manager_test.gd
 run_godot_checked --headless --path "$project_dir" --script res://tests/test_mod_workflow_ui.gd
+run_godot_checked --headless --path "$project_dir" --script res://tests/test_settings_diagnostics.gd
 "$python_bin" "$repo_root/tools/test_patch_asset_registry.py"
 "$python_bin" "$repo_root/tools/test_mod_distribution.py"
 "$python_bin" "$repo_root/tools/test_mod_workflows.py"

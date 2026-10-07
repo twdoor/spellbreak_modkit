@@ -14,6 +14,9 @@ enum CheckStatus {
 
 var _cfg: ModConfigManager
 var _content: VBoxContainer
+var _header: VBoxContainer
+var _show_details := false
+var _section_expanded: Dictionary = {}
 var _summary_label: Label
 var _checks: Array[Dictionary] = []
 
@@ -56,6 +59,16 @@ func _build_ui() -> void:
 	_content.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
 	outer.add_child(_content)
 	scroll.add_child(outer)
+	var header_margin := MarginContainer.new()
+	header_margin.add_theme_constant_override("margin_left", AppTheme.MARGIN_SETTINGS_H)
+	header_margin.add_theme_constant_override("margin_right", AppTheme.MARGIN_SETTINGS_H)
+	header_margin.add_theme_constant_override("margin_top", AppTheme.MARGIN_SETTINGS_V)
+	header_margin.add_theme_constant_override("margin_bottom", AppTheme.SPACING_ROW)
+	_header = VBoxContainer.new()
+	_header.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
+	header_margin.add_child(_header)
+	add_child(header_margin)
+	add_child(HSeparator.new())
 	add_child(scroll)
 
 	_build_header()
@@ -83,31 +96,44 @@ func _build_header() -> void:
 	row.add_child(refresh_btn)
 
 	var copy_btn := Button.new()
-	copy_btn.text = "Copy Summary"
+	copy_btn.text = "Copy report"
+	copy_btn.tooltip_text = "Copy all checks and full paths for troubleshooting"
 	copy_btn.pressed.connect(_copy_summary)
 	row.add_child(copy_btn)
 
-	_content.add_child(row)
+	_header.add_child(row)
+
+	var details := CheckButton.new()
+	details.text = "Show technical details"
+	details.button_pressed = _show_details
+	details.toggled.connect(func(enabled: bool) -> void:
+		_show_details = enabled
+		for node in _content.find_children("CheckDetail", "Label", true, false):
+			node.visible = enabled)
+	_header.add_child(details)
 
 	var hint := Label.new()
-	hint.text = "Checks paths, bundled tools, external executables, writable folders, and Spellbreak profile assumptions."
+	hint.text = "Checks tool availability and your configured folders. Copy report includes full paths."
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD
 	AppTheme.style_muted(hint)
-	_content.add_child(hint)
+	_header.add_child(hint)
 
 
 func _build_summary() -> void:
 	var counts := _status_counts(_checks)
 	var failed := int(counts.get(CheckStatus.FAIL, 0))
 	var warned := int(counts.get(CheckStatus.WARN, 0))
-	var passed := int(counts.get(CheckStatus.PASS, 0))
+	var issues := failed + warned
+	var summary := "All availability checks passed"
+	if issues > 0:
+		summary = "1 issue needs attention" if issues == 1 else "%d issues need attention" % issues
 
 	_summary_label = AppTheme.make_status_label(
-		"%d passed, %d warning(s), %d failed" % [passed, warned, failed],
+		summary,
 		AppTheme.StatusKind.ERROR if failed > 0 else (
 			AppTheme.StatusKind.WARNING if warned > 0 else AppTheme.StatusKind.SUCCESS),
 		AppTheme.FONT_STATUS)
-	_content.add_child(_summary_label)
+	_header.add_child(_summary_label)
 
 
 func _build_sections() -> void:
@@ -122,9 +148,29 @@ func _build_sections() -> void:
 			return str(check.get("section", "")) == section)
 		if section_checks.is_empty():
 			continue
-		_add_section(section)
+		var issues := section_checks.filter(func(check: Dictionary) -> bool:
+			return int(check.status) in [CheckStatus.FAIL, CheckStatus.WARN]).size()
+		var body := VBoxContainer.new()
+		body.add_theme_constant_override("separation", AppTheme.SPACING_ROW)
+		body.visible = issues > 0 or bool(_section_expanded.get(section,
+			section not in ["Configuration", "Spellbreak Profile"]))
+		var toggle := Button.new()
+		toggle.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		toggle.toggle_mode = true
+		toggle.button_pressed = body.visible
+		var caption := "%s · %d checks" % [section, section_checks.size()]
+		if issues > 0:
+			caption += " · %d need attention" % issues
+		toggle.text = ("▾ " if body.visible else "▸ ") + caption
+		toggle.toggled.connect(func(expanded: bool) -> void:
+			body.visible = expanded
+			_section_expanded[section] = expanded
+			toggle.text = ("▾ " if expanded else "▸ ") + caption)
+		_content.add_child(toggle)
+		_content.add_child(body)
 		for check in section_checks:
-			_add_check_row(check)
+			_add_check_row(check, body)
+
 
 
 func _build_footer() -> void:
@@ -168,8 +214,8 @@ func _configuration_checks() -> Array[Dictionary]:
 
 	var launch_cmd := _cfg.launch_cmd.strip_edges()
 	if launch_cmd.is_empty():
-		checks.append(_check("Configuration", "Launch command", CheckStatus.WARN,
-			"Launch button is disabled until a command is configured"))
+		checks.append(_check("Configuration", "Launch command", CheckStatus.INFO,
+			"Optional · Launch button is disabled"))
 	else:
 		checks.append(_launch_command_check(launch_cmd))
 
@@ -202,29 +248,37 @@ func _filesystem_checks() -> Array[Dictionary]:
 
 
 func _tool_checks() -> Array[Dictionary]:
-	var checks: Array[Dictionary] = []
 	var python := ProcessUtils.find_python()
-	checks.append(_executable_check("Tools", "Python", python, true))
-	checks.append(_executable_check("Tools", "dotnet", ProcessUtils.find_executable(["dotnet"]), true))
-
-	var converter := UAssetFile._get_converter_dll()
-	checks.append(_file_check("Tools", "UAsset converter", converter, true))
-
-	var u4pak_path := _cfg.get_u4pak_path() if _cfg != null else ""
-	checks.append(_file_check("Tools", "u4pak.py", u4pak_path, true))
-
-	var dds_main := _cfg.get_dds_tools_main_py() if _cfg != null else ""
-	checks.append(_file_check("Tools", "UE4-DDS-Tools", dds_main, false))
-	checks.append(_executable_check("Tools", "ImageMagick", _find_magick(), false))
-
+	var dotnet := ProcessUtils.find_dotnet()
+	var dds := _cfg.get_dds_tools_main_py() if _cfg != null else ""
+	var native := dds.get_base_dir().path_join("directx/texconv.dll" if OS.get_name() == "Windows" else "directx/libtexconv.so")
 	var umodel := _cfg.get_umodel_path() if _cfg != null else ""
-	if umodel.strip_edges().is_empty():
-		checks.append(_check("Tools", "umodel", CheckStatus.WARN,
-			"3D mesh and animation preview are disabled until umodel is configured"))
-	else:
-		checks.append(_file_check("Tools", "umodel", umodel, true))
+	return [
+		_capability_check("Asset reading and writing", [dotnet, ToolchainRegistry.converter_dll()],
+			false, not dotnet.replace("\\", "/").contains("/runtimes/")),
+		_capability_check("Mod packing", [python, _cfg.get_u4pak_path() if _cfg != null else ""],
+			_cfg != null and not _cfg.u4pak_dir.is_empty(), not python.contains("runtimes")),
+		_capability_check("Texture preview and import", [python, dds, native],
+			_cfg != null and not _cfg.ue4_dds_tools_dir.is_empty(), not python.contains("runtimes")),
+		_capability_check("Mesh and animation preview", [umodel],
+			_cfg != null and not _cfg.umodel_path.is_empty()),
+	]
 
-	return checks
+
+func _capability_check(label: String, paths: Array, custom: bool = false,
+		system_runtime: bool = false) -> Dictionary:
+	var details := PackedStringArray()
+	var missing := false
+	for path_value in paths:
+		var path := str(path_value)
+		details.append(path if not path.is_empty() else "Missing tool path")
+		missing = missing or path.is_empty() or not FileAccess.file_exists(path)
+	if missing:
+		return _check("Tools", label, CheckStatus.FAIL,
+			"Tool missing · check the custom path in Settings" if custom else
+			"Tool missing · reinstall the complete Modkit build", "\n".join(details))
+	var origin := "Custom override" if custom else ("Development runtime" if system_runtime else "Bundled")
+	return _check("Tools", label, CheckStatus.PASS, "Available · " + origin, "\n".join(details))
 
 
 func _profile_checks() -> Array[Dictionary]:
@@ -271,8 +325,8 @@ func _profile_checks() -> Array[Dictionary]:
 func _source_checks() -> Array[Dictionary]:
 	var checks: Array[Dictionary] = []
 	if _cfg == null or _cfg.sources.is_empty():
-		checks.append(_check("Sources", "Reference sources", CheckStatus.WARN,
-			"No sources configured; texture companion recovery and auto animation search are limited"))
+		checks.append(_check("Sources", "Reference sources", CheckStatus.INFO,
+			"Optional · add sources in Settings for companion recovery and animation search"))
 		return checks
 
 	var content_root := _cfg.get_game_profile().content_root
@@ -386,13 +440,6 @@ func _check_writable_dir(path: String) -> Error:
 	return error
 
 
-func _find_magick() -> String:
-	var candidates: Array[String] = ["magick"]
-	if OS.get_name() != "Windows":
-		candidates.append("convert")
-	return ProcessUtils.find_executable(candidates)
-
-
 func _refresh_from_button() -> void:
 	_build_ui()
 	status_changed.emit("Diagnostics refreshed", false)
@@ -409,14 +456,7 @@ func _check(section: String, check_name: String, status: int, message: String,
 	}
 
 
-func _add_section(text: String) -> void:
-	var label := Label.new()
-	label.text = text
-	AppTheme.style_section(label)
-	_content.add_child(label)
-
-
-func _add_check_row(check: Dictionary) -> void:
+func _add_check_row(check: Dictionary, parent: VBoxContainer) -> void:
 	var row := VBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_theme_constant_override("separation", AppTheme.SPACING_TIGHT)
@@ -426,14 +466,16 @@ func _add_check_row(check: Dictionary) -> void:
 
 	var badge := Label.new()
 	badge.text = _status_text(int(check["status"]))
-	badge.custom_minimum_size.x = 72
+	badge.custom_minimum_size.x = 48
 	badge.add_theme_font_size_override("font_size", AppTheme.FONT_BADGE)
 	badge.add_theme_color_override("font_color", _status_color(int(check["status"])))
 	top.add_child(badge)
 
 	var name_label := Label.new()
 	name_label.text = str(check["name"])
-	name_label.custom_minimum_size.x = 190
+	name_label.custom_minimum_size.x = 220
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	AppTheme.style_dim(name_label)
 	top.add_child(name_label)
 
@@ -450,13 +492,16 @@ func _add_check_row(check: Dictionary) -> void:
 	if not detail_text.is_empty():
 		var detail := Label.new()
 		detail.text = detail_text
-		detail.autowrap_mode = TextServer.AUTOWRAP_WORD
+		detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		detail.name = "CheckDetail"
+		detail.visible = _show_details
+		detail.tooltip_text = detail_text
 		detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		detail.add_theme_font_size_override("font_size", AppTheme.FONT_TINY)
 		AppTheme.style_muted(detail)
 		row.add_child(detail)
 
-	_content.add_child(row)
+	parent.add_child(row)
 
 
 func _copy_summary() -> void:

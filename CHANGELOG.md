@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.0 — 2026-10-07
+
+- Expand cosmetic cloning beyond skins to artifacts, cloudbursts, afterglows, emotes, triumphs, cards, badges, and titles with supported editable dependencies and independent localization keys.
+- Preserve native Blueprint parent metadata through cloning, registry patching, and portable mod distribution.
+- Add localization scanning, translation catalogs, language-file generation, and namespace/key merging during multi-mod packing.
+- Add reusable numeric/boolean batch recipes with preview, baseline validation, and recovery backups outside packed content.
+- Condense Mod Manager actions into Create and Tools menus; add drag-to-reorder sources with default-source selection.
+- Remove obsolete Elefrac balance/localization scripts in favor of the editor workflows while retaining packaging references.
+- Ship self-contained Windows x64 and Linux x86-64 builds with private Python, .NET, UE Viewer, and texture tools; no separate runtime installation is required.
+- Replace ImageMagick with Godot image codecs for texture conversion and previews; preserve PNG/TGA alpha and orientation.
+- Remove persistent texture-import backups after successful installation while retaining transactional rollback on failure.
+- Simplify Settings and Diagnostics with feature-level checks, optional technical details, and an advanced bundled-exporter override.
+- Rework the Git project window with background operations, readable status, copyable results, and optional backup during remote replacement sync.
+- Add local/remote branch switching and branch creation that preserves uncommitted work; protect ignored files during switching.
+- Fix truncated filenames in Git change listings and guard Git file operations against open asset edits.
+- Add cross-platform runtime packaging documentation and regression coverage for bundled tools, textures, branch operations, sync recovery, and settings.
+
 ## 0.13.0 — 2026-09-20
 
 - Added skin cloning with linked cosmetic blueprints, skin data, meshes, materials, editable color textures, and icons, plus independent display text and registry loading bundles.

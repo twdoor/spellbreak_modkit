@@ -90,11 +90,7 @@ func _build_impl() -> void:
 		_export_btn.tooltip_text = "UE4-DDS-Tools not configured"
 		_import_btn.disabled = true
 		_import_btn.tooltip_text = "UE4-DDS-Tools not configured"
-	elif not tex_service.has_magick():
-		_export_btn.disabled = true
-		_export_btn.tooltip_text = "ImageMagick (magick) not found in PATH"
-		_import_btn.disabled = true
-		_import_btn.tooltip_text = "ImageMagick (magick) not found in PATH"
+
 
 	_feedback = OperationFeedback.new().setup(_retry_last_operation)
 	_container.add_child(_feedback)
