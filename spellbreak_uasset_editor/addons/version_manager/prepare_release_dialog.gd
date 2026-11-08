@@ -141,6 +141,7 @@ func _read_export_presets() -> Array[Dictionary]:
 					options_section, "appimage/generate_an_appimage", false
 				)
 			),
+			"console_wrapper": int(config.get_value(options_section, "debug/export_console_wrapper", 0)),
 			"existing_path": str(config.get_value(section, "export_path", "")),
 		})
 
@@ -401,6 +402,12 @@ func _plan_release_tasks(
 			and bool(preset.get("generates_appimage", false))
 		):
 			additional_outputs.append(output_path.get_basename() + ".AppImage")
+		if str(preset.platform).to_lower() == "linux":
+			additional_outputs.append(target_folder.path_join("modkit"))
+		elif str(preset.platform).to_lower() == "windows desktop":
+			additional_outputs.append(target_folder.path_join("modkit.cmd"))
+			if int(preset.get("console_wrapper", 0)) == 2:
+				additional_outputs.append(output_path.get_basename() + ".console.exe")
 		tasks.append({
 			"target": preset_name,
 			"preset": preset_name,

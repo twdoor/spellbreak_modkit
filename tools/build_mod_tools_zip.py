@@ -23,11 +23,14 @@ def main():
     instructions += ('## Included scripts\n\nKeep the three Python scripts together. '
                      'On Windows, use `py -3` instead of `python3`. '
                      'No extra Python packages are required.\n')
+    instructions += '\nThe app-only CLI ships beside the desktop application as modkit / modkit.cmd; see CLI.md. These separate distribution utilities still require Python.\n'
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(args.output, 'w', zipfile.ZIP_DEFLATED) as archive:
         for name, path in files.items():
             archive.write(path, 'spellbreak-mod-tools/' + name)
         archive.writestr('spellbreak-mod-tools/README.md', instructions)
+        cli_guide = (root / 'docs/cli.md').read_text(encoding='utf-8')
+        archive.writestr('spellbreak-mod-tools/CLI.md', cli_guide)
     print(args.output)
 
 

@@ -49,6 +49,9 @@ trap 'rm -rf "$tmp_dir"' EXIT
 mkdir -p "$tmp_dir/latest"
 cp -p "$source_dir/sbue.x86_64" "$tmp_dir/latest/sbue.x86_64"
 cp -p "$source_dir/sbue.sh" "$tmp_dir/latest/sbue.sh"
+if [[ -f "$source_dir/modkit" ]]; then
+	cp -p "$source_dir/modkit" "$tmp_dir/latest/modkit"
+fi
 chmod +x "$tmp_dir/latest/sbue.x86_64" "$tmp_dir/latest/sbue.sh"
 
 rm -rf "$latest_dir"

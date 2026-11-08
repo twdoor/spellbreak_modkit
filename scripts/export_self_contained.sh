@@ -24,3 +24,10 @@ run_checked() {
 }
 run_checked --headless --editor --path "$repo_root/spellbreak_uasset_editor" --quit
 run_checked --headless --path "$repo_root/spellbreak_uasset_editor" --export-release "$preset" "$output"
+
+# The export plugin emits the public app-only CLI alongside the executable.
+if [[ "$platform" == linux-x64 ]]; then
+  test -x "$(dirname "$output")/modkit"
+else
+  test -f "$(dirname "$output")/modkit.cmd"
+fi

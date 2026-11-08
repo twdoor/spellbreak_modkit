@@ -40,6 +40,9 @@ run_godot_checked --headless --path "$project_dir" --script res://tests/test_set
 "$python_bin" "$repo_root/tools/test_mod_distribution.py"
 "$python_bin" "$repo_root/tools/test_mod_workflows.py"
 "$python_bin" "$repo_root/tools/test_elefrac_tools.py"
+run_godot_checked --headless --path "$project_dir" --script res://tests/test_cli.gd
+GODOT="$godot_bin" "$python_bin" "$repo_root/tools/test_modkit_cli.py"
+GODOT="$godot_bin" "$python_bin" "$repo_root/tools/test_native_cli.py"
 
 pak_test_dir="$(mktemp -d)"
 trap 'rm -f "${logs[@]}"; rm -rf "$settings_test_dir" "$pak_test_dir"' EXIT

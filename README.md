@@ -90,6 +90,18 @@ Theme**.
 
 ---
 
+## Command line
+
+Desktop exports include a `modkit` launcher (`modkit.cmd` on Windows). Run
+`modkit --help` for asset editing, cosmetic cloning, media export/import, and
+registry-aware packing. The CLI uses the installed app and its bundled tools;
+**no separate Python, Godot editor, or running GUI is required**. Add `--json`
+for structured agent output. You can also invoke the executable directly:
+`sbue.x86_64 --headless --no-header -- cli --help`.
+
+See the [CLI guide](docs/cli.md) for setup and examples. This requires a build
+containing the native CLI; older 1.0 binaries do not support these commands.
+
 ## GUI Editor
 
 ### Mod Manager tab

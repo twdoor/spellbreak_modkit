@@ -44,7 +44,7 @@ display_server/driver.linuxbsd="wayland"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/app_settings/plugin.cfg", "res://addons/appimage_export/plugin.cfg", "res://addons/version_manager/plugin.cfg")
+enabled=PackedStringArray("res://addons/app_settings/plugin.cfg", "res://addons/appimage_export/plugin.cfg", "res://addons/version_manager/plugin.cfg", "res://addons/cli_export/plugin.cfg")
 
 [gui]
 

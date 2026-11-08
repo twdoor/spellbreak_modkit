@@ -49,6 +49,7 @@ func setup(cfg: ModConfigManager) -> ModSettingsTab:
 func _ready() -> void:
 	_initial_snapshot = _snapshot_config()
 	_configure_scene_ui()
+	_configure_cli_ui()
 	_sync_controls()
 
 
@@ -592,3 +593,47 @@ func _open_dir_dialog(line_edit: LineEdit, on_select: Callable) -> void:
 	)
 	get_tree().root.add_child(dialog)
 	dialog.popup_centered(Vector2i(800, 600))
+
+func _configure_cli_ui() -> void:
+	var installer = preload("res://cli/cli_install.gd")
+	var section := VBoxContainer.new()
+	$SettingsScroll/ContentMargin/Content.add_child(section)
+	var title := Label.new()
+	title.text = "Command-line interface"
+	AppTheme.style_header(title)
+	section.add_child(title)
+	var hint := Label.new()
+	hint.text = "Install a per-user command for this app. Changes apply immediately. Keep the app in its current location."
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	section.add_child(hint)
+	var row := HBoxContainer.new()
+	section.add_child(row)
+	var command := LineEdit.new()
+	command.text = "sbue"
+	command.placeholder_text = "Command name"
+	command.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(command)
+	var install_button := Button.new()
+	install_button.text = "Install CLI"
+	row.add_child(install_button)
+	var uninstall_button := Button.new()
+	uninstall_button.text = "Uninstall CLI"
+	row.add_child(uninstall_button)
+	var status := Label.new()
+	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	section.add_child(status)
+	var refresh_state := func() -> void:
+		var path: String = installer.installed_path()
+		command.editable = path.is_empty()
+		install_button.disabled = not path.is_empty()
+		uninstall_button.disabled = path.is_empty()
+		if not path.is_empty():
+			command.text = path.get_file().trim_suffix(".cmd")
+	refresh_state.call()
+	status.text = "Installed: " + installer.installed_path() if not installer.installed_path().is_empty() else "Not installed. Default usage: sbue --help"
+	install_button.pressed.connect(func() -> void:
+		status.text = installer.install(command.text.strip_edges())
+		refresh_state.call())
+	uninstall_button.pressed.connect(func() -> void:
+		status.text = installer.uninstall()
+		refresh_state.call())

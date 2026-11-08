@@ -52,6 +52,27 @@ const _STARTUP_OPEN_EXTENSIONS := ["uasset", "json"]
 
 func _ready() -> void:
 	var arguments := OS.get_cmdline_user_args()
+	if not arguments.is_empty() and arguments[0] == "cli":
+		set_process(false)
+		set_process_input(false)
+		set_process_unhandled_input(false)
+		var command_line := ModkitCommandLine.new()
+		add_child(command_line)
+		command_line.run.call_deferred(arguments.slice(1))
+		return
+	var cli_index := arguments.find("--cli-request")
+	if cli_index >= 0:
+		set_process(false)
+		set_process_input(false)
+		set_process_unhandled_input(false)
+		if cli_index + 2 >= arguments.size():
+			printerr("--cli-request requires request and result paths")
+			get_tree().quit(2)
+			return
+		var runner := ModkitCli.new()
+		add_child(runner)
+		runner.run.call_deferred(arguments[cli_index + 1], arguments[cli_index + 2])
+		return
 	var smoke_index := arguments.find("--verify-toolchain")
 	if smoke_index >= 0:
 		set_process(false)

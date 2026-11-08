@@ -171,15 +171,15 @@ func _update_state() -> void:
 		_tracking.text += "\nBranches have diverged. Merge in a Git client, or sync to keep the remote version."
 
 func _show_branches() -> void:
-	var popup := AcceptDialog.new()
-	popup.title = "Branches"
-	popup.exclusive = true
-	popup.ok_button_text = "Close"
-	AppTheme.apply_theme(popup)
+	var branch_dialog := AcceptDialog.new()
+	branch_dialog.title = "Branches"
+	branch_dialog.exclusive = true
+	branch_dialog.ok_button_text = "Close"
+	AppTheme.apply_theme(branch_dialog)
 	var content := VBoxContainer.new()
 	content.custom_minimum_size.x = 500
 	content.add_theme_constant_override("separation", 12)
-	popup.add_child(content)
+	branch_dialog.add_child(content)
 	_label(content, "Current branch: " + str(_info.branch))
 	var select := OptionButton.new()
 	select.name = "BranchList"
@@ -199,7 +199,7 @@ func _show_branches() -> void:
 		if _info.changed > 0 else "Remote branches create a local tracking branch. Fetch in the Git window to update the list.")
 	switch_button.pressed.connect(func() -> void:
 		var target := str(select.get_item_metadata(select.selected))
-		popup.queue_free()
+		branch_dialog.queue_free()
 		_run_action("switch_branch", target))
 	content.add_child(HSeparator.new())
 	_label(content, "New branch from the current commit")
@@ -213,17 +213,17 @@ func _show_branches() -> void:
 	content.add_child(create)
 	name_input.text_changed.connect(func(value: String) -> void: create.disabled = value.strip_edges().is_empty())
 	var submit := func() -> void:
-		var name := name_input.text.strip_edges()
-		if name.is_empty():
+		var branch_name := name_input.text.strip_edges()
+		if branch_name.is_empty():
 			return
-		popup.queue_free()
-		_run_action("create_branch", name)
+		branch_dialog.queue_free()
+		_run_action("create_branch", branch_name)
 	create.pressed.connect(submit)
 	name_input.text_submitted.connect(func(_value: String) -> void: submit.call())
-	popup.confirmed.connect(popup.queue_free)
-	popup.canceled.connect(popup.queue_free)
-	add_child(popup)
-	popup.popup_centered(Vector2i(560, 360))
+	branch_dialog.confirmed.connect(branch_dialog.queue_free)
+	branch_dialog.canceled.connect(branch_dialog.queue_free)
+	add_child(branch_dialog)
+	branch_dialog.popup_centered(Vector2i(560, 360))
 
 
 func _confirm_force_sync() -> void:
